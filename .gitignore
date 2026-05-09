@@ -1,0 +1,12 @@
+.venv/
+.vscode/
+tempCodeRunner*
+__pycache__/
+.ipynb_checkpoints
+output_Q_learning.py.log
+*.log
+.sixth/
+.pyc
+temp*
+project_info*.md
+tmp_*
