@@ -416,6 +416,7 @@ def run_selected_experiments(
     algo_job_offsets = {}  # algo_upper -> start index in all_setting_jobs
     pending_settings = []  # (global_idx, job) - need to be computed
     algos_needing_save = set()
+    algo_added_counts: dict[str, int] = {algo_upper: 0 for algo_upper in algo_jobs.keys()}
 
     # ── Pass 1: load from disk, collect and logically append what still needs running ──
     offset = 0
@@ -517,14 +518,16 @@ def run_selected_experiments(
         base_filename = algo_filenames[algo_upper]
         algo_results_to_save = [setting_results[off + i] for i in range(len(jobs))]
         if any(r is not None for r in algo_results_to_save):
-            save_algorithm_workbook(
+            _filepath, added_count = save_algorithm_workbook(
                 data_sheets_dir,
                 base_filename,
                 algo_upper,
                 jobs,
                 algo_results_to_save,
                 format_sheets=format_sheets,
+                verbose=False,
             )
+            algo_added_counts[algo_upper] = int(added_count)
 
     # Collect all generated filenames for this run (used to skip in extra-curve loading)
     current_basenames = set(f"{fn}.xlsx" for fn in algo_filenames.values())
@@ -613,10 +616,18 @@ def run_selected_experiments(
     plot_filename_tag = "-".join(e.upper() for e in experiments)
     
     #### Save all plots with a filename that includes the experiment names and smoothing window info
+    plots_dir = "plots"
+    os.makedirs(plots_dir, exist_ok=True)
+    new_plot_count = 0
     for pc in plot_configs:
         window = int(pc["window"])
         suffix = f"w{window}-not-smoothed" if window <= 1 else f"w{window}-smoothed"
-        pc["plot"].save(f"{plot_filename_tag}_{suffix}.png")
+        filename = f"{plot_filename_tag}_{suffix}.png"
+        output_path = os.path.join(plots_dir, filename)
+        if not os.path.isfile(output_path):
+            new_plot_count += 1
+        pc["plot"].save(output_path)
+    print(f"Saved {new_plot_count} new plot(s) to plots/")
 
     # ── Optional animation (uses last REINFORCE episode if available) ──
     if animation_plot and "REINFORCE" in [e.upper() for e in experiments]:

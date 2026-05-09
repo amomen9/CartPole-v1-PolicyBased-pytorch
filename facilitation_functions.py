@@ -1430,6 +1430,7 @@ def save_algorithm_workbook(
     setting_jobs: list[dict[str, Any]],
     setting_results: list[tuple[np.ndarray, np.ndarray, np.ndarray] | None],
     format_sheets: bool = False,
+    verbose: bool = True,
 ) -> str:
     """Save or append settings into an algorithm workbook."""
     os.makedirs(dir_path, exist_ok=True)
@@ -1509,5 +1510,6 @@ def save_algorithm_workbook(
                 _write_raw_excel_sheet(worksheet, headers, rows)
 
     workbook.save(filepath)
-    print(f"Saved {added_count} new setting(s) to {filepath}")
-    return filepath
+    if verbose:
+        print(f"Saved {added_count} new setting(s) to {filepath}")
+    return filepath, added_count
