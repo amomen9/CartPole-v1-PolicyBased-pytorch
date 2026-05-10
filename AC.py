@@ -134,7 +134,7 @@ def run_ac(
     progress_bar_position=None,
     shared_step_counter=None,
     max_eval_episode_length=None,
-    eval_with_env_episode_trials: bool = False,
+    eval_with_env_episode_trials: bool = True,
     n_eval_episodes: int = 5,
 ):
     """

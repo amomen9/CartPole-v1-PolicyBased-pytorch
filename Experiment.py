@@ -22,18 +22,18 @@ def experiment():
         "plot_smoothing_window": [1, 101, 201, 251, 351],  # Use multiple values to plot multiple curves. Default: [1, 51, 101, 201, 251, 301]. Set to [1] to skip smoothing.
         "curve_confidence_interval": 0.6,   # Curve shading confidence interval. Default: 0.95. Set to 0 to skip CI shading.
         "curve_shaded_area_opacity": 0.05,  # Opacity of the shaded area for confidence intervals. Default: 0.05 (5% opacity).
-        "use_existing_disk_data": False,     # Whether to use existing data (.xlsx files) from disk if exists.
+        "use_existing_disk_data": True,     # Whether to use existing data (.xlsx files) from disk if exists.
         "curve_plot": False,                # Show learning curve plot window at the end.
         "animation_plot": False,            # Show CartPole animation at the end.
         # Environment
-        "n_timesteps": 100000,              # Total number of training timesteps. Default: 1000000.
+        "n_timesteps": 1000000,              # Total number of training timesteps. Default: 1000000.
         "eval_interval": 250,
         "max_train_episode_length": 500, #500        # Episode truncation step. Default: 500.
-        "max_eval_episode_length": 500, #500        # Episode truncation step. Default: 500.
+        "max_eval_episode_length": 10000, #500        # Episode truncation step. Default: 500.
         # Model evaluation option:
         # False (default): evaluation uses the fast proxy from training (last_episode_return).
         # True: evaluation uses greedy environment episode trials via agent.evaluate().
-        "eval_with_env_episode_trials": False,
+        "eval_with_env_episode_trials": True,
         "n_eval_episodes": 5,
         "base_seed": 42,                    # Base seed for CartPole environment and agent initialization. Each repetition will use a different seed derived from this base seed (e.g., base_seed + repetition_index).
     }
@@ -76,7 +76,7 @@ def experiment():
     # ------------- End AC hyperparameters -----------
 
     # ------------- Algorithm Type: A2C hyperparameters (optimal) ----
-    include_A2C_in_training = False
+    include_A2C_in_training = True
     a2c_config = {
         "gamma": [0.99],                # list of discount factors to sweep
         "actor_lr": [0.0001],          # policy learning rate(s) to sweep

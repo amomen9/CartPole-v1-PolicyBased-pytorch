@@ -618,6 +618,8 @@ def run_selected_experiments(
     #### Save all plots with a filename that includes the experiment names and smoothing window info
     plots_dir = "plots"
     os.makedirs(plots_dir, exist_ok=True)
+    close_individual_plot_figs = (not curve_plot) and (not animation_plot)
+
     new_plot_count = 0
     for pc in plot_configs:
         window = int(pc["window"])
@@ -627,7 +629,39 @@ def run_selected_experiments(
         if not os.path.isfile(output_path):
             new_plot_count += 1
         pc["plot"].save(output_path)
+        if close_individual_plot_figs and hasattr(pc["plot"], "fig"):
+            plt.close(pc["plot"].fig)
+
     print(f"Saved {new_plot_count} new plot(s) to plots/")
+
+    # ── Combined display: smoothing windows 101 and 201 (side-by-side) ──
+    combined_fig_shown = False
+    desired_windows = [101, 201]
+    available_windows = {int(pc["window"]) for pc in plot_configs}
+
+    if all(w in available_windows for w in desired_windows):
+        try:
+            combined_fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+            combined_fig.suptitle(f"{plot_filename_tag} (w=101 and w=201)")
+
+            for ax, w in zip(axes, desired_windows):
+                suffix = f"w{w}-not-smoothed" if w <= 1 else f"w{w}-smoothed"
+                filename = f"{plot_filename_tag}_{suffix}.png"
+                output_path = os.path.join("plots", filename)
+
+                if os.path.isfile(output_path):
+                    img = plt.imread(output_path)
+                    ax.imshow(img)
+                    ax.axis("off")
+                else:
+                    ax.axis("off")
+                ax.set_title(f"window {w}")
+
+            plt.tight_layout()
+            combined_fig_shown = True
+        except Exception as exc:
+            print(f"[plot] Failed to create combined subplot preview: {exc}")
+            combined_fig_shown = False
 
     # ── Optional animation (uses last REINFORCE episode if available) ──
     if animation_plot and "REINFORCE" in [e.upper() for e in experiments]:
@@ -664,7 +698,7 @@ def run_selected_experiments(
             policy=lambda obs: trained_nn_policy(agent.actor, obs),
         )
 
-    if curve_plot or animation_plot:
+    if curve_plot or animation_plot or combined_fig_shown:
         plt.show()
 
     total_time = (time.perf_counter() - start_time) / 60.0

@@ -30,7 +30,7 @@ def run_reinforce(
     progress_bar_desc="Env Steps",
     progress_bar_position=None,
     shared_step_counter=None,
-    eval_with_env_episode_trials: bool = False,
+    eval_with_env_episode_trials: bool = True,
     n_eval_episodes: int = 5,
 ):
     """REINFORCE training loop. Steps through the environment one step at a time.
