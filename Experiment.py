@@ -16,7 +16,7 @@ def experiment():
     #################[ Global Parameters ]################
     global_config = {
         "n_repetitions": 5,                 # Default: 5
-        "UNUSED_CPU_CORES": 2,              # Number of CPU cores to leave unused when using multiprocessing, for appropriate other applications' performance. Cap degree of parallelism: <#total CPU cores>-UNUSED_CPU_CORES Default: 2.
+        "UNUSED_CPU_CORES": 3,              # Number of CPU cores to leave unused when using multiprocessing, for appropriate other applications' performance. Cap degree of parallelism: <#total CPU cores>-UNUSED_CPU_CORES Default: 2.
         # Plotting parameters
         "benchmark_curve": 1,               # Default: 1, choose one: 1 or 2 for the benchmark CSV (BaselineDataCartPole_run1.csv or BaselineDataCartPole_run2.csv).
         "benchmark_name": "Baseline",
@@ -40,138 +40,9 @@ def experiment():
     }
     ################[ End Global Parameters ]################
 
-
-    ###############[ Training hyperparameters ]##############
-    # ------------- Algorithm Type: REINFORCE hyperparameters (optimal) ----
-    include_REINFORCE_in_training = False
-    reinforce_config = {
-        "gamma": [0.99],                # list of discount factors to sweep
-        "actor_lr": [0.001],            # actor learning rate(s) to sweep
-        "actor_hidden_nn": [[32,32]],   # list of NN architectures to sweep
-        "legend_parameters": {          # [plot label, show flag]
-            "gamma": [r"$\gamma$: ", True],
-            "actor_lr": [r"Actor $\alpha:$ ", True],
-            "actor_hidden_nn": [r"Actor NN: ", True],
-        },
-    }
-    # ------------- End REINFORCE hyperparameters -----------
-
-    # ------------- Algorithm Type: AC hyperparameters (optimal) ----
-    include_AC_in_training = False
-    ac_config = {
-        "gamma": [0.99],
-        "FULL_EPISODE_RETURN": [True],           # Whether to use full-episode return (Monte Carlo) or n-step return (TD) for the critic target. Default: True (MC). Set to [False] to use n-step return (TD) for the critic target.
-        "actor_lr": [0.001],                   # 2D actor learning rate(s) to sweep
-        "actor_hidden_nn": [[64, 64]],         # 2D list of NN architectures to sweep
-        "critic_lr": [0.001],                  # critic learning rate(s) to sweep
-        "critic_hidden_nn": [[128, 128]],      # critic NN architectures to sweep
-        "TN_step": [10],                      # list of n-step returns to sweep (Target Network). Default: [10]. Set to [1] to skip n-step return trials.        
-        "legend_parameters": {                 # [plot label, show flag]
-            "gamma": [r"$\gamma$: ", True],
-            "actor_lr": [r"Actor $\alpha$: ", True],
-            "actor_hidden_nn": [r"Actor NN: ", True],
-            "critic_lr": [r"Critic $\beta$: ", True],
-            "critic_hidden_nn": [r"Critic NN: ", True],
-            "TN_step": [r"TN Step: ", False],
-        },
-    }
-    # ------------- End AC hyperparameters -----------
-
-    # ------------- Algorithm Type: A2C hyperparameters (optimal) ----
-    include_A2C_in_training = True
-    a2c_config = {
-        "gamma": [0.99],                # list of discount factors to sweep
-        "actor_lr": [0.0001],          # policy learning rate(s) to sweep
-        "actor_hidden_nn": [[64, 64]],        # list of NN architectures to sweep for policy network
-        "critic_lr": [0.01],        # value function learning rate(s) to sweep
-        "critic_hidden_nn": [[128, 128]],  # list of NN architectures to sweep for value function network
-        "TN_step": [10],                 # list of n-step returns to sweep (Target Network). Default: [10]. Set to [1] to skip n-step return trials.    
-        "legend_parameters": {          # [plot label, show flag]
-            "gamma": [r"$\gamma$: ", True],
-            "actor_lr": [r"Actor $\alpha$: ", True],
-            "critic_lr": [r"Critic $\beta$: ", True],
-            "actor_hidden_nn": [r"Actor NN: ", True],
-            "critic_hidden_nn": [r"Critic NN: ", True],
-            "TN_step": [r"TN Step: ", False],
-        },
-    }
-    # ------------- End A2C hyperparameters -----------
-
-    # ------------- Algorithm Type: PPO hyperparameters (optimal) ----
-    # Proximal Policy Optimisation (PPO-clipped) - Schulman et al., 2017
-    include_PPO_in_training = True
-    ppo_config = {
-        "gamma": [0.99],                # list of discount factors to sweep
-        "actor_lr": [0.0003],           # actor learning rate(s) to sweep
-        "actor_hidden_nn": [[64, 64]],  # actor NN architectures to sweep
-        "critic_lr": [0.001],           # critic learning rate(s) to sweep
-        "critic_hidden_nn": [[64, 64]], # critic NN architectures to sweep
-        "gae_lambda": [0.95],           # GAE lambda (Schulman et al., 2015)
-        "clip_eps": [0.2],              # PPO clipping epsilon
-        "n_epochs": [10],               # # of optimisation epochs per rollout
-        "rollout_steps": [2048],        # # of env steps per rollout (PPO buffer size)
-        "mini_batch_size": [64],        # mini-batch size for PPO updates
-        "entropy_coef": [0.0],          # entropy bonus weight
-        "value_coef": [0.5],            # value loss weight
-        "max_grad_norm": [0.5],         # global gradient-norm clip
-        "legend_parameters": {          # [plot label, show flag]
-            "gamma": [r"$\gamma$: ", False],
-            "actor_lr": [r"Actor $\alpha$: ", True],
-            "critic_lr": [r"Critic $\beta$: ", False],
-            "actor_hidden_nn": [r"Actor NN: ", False],
-            "critic_hidden_nn": [r"Critic NN: ", True],
-            "gae_lambda": [r"$\lambda_{GAE}$: ", True],
-            "clip_eps": [r"$\epsilon_{clip}$: ", True],
-            "n_epochs": [r"Epochs: ", False],
-            "rollout_steps": [r"Rollout: ", False],
-            "mini_batch_size": [r"MB: ", False],
-            "entropy_coef": [r"Ent: ", False],
-            "value_coef": [r"VCoef: ", False],
-            "max_grad_norm": [r"GradClip: ", False],
-        },
-    }
-    # ------------- End PPO hyperparameters -----------
-
-    # ------------- Algorithm Type: SAC hyperparameters (optimal) ----
-    # Soft Actor-Critic (discrete) - Haarnoja et al., 2018/2019 + Christodoulou, 2019
-    include_SAC_in_training = True
-    sac_config = {
-        "gamma": [0.99],                # list of discount factors to sweep
-        "actor_lr": [0.0003],           # actor learning rate(s) to sweep
-        "actor_hidden_nn": [[64, 64]],  # actor NN architectures to sweep
-        "critic_lr": [0.0003],          # critic learning rate(s) to sweep
-        "critic_hidden_nn": [[128, 128]], # critic (twin Q) NN architectures
-        "alpha_lr": [0.0003],           # entropy-temperature learning rate
-        "tau": [0.005],                 # soft target update rate
-        "target_entropy_ratio": [0.98], # target entropy = ratio * log(n_actions)
-        "replay_buffer_size": [100000], # replay buffer capacity
-        "batch_size": [64],             # SGD batch size from the replay buffer
-        "warmup_steps": [1000],         # random-action steps before SAC kicks in
-        "updates_per_step": [1],        # gradient updates per env step
-        "auto_tune_alpha": [True],      # Default: True (Haarnoja et al., 2019). Set to [False] to use fixed alpha (Haarnoja et al., 2018).
-        "alpha_init": [1.0],            # Initial / fixed entropy temperature alpha. Used as the start point when auto_tune_alpha=True, or as the fixed value when auto_tune_alpha=False.
-        "legend_parameters": {          # [plot label, show flag]
-            "gamma": [r"$\gamma$: ", False],
-            "actor_lr": [r"Actor $\alpha$: ", True],
-            "critic_lr": [r"Critic $\beta$: ", False],
-            "actor_hidden_nn": [r"Actor NN: ", True],
-            "critic_hidden_nn": [r"Critic NN: ", False],
-            "alpha_lr": [r"$\alpha_{lr}$: ", True],
-            "tau": [r"$\tau$: ", True],
-            "target_entropy_ratio": [r"Tgt H ratio: ", True],
-            "replay_buffer_size": [r"Buff: ", False],
-            "batch_size": [r"Batch: ", False],
-            "warmup_steps": [r"Warm: ", False],
-            "updates_per_step": [r"UPS: ", False],
-            "auto_tune_alpha": [r"AutoTune $\alpha$: ", False],
-            "alpha_init": [r"$\alpha_0$: ", True],
-        },
-    }
-    # ------------- End SAC hyperparameters -----------
-
     # Using DQN implementation from the previous assignment (existing in the assignment2_repo directory)
     # ------------- Algorithm: DQN hyperparameters (optimal) ----
-    include_DQN_in_training = False
+    include_DQN_in_training = True
     dqn_config = {
         "gamma": 0.99,
         "learning_rate": [0.001],
@@ -213,6 +84,134 @@ def experiment():
         },
     }
     # ------------- End DQN hyperparameters -----------
+
+    ###############[ Training hyperparameters ]##############
+    # ------------- Algorithm Type: REINFORCE hyperparameters (optimal) ----
+    include_REINFORCE_in_training = True
+    reinforce_config = {
+        "gamma": [0.99],                # list of discount factors to sweep
+        "actor_lr": [0.001],            # actor learning rate(s) to sweep
+        "actor_hidden_nn": [[32,32]],   # list of NN architectures to sweep
+        "legend_parameters": {          # [plot label, show flag]
+            "gamma": [r"$\gamma$: ", True],
+            "actor_lr": [r"Actor $\alpha:$ ", True],
+            "actor_hidden_nn": [r"Actor NN: ", True],
+        },
+    }
+    # ------------- End REINFORCE hyperparameters -----------
+
+    # ------------- Algorithm Type: AC hyperparameters (optimal) ----
+    include_AC_in_training = False
+    ac_config = {
+        "gamma": [0.99],
+        "FULL_EPISODE_RETURN": [True],           # Whether to use full-episode return (Monte Carlo) or n-step return (TD) for the critic target. Default: True (MC). Set to [False] to use n-step return (TD) for the critic target.
+        "actor_lr": [0.001],                   # 2D actor learning rate(s) to sweep
+        "actor_hidden_nn": [[64, 64]],         # 2D list of NN architectures to sweep
+        "critic_lr": [0.001],                  # critic learning rate(s) to sweep
+        "critic_hidden_nn": [[128, 128]],      # critic NN architectures to sweep
+        "TN_step": [10],                      # list of n-step returns to sweep (Target Network). Default: [10]. Set to [1] to skip n-step return trials.        
+        "legend_parameters": {                 # [plot label, show flag]
+            "gamma": [r"$\gamma$: ", True],
+            "actor_lr": [r"Actor $\alpha$: ", True],
+            "actor_hidden_nn": [r"Actor NN: ", True],
+            "critic_lr": [r"Critic $\beta$: ", True],
+            "critic_hidden_nn": [r"Critic NN: ", True],
+            "TN_step": [r"TN Step: ", False],
+        },
+    }
+    # ------------- End AC hyperparameters -----------
+
+    # ------------- Algorithm Type: A2C hyperparameters (optimal) ----
+    include_A2C_in_training = False
+    a2c_config = {
+        "gamma": [0.99],                # list of discount factors to sweep
+        "actor_lr": [0.0001],          # policy learning rate(s) to sweep
+        "actor_hidden_nn": [[64, 64]],        # list of NN architectures to sweep for policy network
+        "critic_lr": [0.01],        # value function learning rate(s) to sweep
+        "critic_hidden_nn": [[128, 128]],  # list of NN architectures to sweep for value function network
+        "TN_step": [10],                 # list of n-step returns to sweep (Target Network). Default: [10]. Set to [1] to skip n-step return trials.    
+        "legend_parameters": {          # [plot label, show flag]
+            "gamma": [r"$\gamma$: ", True],
+            "actor_lr": [r"Actor $\alpha$: ", True],
+            "critic_lr": [r"Critic $\beta$: ", True],
+            "actor_hidden_nn": [r"Actor NN: ", True],
+            "critic_hidden_nn": [r"Critic NN: ", True],
+            "TN_step": [r"TN Step: ", False],
+        },
+    }
+    # ------------- End A2C hyperparameters -----------
+
+    # ------------- Algorithm Type: PPO hyperparameters (optimal) ----
+    # Proximal Policy Optimisation (PPO-clipped) - Schulman et al., 2017
+    include_PPO_in_training = False
+    ppo_config = {
+        "gamma": [0.99],                # list of discount factors to sweep
+        "actor_lr": [0.0003],           # actor learning rate(s) to sweep
+        "actor_hidden_nn": [[64, 64]],  # actor NN architectures to sweep
+        "critic_lr": [0.001],           # critic learning rate(s) to sweep
+        "critic_hidden_nn": [[64, 64]], # critic NN architectures to sweep
+        "gae_lambda": [0.95],           # GAE lambda (Schulman et al., 2015)
+        "clip_eps": [0.2],              # PPO clipping epsilon
+        "n_epochs": [10],               # # of optimisation epochs per rollout
+        "rollout_steps": [2048],        # # of env steps per rollout (PPO buffer size)
+        "mini_batch_size": [64],        # mini-batch size for PPO updates
+        "entropy_coef": [0.0],          # entropy bonus weight
+        "value_coef": [0.5],            # value loss weight
+        "max_grad_norm": [0.5],         # global gradient-norm clip
+        "legend_parameters": {          # [plot label, show flag]
+            "gamma": [r"$\gamma$: ", False],
+            "actor_lr": [r"Actor $\alpha$: ", True],
+            "critic_lr": [r"Critic $\beta$: ", False],
+            "actor_hidden_nn": [r"Actor NN: ", False],
+            "critic_hidden_nn": [r"Critic NN: ", True],
+            "gae_lambda": [r"$\lambda_{GAE}$: ", True],
+            "clip_eps": [r"$\epsilon_{clip}$: ", True],
+            "n_epochs": [r"Epochs: ", False],
+            "rollout_steps": [r"Rollout: ", False],
+            "mini_batch_size": [r"MB: ", False],
+            "entropy_coef": [r"Ent: ", False],
+            "value_coef": [r"VCoef: ", False],
+            "max_grad_norm": [r"GradClip: ", False],
+        },
+    }
+    # ------------- End PPO hyperparameters -----------
+
+    # ------------- Algorithm Type: SAC hyperparameters (optimal) ----
+    # Soft Actor-Critic (discrete) - Haarnoja et al., 2018/2019 + Christodoulou, 2019
+    include_SAC_in_training = False
+    sac_config = {
+        "gamma": [0.99],                # list of discount factors to sweep
+        "actor_lr": [0.0003],           # actor learning rate(s) to sweep
+        "actor_hidden_nn": [[64, 64]],  # actor NN architectures to sweep
+        "critic_lr": [0.0003],          # critic learning rate(s) to sweep
+        "critic_hidden_nn": [[128, 128]], # critic (twin Q) NN architectures
+        "alpha_lr": [0.0003],           # entropy-temperature learning rate
+        "tau": [0.005],                 # soft target update rate
+        "target_entropy_ratio": [0.98], # target entropy = ratio * log(n_actions)
+        "replay_buffer_size": [100000], # replay buffer capacity
+        "batch_size": [64],             # SGD batch size from the replay buffer
+        "warmup_steps": [1000],         # random-action steps before SAC kicks in
+        "updates_per_step": [1],        # gradient updates per env step
+        "auto_tune_alpha": [True],      # Default: True (Haarnoja et al., 2019). Set to [False] to use fixed alpha (Haarnoja et al., 2018).
+        "alpha_init": [1.0],            # Initial / fixed entropy temperature alpha. Used as the start point when auto_tune_alpha=True, or as the fixed value when auto_tune_alpha=False.
+        "legend_parameters": {          # [plot label, show flag]
+            "gamma": [r"$\gamma$: ", False],
+            "actor_lr": [r"Actor $\alpha$: ", True],
+            "critic_lr": [r"Critic $\beta$: ", False],
+            "actor_hidden_nn": [r"Actor NN: ", True],
+            "critic_hidden_nn": [r"Critic NN: ", False],
+            "alpha_lr": [r"$\alpha_{lr}$: ", True],
+            "tau": [r"$\tau$: ", True],
+            "target_entropy_ratio": [r"Tgt H ratio: ", True],
+            "replay_buffer_size": [r"Buff: ", False],
+            "batch_size": [r"Batch: ", False],
+            "warmup_steps": [r"Warm: ", False],
+            "updates_per_step": [r"UPS: ", False],
+            "auto_tune_alpha": [r"AutoTune $\alpha$: ", False],
+            "alpha_init": [r"$\alpha_0$: ", True],
+        },
+    }
+    # ------------- End SAC hyperparameters -----------
     ##########################################################
 
     experiments = []
