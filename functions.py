@@ -269,7 +269,9 @@ def run_selected_experiments(
     if unused_cpu_cores < 0:
         unused_cpu_cores = 0
     # Backward/forward compatible key names (some configs use show_curve_plots)
-    show_curved_plots = bool(gc.get("show_curved_plots", gc.get("show_curve_plots", False)))
+    # Keep the *original* show_curve_plots value for the matplotlib `block=` behavior.
+    show_curve_plots = bool(gc.get("show_curved_plots", gc.get("show_curve_plots", False)))
+    show_curved_plots = show_curve_plots
     animation_plot = bool(gc.get("animation_plot", False))
 
     start_time = time.perf_counter()
@@ -773,7 +775,7 @@ def run_selected_experiments(
         )
 
     if show_curved_plots or animation_plot or combined_fig_shown:
-        plt.show()
+        plt.show(block=show_curve_plots)
 
     total_time = (time.perf_counter() - start_time) / 60.0
     with open("output.log", "w", encoding="utf-8") as f:

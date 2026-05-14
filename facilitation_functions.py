@@ -1382,7 +1382,10 @@ def _run_dqn_one_rep(trial_common: dict[str, Any], run_seed: int, rep_index: int
 def _run_pending_parallel(pending_settings, n_repetitions, n_timesteps, eval_interval,
                           max_train_episode_length, max_eval_episode_length, base_seed,
                           use_existing_network_checkpoints: bool,
-                          setting_results: list[tuple[np.ndarray, np.ndarray, np.ndarray] | None],
+    setting_results: list[
+        tuple[np.ndarray, np.ndarray, np.ndarray] | tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]
+        | None
+    ],
                           unused_cpu_cores: int = 0):
     """Run all pending (setting × rep) tasks in a single flat ProcessPoolExecutor.
 
@@ -1821,33 +1824,130 @@ def _next_setting_sheet_name(workbook) -> str:
     return f"{SETTING_SHEET_PREFIX}{highest_index + 1:03d}"
 
 
-def _rows_from_result(result: tuple[np.ndarray, np.ndarray, np.ndarray]) -> list[list[Any]]:
-    """Convert a result tuple into a row-wise table for Excel writing."""
-    learning_curve, learning_curve_std, timesteps = result
+def _rows_from_result(
+    result: tuple[np.ndarray, np.ndarray, np.ndarray]
+    | tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]
+) -> list[list[Any]]:
+    """Convert a (mean,std,timesteps[,raw_returns]) tuple into row-wise Excel rows.
+
+    If ``raw_returns`` is provided it is expected to have shape:
+        (n_repetitions, n_points)
+
+    Then each row becomes:
+        [timestep, mean, std, rep_1, ..., rep_n]
+    """
+    learning_curve, learning_curve_std, timesteps = result[:3]
+    raw_returns = result[3] if len(result) == 4 else None
+
+    timesteps_arr = np.asarray(timesteps)
+    learning_curve_arr = np.asarray(learning_curve)
+    learning_curve_std_arr = np.asarray(learning_curve_std)
+
+    if raw_returns is None:
+        rows = []
+        for timestep, mean_value, std_value in zip(
+            timesteps_arr, learning_curve_arr, learning_curve_std_arr
+        ):
+            rows.append([timestep, mean_value, std_value])
+        return rows
+
+    raw_returns_arr = np.asarray(raw_returns, dtype=np.float32)
+
+    n_points = min(
+        len(timesteps_arr),
+        len(learning_curve_arr),
+        len(learning_curve_std_arr),
+        raw_returns_arr.shape[1],
+    )
+
     rows = []
-    for timestep, mean_value, std_value in zip(timesteps, learning_curve, learning_curve_std):
-        rows.append([timestep, mean_value, std_value])
+    for idx in range(n_points):
+        rep_values = raw_returns_arr[:, idx].tolist()
+        rows.append([
+            timesteps_arr[idx],
+            learning_curve_arr[idx],
+            learning_curve_std_arr[idx],
+            *rep_values,
+        ])
     return rows
 
 
 def _build_headers(job_hyperparams: dict[str, Any]) -> list[str]:
     """Build the Excel column headers for a saved setting."""
+    try:
+        n_repetitions = int(job_hyperparams.get("n_repetitions", 0))
+    except (TypeError, ValueError):
+        n_repetitions = 0
+
+    rep_headers = [f"rep_{i + 1}" for i in range(max(0, n_repetitions))]
+
     return [
         "timestep",
         "learning_curve_mean",
         "learning_curve_std",
+        *rep_headers,
         *[str(key) for key in job_hyperparams.keys()],
         "curve_label",
     ]
 
 
-def _build_rows(job_hyperparams: dict[str, Any], curve_label: str, result: tuple[np.ndarray, np.ndarray, np.ndarray]) -> list[list[Any]]:
-    """Build the Excel rows for a single setting sheet."""
+def _build_rows(
+    job_hyperparams: dict[str, Any],
+    curve_label: str,
+    result: tuple[np.ndarray, np.ndarray, np.ndarray]
+    | tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
+) -> list[list[Any]]:
+    """Build the Excel rows for a single setting sheet.
+
+    Writes:
+    - timestep / mean / std for every row
+    - rep_1..rep_n for every row (when ``raw_returns`` is available)
+    - hyperparameters + curve_label ONLY on the first timestep row
+    """
     base_rows = _rows_from_result(result)
-    hyperparam_values = [_value_to_text(value) for value in job_hyperparams.values()]
+
+    try:
+        n_repetitions = int(job_hyperparams.get("n_repetitions", 0))
+    except (TypeError, ValueError):
+        n_repetitions = 0
+    n_repetitions = max(0, n_repetitions)
+
+    hyperparam_headers = [str(k) for k in job_hyperparams.keys()]
+    hyperparam_values = [_value_to_text(job_hyperparams[h]) for h in hyperparam_headers]
+
     rows: list[list[Any]] = []
-    for timestep, mean_value, std_value in base_rows:
-        rows.append([timestep, mean_value, std_value, *hyperparam_values, curve_label])
+    hyperparam_count = len(hyperparam_values)
+
+    for row_index, base_row in enumerate(base_rows):
+        # base_row is either:
+        #  - [timestep, mean, std]
+        #  - [timestep, mean, std, rep_1, ..., rep_n]
+        timestep = base_row[0]
+        mean_value = base_row[1]
+        std_value = base_row[2]
+        rep_values = base_row[3:] if len(base_row) > 3 else []
+
+        if n_repetitions > 0:
+            if len(rep_values) < n_repetitions:
+                rep_values = [None] * (n_repetitions - len(rep_values)) + rep_values
+                rep_values = rep_values[-n_repetitions:]
+            elif len(rep_values) > n_repetitions:
+                rep_values = rep_values[:n_repetitions]
+        else:
+            rep_values = []
+
+        if row_index == 0:
+            rows.append([timestep, mean_value, std_value, *rep_values, *hyperparam_values, curve_label])
+        else:
+            rows.append([
+                timestep,
+                mean_value,
+                std_value,
+                *rep_values,
+                *([None] * hyperparam_count),
+                "",
+            ])
+
     return rows
 
 
@@ -1892,8 +1992,26 @@ def _parse_sheet_entry(worksheet, *, formatted_sheets: bool = False) -> dict[str
     except Exception:
         return None
 
+    rep_headers = [h for h in headers if h.startswith("rep_")]
+    rep_headers_sorted = sorted(
+        rep_headers,
+        key=lambda s: int(s.split("_", 1)[1]) if s.split("_", 1)[1].isdigit() else 10**9,
+    )
+
+    raw_returns = None
+    if rep_headers_sorted:
+        # raw_returns shape: (n_repetitions, n_points)
+        rep_cols = []
+        for h in rep_headers_sorted:
+            col = column_data[h]
+            rep_cols.append([np.nan if v is None else v for v in col])
+        raw_returns = np.asarray(rep_cols, dtype=np.float32)
+
     hyperparams: dict[str, Any] = {}
     for header in headers:
+        # rep_* must never be part of the hyperparameter signature
+        if header.startswith("rep_"):
+            continue
         if header in required or header == "curve_label":
             continue
         values = column_data[header]
@@ -1908,6 +2026,7 @@ def _parse_sheet_entry(worksheet, *, formatted_sheets: bool = False) -> dict[str
         "learning_curve": learning_curve,
         "learning_curve_std": learning_curve_std,
         "timesteps": timesteps,
+        "raw_returns": raw_returns,
         "curve_label": curve_label,
         "hyperparams": hyperparams,
     }
@@ -1993,11 +2112,13 @@ def save_algorithm_workbook(
         if job_signature in existing_signatures:
             continue
 
-        learning_curve, learning_curve_std, timesteps = result
+        learning_curve, learning_curve_std, timesteps = result[:3]
+        raw_returns = result[3] if len(result) == 4 else None
         all_entries.append({
             "learning_curve": learning_curve,
             "learning_curve_std": learning_curve_std,
             "timesteps": timesteps,
+            "raw_returns": raw_returns,
             "curve_label": job["curve_label"],
             "hyperparams": job["hyperparams"],
         })
@@ -2029,11 +2150,22 @@ def save_algorithm_workbook(
         for index, entry in enumerate(all_entries, start=1):
             worksheet = workbook.create_sheet(title=f"Setting_{index:03d}")
             headers = _build_headers(entry["hyperparams"])
-            rows = _build_rows(entry["hyperparams"], entry["curve_label"], (
-                entry["learning_curve"],
-                entry["learning_curve_std"],
-                entry["timesteps"],
-            ))
+            raw_returns = entry.get("raw_returns")
+            if raw_returns is None:
+                result_tuple = (
+                    entry["learning_curve"],
+                    entry["learning_curve_std"],
+                    entry["timesteps"],
+                )
+            else:
+                result_tuple = (
+                    entry["learning_curve"],
+                    entry["learning_curve_std"],
+                    entry["timesteps"],
+                    raw_returns,
+                )
+
+            rows = _build_rows(entry["hyperparams"], entry["curve_label"], result_tuple)
             if format_sheets:
                 _format_excel(
                     worksheet,

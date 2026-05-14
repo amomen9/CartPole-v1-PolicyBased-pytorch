@@ -24,6 +24,7 @@ def experiment():
         "curve_confidence_interval": 0.6,   # Curve shading confidence interval. Default: 0.95. Set to 0 to skip CI shading.
         "curve_shaded_area_opacity": 0.06,  # Opacity of the shaded area for confidence intervals. Default: 0.05 (5% opacity).
         "show_curve_plots": True,                # Show learning curve plot window at the end.
+        "show_curved_plots": True,             # Show learning curve plot window at the end.
         "animation_plot": True,            # Show CartPole animation at the end.
         "use_existing_disk_data": True,     # Whether to use existing data (.xlsx files) from disk if exists.
         "use_existing_disk_trained_networks": True,
@@ -59,11 +60,12 @@ def experiment():
     include_AC_in_training = False
     ac_config = {
         "gamma": [0.99],
+        "FULL_EPISODE_RETURN": [True],           # Whether to use full-episode return (Monte Carlo) or n-step return (TD) for the critic target. Default: True (MC). Set to [False] to use n-step return (TD) for the critic target.
         "actor_lr": [0.001],                   # 2D actor learning rate(s) to sweep
         "actor_hidden_nn": [[64, 64]],         # 2D list of NN architectures to sweep
         "critic_lr": [0.001],                  # critic learning rate(s) to sweep
         "critic_hidden_nn": [[128, 128]],      # critic NN architectures to sweep
-        "TN_step": [10],                 # list of n-step returns to sweep (Target Network). Default: [10]. Set to [1] to skip n-step return trials.    
+        "TN_step": [10],                      # list of n-step returns to sweep (Target Network). Default: [10]. Set to [1] to skip n-step return trials.        
         "legend_parameters": {                 # [plot label, show flag]
             "gamma": [r"$\gamma$: ", True],
             "actor_lr": [r"Actor $\alpha$: ", True],
@@ -113,10 +115,10 @@ def experiment():
         "value_coef": [0.5],            # value loss weight
         "max_grad_norm": [0.5],         # global gradient-norm clip
         "legend_parameters": {          # [plot label, show flag]
-            "gamma": [r"$\gamma$: ", True],
+            "gamma": [r"$\gamma$: ", False],
             "actor_lr": [r"Actor $\alpha$: ", True],
-            "critic_lr": [r"Critic $\beta$: ", True],
-            "actor_hidden_nn": [r"Actor NN: ", True],
+            "critic_lr": [r"Critic $\beta$: ", False],
+            "actor_hidden_nn": [r"Actor NN: ", False],
             "critic_hidden_nn": [r"Critic NN: ", True],
             "gae_lambda": [r"$\lambda_{GAE}$: ", True],
             "clip_eps": [r"$\epsilon_{clip}$: ", True],
@@ -149,20 +151,20 @@ def experiment():
         "auto_tune_alpha": [True],      # Default: True (Haarnoja et al., 2019). Set to [False] to use fixed alpha (Haarnoja et al., 2018).
         "alpha_init": [1.0],            # Initial / fixed entropy temperature alpha. Used as the start point when auto_tune_alpha=True, or as the fixed value when auto_tune_alpha=False.
         "legend_parameters": {          # [plot label, show flag]
-            "gamma": [r"$\gamma$: ", True],
+            "gamma": [r"$\gamma$: ", False],
             "actor_lr": [r"Actor $\alpha$: ", True],
-            "critic_lr": [r"Critic $\beta$: ", True],
+            "critic_lr": [r"Critic $\beta$: ", False],
             "actor_hidden_nn": [r"Actor NN: ", True],
-            "critic_hidden_nn": [r"Critic NN: ", True],
-            "alpha_lr": [r"$\alpha_{lr}$: ", False],
+            "critic_hidden_nn": [r"Critic NN: ", False],
+            "alpha_lr": [r"$\alpha_{lr}$: ", True],
             "tau": [r"$\tau$: ", True],
-            "target_entropy_ratio": [r"Tgt H ratio: ", False],
+            "target_entropy_ratio": [r"Tgt H ratio: ", True],
             "replay_buffer_size": [r"Buff: ", False],
             "batch_size": [r"Batch: ", False],
             "warmup_steps": [r"Warm: ", False],
             "updates_per_step": [r"UPS: ", False],
-            "auto_tune_alpha": [r"AutoTune $\alpha$: ", True],
-            "alpha_init": [r"$\alpha_0$: ", False],
+            "auto_tune_alpha": [r"AutoTune $\alpha$: ", False],
+            "alpha_init": [r"$\alpha_0$: ", True],
         },
     }
     # ------------- End SAC hyperparameters -----------

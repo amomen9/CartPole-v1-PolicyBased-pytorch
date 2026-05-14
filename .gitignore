@@ -10,3 +10,5 @@ output_Q_learning.py.log
 temp*
 project_info*.md
 tmp_*
+tmp/
+temp/
