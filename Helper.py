@@ -11,6 +11,8 @@ import matplotlib.pyplot as plt
 import matplotlib.pyplot as visplt
 import os
 from scipy.signal import savgol_filter
+from scipy.stats import t as t_dist
+from tqdm import tqdm
 # Import Environment lazily inside __main__ to avoid circular imports during
 # multiprocessing worker startup.
 # from statsmodels.nonparametric.kernel_regression import KernelReg
@@ -18,7 +20,6 @@ from scipy.signal import savgol_filter
 
 def _create_step_progress_bar(total, desc, position=None, leave=True):
     """Create a tqdm progress bar with the shared project formatting."""
-    from tqdm import tqdm
 
     tqdm_kwargs = {
         "total": total,
@@ -38,10 +39,10 @@ class LearningCurvePlot:
     def __init__(self,title=None):
         self.fig,self.ax = plt.subplots()
         self.ax.set_xlabel('Timestep')
-        self.ax.set_ylabel('Episode Return')      
+        self.ax.set_ylabel('Episode Return')
         if title is not None:
             self.ax.set_title(title)
-        
+
     def add_curve(self, x, y, label=None, ls="solid", color=None):
         ''' y: vector of average reward results
         label: string to appear as label in plot legend '''
@@ -57,7 +58,6 @@ class LearningCurvePlot:
         '''Add a shaded confidence band around the mean curve.
         alpha controls CI significance (e.g., 0.05 for 95% CI),
         fill_opacity controls the visual transparency of the shaded area.'''
-        from scipy.stats import t as t_dist
         t_crit = t_dist.ppf(1 - alpha / 2, df=max(n - 1, 1))
         margin = t_crit * y_std / np.sqrt(max(n, 1))
         y_lower = y_mean - margin
@@ -70,15 +70,33 @@ class LearningCurvePlot:
             color = self.ax.get_lines()[-1].get_color()  # match the last plotted line
         self.ax.fill_between(x, y_lower, y_upper,
                              alpha=fill_opacity, color=color)
-    
+
     def set_ylim(self,lower,upper):
         self.ax.set_ylim([lower,upper])
 
     def add_hline(self,height,label):
         self.ax.axhline(height,ls='--',c='k',label=label)
 
-    def save(self,name='test.png'):
-        ''' name: string for filename of saved figure '''
+    @staticmethod
+    def _resolve_non_overwriting_path(output_path: str) -> str:
+        """Return output_path if it doesn't exist; otherwise add (1), (2), ... before the extension."""
+        if not os.path.exists(output_path):
+            return output_path
+
+        root, ext = os.path.splitext(output_path)
+        i = 1
+        while True:
+            candidate = f"{root} ({i}){ext}"
+            if not os.path.exists(candidate):
+                return candidate
+            i += 1
+
+    def save(self,name='test.png') -> str:
+        ''' name: string for filename of saved figure.
+
+        If the target filename already exists, saves to an enumerated name:
+        file.png -> file (1).png -> file (2).png -> ...
+        '''
         self.ax.legend(
             fontsize=8,
             handlelength=1.2,
@@ -88,18 +106,27 @@ class LearningCurvePlot:
             borderaxespad=0.3,
         )
         self.fig.tight_layout()
+
         output_path = name
         if not os.path.isabs(name):
             os.makedirs("plots", exist_ok=True)
             output_path = os.path.join("plots", os.path.basename(name))
+        else:
+            # Ensure parent folder exists for absolute paths
+            out_dir = os.path.dirname(output_path)
+            if out_dir:
+                os.makedirs(out_dir, exist_ok=True)
+
+        output_path = self._resolve_non_overwriting_path(output_path)
         self.fig.savefig(output_path,dpi=300)
+        return output_path
 # End Class LearningCurvePlot ##############################################################
 
 
 
 def smooth(y, window, poly=2):
     '''
-    y: vector to be smoothed 
+    y: vector to be smoothed
     window: size of the smoothing window '''
     return savgol_filter(y,window,poly)
 
@@ -149,7 +176,7 @@ def linear_anneal(t,T,start,final,percentage):
     start: initial value
     final: value after percentage*T steps
     percentage: percentage of T after which annealing finishes
-    ''' 
+    '''
     final_from_T = int(percentage*T)
     if t > final_from_T:
         return final

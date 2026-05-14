@@ -21,9 +21,9 @@ from Helper import (
 # Begin Class CartPoleAgentPlot ##############################################################
 class CartPoleAgentPlot:
     ''' Class for plotting CartPole agent behavior during training '''
-    def __init__(self, env, title=None, curve_plot=False, animation_plot=False):
+    def __init__(self, env, title=None, show_curved_plots=False, animation_plot=False):
         self.env = env
-        if curve_plot:
+        if show_curved_plots:
             self.fig,self.ax = visplt.subplots()
             ###### Setting plot parameters for better visualization
             self.ax.set_xlim(-2.4,2.4)
@@ -200,13 +200,15 @@ def run_selected_experiments(
     ac_config=None,
     a2c_config=None,
     dqn_config=None,
+    ppo_config=None,
+    sac_config=None,
 ):
     """Orchestrate training, data loading, and plotting for all selected experiments.
 
     Parameters
     ----------
     experiments : list[str]
-        Algorithm names to run. Supported: "REINFORCE", "AC", "A2C", "DQN".
+        Algorithm names to run. Supported: "REINFORCE", "AC", "A2C", "DQN", "PPO", "SAC".
     global_config : dict
         Global/shared parameters (benchmark, plotting, environment, seed).
     reinforce_config : dict or None
@@ -217,6 +219,10 @@ def run_selected_experiments(
         A2C-specific hyperparameters. Required when "A2C" in experiments.
     dqn_config : dict or None
         DQN-specific hyperparameters. Required when "DQN" in experiments.
+    ppo_config : dict or None
+        PPO-specific hyperparameters. Required when "PPO" in experiments.
+    sac_config : dict or None
+        SAC-specific hyperparameters. Required when "SAC" in experiments.
     """
     # ── Unpack global config ──
     gc = global_config or {}
@@ -227,6 +233,12 @@ def run_selected_experiments(
     curve_confidence_interval = gc.get("curve_confidence_interval", 0.6)
     curve_shaded_area_opacity = gc.get("curve_shaded_area_opacity", 0.05)
     use_existing_disk_data = gc.get("use_existing_disk_data", True)
+    use_existing_network_checkpoints = bool(
+        gc.get(
+            "use_existing_disk_trained_networks",
+            gc.get("use_existing_network_checkpoints", False),
+        )
+    )
     format_sheets = bool(gc.get("format_sheets", False))
     formatted_sheets = bool(gc.get("formatted_sheets", False))
     n_timesteps = int(gc.get("n_timesteps", 100000))
@@ -253,8 +265,12 @@ def run_selected_experiments(
     )
 
     base_seed = int(gc.get("base_seed", 42))
-    curve_plot = gc.get("curve_plot", False)
-    animation_plot = gc.get("animation_plot", False)
+    unused_cpu_cores = int(gc.get("UNUSED_CPU_CORES", 0))
+    if unused_cpu_cores < 0:
+        unused_cpu_cores = 0
+    # Backward/forward compatible key names (some configs use show_curve_plots)
+    show_curved_plots = bool(gc.get("show_curved_plots", gc.get("show_curve_plots", False)))
+    animation_plot = bool(gc.get("animation_plot", False))
 
     start_time = time.perf_counter()
     start_human = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -268,7 +284,9 @@ def run_selected_experiments(
         _build_ac_jobs,
         _build_algo_filename,
         _build_dqn_jobs,
+        _build_ppo_jobs,
         _build_reinforce_jobs,
+        _build_sac_jobs,
         _load_all_excel_curves,
         _load_results_from_excel,
         _run_pending_parallel,
@@ -287,6 +305,15 @@ def run_selected_experiments(
     if plot_smoothing_windows.size < 1:
         raise ValueError("plot_smoothing_window must contain at least one value.")
 
+    # User request: only show the combined 2-subplot plot during execution.
+    # If the required windows exist (101 and 201), disable other plot display (curve figures + animation).
+    desired_windows = [101, 201]
+    available_windows = {int(w) for w in plot_smoothing_windows}
+    will_have_combined_preview = all(w in available_windows for w in desired_windows)
+    if will_have_combined_preview:
+        show_curved_plots = False
+        animation_plot = False
+
     # ── Build setting jobs for each selected algorithm (grouped by algo) ──
     algo_jobs = {}  # algo_upper -> list of setting_jobs
     algo_configs_map = {
@@ -294,6 +321,15 @@ def run_selected_experiments(
         "AC": ac_config,
         "A2C": a2c_config,
         "DQN": dqn_config,
+        "PPO": ppo_config,
+        "SAC": sac_config,
+    }
+    # Preserve the original (un-augmented) algo configs for workbook-level
+    # meta validation. The augmented copies merge in global keys for per-sheet
+    # hyperparameter matching, but the meta sheet stores the user-supplied
+    # algo config as it appears in Experiment.py.
+    original_algo_configs_map = {
+        algo_key: cfg for algo_key, cfg in algo_configs_map.items() if cfg is not None
     }
     # Disk-matching should depend on evaluation mode so proxy-vs-env-trial
     # results don't mix between runs.
@@ -366,6 +402,34 @@ def run_selected_experiments(
                 max_eval_episode_length=max_eval_episode_length,
                 base_seed=base_seed,
             )
+        elif algo_upper == "PPO":
+            if ppo_config is None:
+                raise ValueError("ppo_config dict is required when PPO is included.")
+            jobs = _build_ppo_jobs(
+                algo_config=ppo_config,
+                n_repetitions=n_repetitions,
+                n_timesteps=n_timesteps,
+                eval_interval=eval_interval,
+                max_train_episode_length=max_train_episode_length,
+                max_eval_episode_length=max_eval_episode_length,
+                base_seed=base_seed,
+                eval_with_env_episode_trials=eval_with_env_episode_trials,
+                n_eval_episodes=n_eval_episodes,
+            )
+        elif algo_upper == "SAC":
+            if sac_config is None:
+                raise ValueError("sac_config dict is required when SAC is included.")
+            jobs = _build_sac_jobs(
+                algo_config=sac_config,
+                n_repetitions=n_repetitions,
+                n_timesteps=n_timesteps,
+                eval_interval=eval_interval,
+                max_train_episode_length=max_train_episode_length,
+                max_eval_episode_length=max_eval_episode_length,
+                base_seed=base_seed,
+                eval_with_env_episode_trials=eval_with_env_episode_trials,
+                n_eval_episodes=n_eval_episodes,
+            )
         else:
             raise ValueError(f"Unknown algorithm: {algo}")
         algo_jobs[algo_upper] = jobs
@@ -434,6 +498,8 @@ def run_selected_experiments(
                     excel_path,
                     cfg,
                     formatted_sheets=formatted_sheets,
+                    global_config=gc,
+                    original_algo_config=original_algo_configs_map.get(algo_upper),
                 )
             except Exception as exc:
                 print(f"[{algo_upper}] Existing Excel data is incompatible. Re-running from scratch. Reason: {exc}")
@@ -488,11 +554,15 @@ def run_selected_experiments(
     if pending_settings:
         cpu_count = os.cpu_count() or 1
         total_tasks = len(pending_settings) * n_repetitions
-        max_workers = min(total_tasks, cpu_count)
-        print(f"CPU cores available: {cpu_count}. "
-              f"Total tasks: {total_tasks} "
-              f"({len(pending_settings)} setting(s) × {n_repetitions} rep(s)). "
-              f"Parallel workers: {max_workers}.\n")
+        available_cpus = max(1, cpu_count - unused_cpu_cores)
+        max_workers = min(total_tasks, available_cpus)
+        print(
+            f"CPU cores available: {cpu_count} "
+            f"(reserving UNUSED_CPU_CORES={unused_cpu_cores} => using {available_cpus}). "
+            f"Total tasks: {total_tasks} "
+            f"({len(pending_settings)} setting(s) × {n_repetitions} rep(s)). "
+            f"Parallel workers: {max_workers}.\n"
+        )
         for global_idx, job in pending_settings:
             print(f"Setting {global_idx + 1}/{len(all_setting_jobs)}: {job['curve_label']}")
         print()
@@ -504,7 +574,9 @@ def run_selected_experiments(
             max_train_episode_length=max_train_episode_length,
             max_eval_episode_length=max_eval_episode_length,
             base_seed=base_seed,
+            use_existing_network_checkpoints=use_existing_network_checkpoints,
             setting_results=setting_results,
+            unused_cpu_cores=unused_cpu_cores,
         )
 
     # ── Pass 3: save newly computed results per algo to excel files, algo_upper: algorithm name uppercased ──
@@ -526,6 +598,8 @@ def run_selected_experiments(
                 algo_results_to_save,
                 format_sheets=format_sheets,
                 verbose=False,
+                global_config=gc,
+                algo_config=original_algo_configs_map.get(algo_upper),
             )
             algo_added_counts[algo_upper] = int(added_count)
 
@@ -542,6 +616,8 @@ def run_selected_experiments(
             data_sheets_dir,
             algo_configs,
             formatted_sheets=formatted_sheets,
+            global_config=gc,
+            original_algo_configs=original_algo_configs_map,
         )
         for curve_info in all_disk_curves:
             if curve_info["source_file"] in current_basenames:
@@ -565,7 +641,7 @@ def run_selected_experiments(
 
     # ── 1. Plot current experiment settings across all smoothing windows ──
     for idx, job in enumerate(all_setting_jobs):
-        lc_raw, lc_std_raw, timesteps = setting_results[idx]
+        lc_raw, lc_std_raw, timesteps = setting_results[idx][:3]
         curve_label = job["curve_label"]
         for pc in plot_configs:
             window = int(pc["window"])
@@ -618,17 +694,18 @@ def run_selected_experiments(
     #### Save all plots with a filename that includes the experiment names and smoothing window info
     plots_dir = "plots"
     os.makedirs(plots_dir, exist_ok=True)
-    close_individual_plot_figs = (not curve_plot) and (not animation_plot)
+    close_individual_plot_figs = (not show_curved_plots) and (not animation_plot)
 
+    saved_paths_by_window: dict[int, str] = {}
     new_plot_count = 0
     for pc in plot_configs:
         window = int(pc["window"])
         suffix = f"w{window}-not-smoothed" if window <= 1 else f"w{window}-smoothed"
         filename = f"{plot_filename_tag}_{suffix}.png"
         output_path = os.path.join(plots_dir, filename)
-        if not os.path.isfile(output_path):
-            new_plot_count += 1
-        pc["plot"].save(output_path)
+        saved_path = pc["plot"].save(output_path)
+        saved_paths_by_window[window] = saved_path
+        new_plot_count += 1
         if close_individual_plot_figs and hasattr(pc["plot"], "fig"):
             plt.close(pc["plot"].fig)
 
@@ -642,15 +719,12 @@ def run_selected_experiments(
     if all(w in available_windows for w in desired_windows):
         try:
             combined_fig, axes = plt.subplots(1, 2, figsize=(14, 6))
-            combined_fig.suptitle(f"{plot_filename_tag} (w=101 and w=201)")
+            combined_fig.suptitle(f"Twin_{plot_filename_tag} (w=101 and w=201)")
 
             for ax, w in zip(axes, desired_windows):
-                suffix = f"w{w}-not-smoothed" if w <= 1 else f"w{w}-smoothed"
-                filename = f"{plot_filename_tag}_{suffix}.png"
-                output_path = os.path.join("plots", filename)
-
-                if os.path.isfile(output_path):
-                    img = plt.imread(output_path)
+                saved_path = saved_paths_by_window.get(w)
+                if saved_path is not None and os.path.isfile(saved_path):
+                    img = plt.imread(saved_path)
                     ax.imshow(img)
                     ax.axis("off")
                 else:
@@ -691,14 +765,14 @@ def run_selected_experiments(
         )
         anim = CartPoleAgentPlot(
             test_env, title="CartPole Agent Plot",
-            curve_plot=curve_plot, animation_plot=animation_plot,
+            show_curved_plots=show_curved_plots, animation_plot=animation_plot,
         )
         anim.test_one_episode(
             test_env,
             policy=lambda obs: trained_nn_policy(agent.actor, obs),
         )
 
-    if curve_plot or animation_plot or combined_fig_shown:
+    if show_curved_plots or animation_plot or combined_fig_shown:
         plt.show()
 
     total_time = (time.perf_counter() - start_time) / 60.0
@@ -713,7 +787,7 @@ def run_selected_experiments(
 if __name__ == "__main__":
     base_seed = 47
     env=environ.CartPoleEnvironment(max_episode_length=500, render_mode="rgb_array",seed=base_seed)
-    plot=fn.CartPoleAgentPlot(env, title="Test CartPole Agent Plot", curve_plot=False)
+    plot=fn.CartPoleAgentPlot(env, title="Test CartPole Agent Plot", show_curved_plots=False)
     preview_animation = plot.test_one_episode(env=env, policy="test_policy")
     plt.show()
 ####################################################################
@@ -806,6 +880,7 @@ def average_over_repetitions(
     eval_with_env_episode_trials: bool = False,
     n_eval_episodes: int = 5,
     return_raw=False,
+    unused_cpu_cores: int = 0,
 ):
     """Run ``n_repetitions`` of the given method and return (mean, std, timesteps)."""
 
@@ -817,7 +892,15 @@ def average_over_repetitions(
     returns_over_repetitions = []
     timesteps = None
 
-    parallel_workers = max(1, min(n_repetitions, os.cpu_count() or 1))
+    cpu_count = os.cpu_count() or 1
+    if unused_cpu_cores is None:
+        unused_cpu_cores = 0
+    unused_cpu_cores = int(unused_cpu_cores)
+    if unused_cpu_cores < 0:
+        unused_cpu_cores = 0
+
+    available_cpus = max(1, cpu_count - unused_cpu_cores)
+    parallel_workers = max(1, min(n_repetitions, available_cpus))
     use_parallel = parallel_workers > 1 and n_repetitions > 1
 
     if use_parallel:
@@ -955,8 +1038,28 @@ def _run_single_repetition(
     n_agent_state_elements=4,
     n_actions=2,
     TN_step=10,
+    use_existing_network_checkpoints: bool = False,
     eval_with_env_episode_trials: bool = False,
     n_eval_episodes: int = 5,
+    # PPO-specific
+    gae_lambda: float = 0.95,
+    clip_eps: float = 0.2,
+    n_epochs: int = 10,
+    rollout_steps: int = 2048,
+    mini_batch_size: int = 64,
+    entropy_coef: float = 0.0,
+    value_coef: float = 0.5,
+    max_grad_norm: float = 0.5,
+    # SAC-specific
+    alpha_lr: float = 3e-4,
+    tau: float = 0.005,
+    target_entropy_ratio: float = 0.98,
+    replay_buffer_size: int = 100000,
+    batch_size: int = 64,
+    warmup_steps: int = 1000,
+    updates_per_step: int = 1,
+    auto_tune_alpha: bool = True,
+    alpha_init: float = 1.0,
 ):
     """Run one training repetition (pickle-safe for ProcessPoolExecutor)."""
 
@@ -975,6 +1078,11 @@ def _run_single_repetition(
 
     if method == "REINFORCE":
         from REINFORCE import REINFORCE_Agent, run_reinforce
+        from checkpointing import (
+            load_state_dict_if_present,
+            pg_actor_checkpoint_path,
+            save_state_dict_overwrite,
+        )
 
         agent = REINFORCE_Agent(
             actor_hidden_nn=actor_hidden_nn,
@@ -982,6 +1090,17 @@ def _run_single_repetition(
             gamma=gamma,
             use_critic=False,
         )
+
+        actor_ck = pg_actor_checkpoint_path(
+            algo_type="REINFORCE",
+            actor_hidden_nn=actor_hidden_nn,
+        )
+        if use_existing_network_checkpoints:
+            load_state_dict_if_present(
+                model=agent.actor,
+                checkpoint_path=actor_ck.file_path,
+            )
+
         env = environ.CartPoleEnvironment(
             max_episode_length=max_train_episode_length,
             render_mode="rgb_array",
@@ -999,8 +1118,21 @@ def _run_single_repetition(
             eval_with_env_episode_trials=eval_with_env_episode_trials,
             n_eval_episodes=n_eval_episodes,
         )
+
+        if rep_index == 0:
+            save_state_dict_overwrite(
+                model=agent.actor,
+                checkpoint_path=actor_ck.file_path,
+            )
+
     elif method == "ac":
         from AC import AC_Agent, run_ac
+        from checkpointing import (
+            load_state_dict_if_present,
+            pg_actor_checkpoint_path,
+            pg_critic_checkpoint_path,
+            save_state_dict_overwrite,
+        )
 
         agent = AC_Agent(
             actor_hidden_nn=actor_hidden_nn,
@@ -1009,6 +1141,26 @@ def _run_single_repetition(
             critic_lr=critic_lr,
             gamma=gamma,
         )
+
+        actor_ck = pg_actor_checkpoint_path(
+            algo_type="AC",
+            actor_hidden_nn=actor_hidden_nn,
+        )
+        critic_ck = pg_critic_checkpoint_path(
+            algo_type="AC",
+            critic_hidden_nn=critic_hidden_nn,
+        )
+
+        if use_existing_network_checkpoints:
+            load_state_dict_if_present(
+                model=agent.actor,
+                checkpoint_path=actor_ck.file_path,
+            )
+            load_state_dict_if_present(
+                model=agent.critic,
+                checkpoint_path=critic_ck.file_path,
+            )
+
         env = environ.CartPoleEnvironment(
             max_episode_length=max_train_episode_length,
             render_mode="rgb_array",
@@ -1026,8 +1178,25 @@ def _run_single_repetition(
             eval_with_env_episode_trials=eval_with_env_episode_trials,
             n_eval_episodes=n_eval_episodes,
         )
+
+        if rep_index == 0:
+            save_state_dict_overwrite(
+                model=agent.actor,
+                checkpoint_path=actor_ck.file_path,
+            )
+            save_state_dict_overwrite(
+                model=agent.critic,
+                checkpoint_path=critic_ck.file_path,
+            )
+
     elif method == "a2c":
         from A2C import A2C_Agent, run_a2c
+        from checkpointing import (
+            load_state_dict_if_present,
+            pg_actor_checkpoint_path,
+            pg_critic_checkpoint_path,
+            save_state_dict_overwrite,
+        )
 
         agent = A2C_Agent(
             critic_lr=critic_lr,
@@ -1039,6 +1208,26 @@ def _run_single_repetition(
             actor_lr=actor_lr,
             gamma=gamma,
         )
+
+        actor_ck = pg_actor_checkpoint_path(
+            algo_type="A2C",
+            actor_hidden_nn=actor_hidden_nn,
+        )
+        critic_ck = pg_critic_checkpoint_path(
+            algo_type="A2C",
+            critic_hidden_nn=critic_hidden_nn,
+        )
+
+        if use_existing_network_checkpoints:
+            load_state_dict_if_present(
+                model=agent.policy,
+                checkpoint_path=actor_ck.file_path,
+            )
+            load_state_dict_if_present(
+                model=agent.value_func,
+                checkpoint_path=critic_ck.file_path,
+            )
+
         env = environ.CartPoleEnvironment(
             max_episode_length=max_train_episode_length,
             render_mode="rgb_array",
@@ -1049,15 +1238,188 @@ def _run_single_repetition(
             n_timesteps=n_timesteps,
             eval_interval=eval_interval,
             truncation_step=max_train_episode_length,
-            max_eval_episode_length=max_eval_episode_length,
             enable_progress_bar=enable_progress_bar,
             progress_bar_desc=f"A2C Rep {rep_index + 1}/{n_repetitions}",
             progress_bar_position=rep_index if enable_progress_bar else None,
             shared_step_counter=shared_step_counter,
+            max_eval_episode_length=max_eval_episode_length,
             eval_with_env_episode_trials=eval_with_env_episode_trials,
             n_eval_episodes=n_eval_episodes,
         )
-    else:
-        raise ValueError(f"Unknown method: {method}")
+
+        if rep_index == 0:
+            save_state_dict_overwrite(
+                model=agent.policy,
+                checkpoint_path=actor_ck.file_path,
+            )
+            save_state_dict_overwrite(
+                model=agent.value_func,
+                checkpoint_path=critic_ck.file_path,
+            )
+
+    elif method == "ppo":
+        from PPO import PPO_Agent, run_ppo
+        from checkpointing import (
+            load_state_dict_if_present,
+            pg_actor_checkpoint_path,
+            pg_critic_checkpoint_path,
+            save_state_dict_overwrite,
+        )
+
+        agent = PPO_Agent(
+            n_agent_state_elements=n_agent_state_elements,
+            n_actions=n_actions,
+            actor_lr=actor_lr,
+            critic_lr=critic_lr,
+            gamma=gamma,
+            gae_lambda=gae_lambda,
+            clip_eps=clip_eps,
+            n_epochs=n_epochs,
+            mini_batch_size=mini_batch_size,
+            entropy_coef=entropy_coef,
+            value_coef=value_coef,
+            max_grad_norm=max_grad_norm,
+            actor_hidden_nn=actor_hidden_nn,
+            critic_hidden_nn=critic_hidden_nn,
+        )
+
+        actor_ck = pg_actor_checkpoint_path(
+            algo_type="PPO",
+            actor_hidden_nn=actor_hidden_nn,
+        )
+        critic_ck = pg_critic_checkpoint_path(
+            algo_type="PPO",
+            critic_hidden_nn=critic_hidden_nn,
+        )
+
+        if use_existing_network_checkpoints:
+            load_state_dict_if_present(
+                model=agent.policy,
+                checkpoint_path=actor_ck.file_path,
+            )
+            load_state_dict_if_present(
+                model=agent.value_func,
+                checkpoint_path=critic_ck.file_path,
+            )
+
+        env = environ.CartPoleEnvironment(
+            max_episode_length=max_train_episode_length,
+            render_mode="rgb_array",
+        )
+        rep_returns, rep_timesteps = run_ppo(
+            agent,
+            env,
+            n_timesteps=n_timesteps,
+            eval_interval=eval_interval,
+            truncation_step=max_train_episode_length,
+            rollout_steps=rollout_steps,
+            enable_progress_bar=enable_progress_bar,
+            progress_bar_desc=f"PPO Rep {rep_index + 1}/{n_repetitions}",
+            progress_bar_position=rep_index if enable_progress_bar else None,
+            shared_step_counter=shared_step_counter,
+            max_eval_episode_length=max_eval_episode_length,
+            eval_with_env_episode_trials=eval_with_env_episode_trials,
+            n_eval_episodes=n_eval_episodes,
+        )
+
+        if rep_index == 0:
+            save_state_dict_overwrite(
+                model=agent.policy,
+                checkpoint_path=actor_ck.file_path,
+            )
+            save_state_dict_overwrite(
+                model=agent.value_func,
+                checkpoint_path=critic_ck.file_path,
+            )
+
+    elif method == "sac":
+        from SAC import SAC_Agent, run_sac
+        from checkpointing import (
+            load_state_dict_if_present,
+            pg_actor_checkpoint_path,
+            sac_q_checkpoint_path,
+            save_state_dict_overwrite,
+        )
+
+        agent = SAC_Agent(
+            n_agent_state_elements=n_agent_state_elements,
+            n_actions=n_actions,
+            actor_lr=actor_lr,
+            critic_lr=critic_lr,
+            alpha_lr=alpha_lr,
+            gamma=gamma,
+            tau=tau,
+            target_entropy_ratio=target_entropy_ratio,
+            replay_buffer_size=replay_buffer_size,
+            batch_size=batch_size,
+            warmup_steps=warmup_steps,
+            updates_per_step=updates_per_step,
+            actor_hidden_nn=actor_hidden_nn,
+            critic_hidden_nn=critic_hidden_nn,
+            auto_tune_alpha=auto_tune_alpha,
+            alpha_init=alpha_init,
+        )
+
+        actor_ck = pg_actor_checkpoint_path(
+            algo_type="SAC",
+            actor_hidden_nn=actor_hidden_nn,
+        )
+        q1_ck = sac_q_checkpoint_path(
+            critic_hidden_nn=critic_hidden_nn,
+            q_index=1,
+        )
+        q2_ck = sac_q_checkpoint_path(
+            critic_hidden_nn=critic_hidden_nn,
+            q_index=2,
+        )
+
+        if use_existing_network_checkpoints:
+            load_state_dict_if_present(
+                model=agent.policy,
+                checkpoint_path=actor_ck.file_path,
+            )
+            if load_state_dict_if_present(
+                model=agent.q1,
+                checkpoint_path=q1_ck.file_path,
+            ):
+                agent.q1_target.load_state_dict(agent.q1.state_dict())
+            if load_state_dict_if_present(
+                model=agent.q2,
+                checkpoint_path=q2_ck.file_path,
+            ):
+                agent.q2_target.load_state_dict(agent.q2.state_dict())
+
+        env = environ.CartPoleEnvironment(
+            max_episode_length=max_train_episode_length,
+            render_mode="rgb_array",
+        )
+        rep_returns, rep_timesteps = run_sac(
+            agent,
+            env,
+            n_timesteps=n_timesteps,
+            eval_interval=eval_interval,
+            truncation_step=max_train_episode_length,
+            enable_progress_bar=enable_progress_bar,
+            progress_bar_desc=f"SAC Rep {rep_index + 1}/{n_repetitions}",
+            progress_bar_position=rep_index if enable_progress_bar else None,
+            shared_step_counter=shared_step_counter,
+            max_eval_episode_length=max_eval_episode_length,
+            eval_with_env_episode_trials=eval_with_env_episode_trials,
+            n_eval_episodes=n_eval_episodes,
+        )
+
+        if rep_index == 0:
+            save_state_dict_overwrite(
+                model=agent.policy,
+                checkpoint_path=actor_ck.file_path,
+            )
+            save_state_dict_overwrite(
+                model=agent.q1,
+                checkpoint_path=q1_ck.file_path,
+            )
+            save_state_dict_overwrite(
+                model=agent.q2,
+                checkpoint_path=q2_ck.file_path,
+            )
 
     return rep_returns, rep_timesteps

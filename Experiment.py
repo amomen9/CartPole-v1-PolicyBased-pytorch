@@ -15,34 +15,34 @@ def experiment():
 
     #################[ Global Parameters ]################
     global_config = {
+        "n_repetitions": 5,                 # Default: 5
+        "UNUSED_CPU_CORES": 2,              # Number of CPU cores to leave unused when using multiprocessing, for appropriate other applications' performance. Cap degree of parallelism: <#total CPU cores>-UNUSED_CPU_CORES Default: 2.
+        # Plotting parameters
         "benchmark_curve": 1,               # Default: 1, choose one: 1 or 2 for the benchmark CSV (BaselineDataCartPole_run1.csv or BaselineDataCartPole_run2.csv).
         "benchmark_name": "Baseline",
-        "n_repetitions": 5,                 # Default: 5
-        # Plotting parameters
         "plot_smoothing_window": [1, 101, 201, 251, 351],  # Use multiple values to plot multiple curves. Default: [1, 51, 101, 201, 251, 301]. Set to [1] to skip smoothing.
         "curve_confidence_interval": 0.6,   # Curve shading confidence interval. Default: 0.95. Set to 0 to skip CI shading.
-        "curve_shaded_area_opacity": 0.05,  # Opacity of the shaded area for confidence intervals. Default: 0.05 (5% opacity).
+        "curve_shaded_area_opacity": 0.06,  # Opacity of the shaded area for confidence intervals. Default: 0.05 (5% opacity).
+        "show_curve_plots": True,                # Show learning curve plot window at the end.
+        "animation_plot": True,            # Show CartPole animation at the end.
         "use_existing_disk_data": True,     # Whether to use existing data (.xlsx files) from disk if exists.
-        "curve_plot": False,                # Show learning curve plot window at the end.
-        "animation_plot": False,            # Show CartPole animation at the end.
+        "use_existing_disk_trained_networks": True,
         # Environment
-        "n_timesteps": 1000000,              # Total number of training timesteps. Default: 1000000.
-        "eval_interval": 250,
-        "max_train_episode_length": 500, #500        # Episode truncation step. Default: 500.
-        "max_eval_episode_length": 10000, #500        # Episode truncation step. Default: 500.
-        # Model evaluation option:
-        # False (default): evaluation uses the fast proxy from training (last_episode_return).
-        # True: evaluation uses greedy environment episode trials via agent.evaluate().
-        "eval_with_env_episode_trials": True,
-        "n_eval_episodes": 5,
+        "max_train_episode_length": 1000, #500        # Episode truncation step. Default: 500.
         "base_seed": 42,                    # Base seed for CartPole environment and agent initialization. Each repetition will use a different seed derived from this base seed (e.g., base_seed + repetition_index).
+        # Agent
+        "n_timesteps": 200000,              # Total number of training timesteps. Default: 1000000.
+        "max_eval_episode_length": 20000, #500        # Episode truncation step. Default: 500.
+        "eval_interval": 250,
+        "eval_with_env_episode_trials": True, # Default: True. Set to False to use the fast proxy from training (last_episode_return) for evaluation instead of running separate greedy environment episode trials via agent.evaluate(). Note: setting to False will speed up training and plotting, but will not provide true evaluation curves. Setting to True will provide true evaluation curves but will significantly increase training time due to the need to run separate evaluation episodes at each eval_interval.
+        "n_eval_episodes": 5,
     }
     ################[ End Global Parameters ]################
 
 
     ###############[ Training hyperparameters ]##############
     # ------------- Algorithm Type: REINFORCE hyperparameters (optimal) ----
-    include_REINFORCE_in_training = True
+    include_REINFORCE_in_training = False
     reinforce_config = {
         "gamma": [0.99],                # list of discount factors to sweep
         "actor_lr": [0.001],            # actor learning rate(s) to sweep
@@ -94,6 +94,78 @@ def experiment():
         },
     }
     # ------------- End A2C hyperparameters -----------
+
+    # ------------- Algorithm Type: PPO hyperparameters (optimal) ----
+    # Proximal Policy Optimisation (PPO-clipped) - Schulman et al., 2017
+    include_PPO_in_training = True
+    ppo_config = {
+        "gamma": [0.99],                # list of discount factors to sweep
+        "actor_lr": [0.0003],           # actor learning rate(s) to sweep
+        "actor_hidden_nn": [[64, 64]],  # actor NN architectures to sweep
+        "critic_lr": [0.001],           # critic learning rate(s) to sweep
+        "critic_hidden_nn": [[64, 64]], # critic NN architectures to sweep
+        "gae_lambda": [0.95],           # GAE lambda (Schulman et al., 2015)
+        "clip_eps": [0.2],              # PPO clipping epsilon
+        "n_epochs": [10],               # # of optimisation epochs per rollout
+        "rollout_steps": [2048],        # # of env steps per rollout (PPO buffer size)
+        "mini_batch_size": [64],        # mini-batch size for PPO updates
+        "entropy_coef": [0.0],          # entropy bonus weight
+        "value_coef": [0.5],            # value loss weight
+        "max_grad_norm": [0.5],         # global gradient-norm clip
+        "legend_parameters": {          # [plot label, show flag]
+            "gamma": [r"$\gamma$: ", True],
+            "actor_lr": [r"Actor $\alpha$: ", True],
+            "critic_lr": [r"Critic $\beta$: ", True],
+            "actor_hidden_nn": [r"Actor NN: ", True],
+            "critic_hidden_nn": [r"Critic NN: ", True],
+            "gae_lambda": [r"$\lambda_{GAE}$: ", True],
+            "clip_eps": [r"$\epsilon_{clip}$: ", True],
+            "n_epochs": [r"Epochs: ", False],
+            "rollout_steps": [r"Rollout: ", False],
+            "mini_batch_size": [r"MB: ", False],
+            "entropy_coef": [r"Ent: ", False],
+            "value_coef": [r"VCoef: ", False],
+            "max_grad_norm": [r"GradClip: ", False],
+        },
+    }
+    # ------------- End PPO hyperparameters -----------
+
+    # ------------- Algorithm Type: SAC hyperparameters (optimal) ----
+    # Soft Actor-Critic (discrete) - Haarnoja et al., 2018/2019 + Christodoulou, 2019
+    include_SAC_in_training = True
+    sac_config = {
+        "gamma": [0.99],                # list of discount factors to sweep
+        "actor_lr": [0.0003],           # actor learning rate(s) to sweep
+        "actor_hidden_nn": [[64, 64]],  # actor NN architectures to sweep
+        "critic_lr": [0.0003],          # critic learning rate(s) to sweep
+        "critic_hidden_nn": [[128, 128]], # critic (twin Q) NN architectures
+        "alpha_lr": [0.0003],           # entropy-temperature learning rate
+        "tau": [0.005],                 # soft target update rate
+        "target_entropy_ratio": [0.98], # target entropy = ratio * log(n_actions)
+        "replay_buffer_size": [100000], # replay buffer capacity
+        "batch_size": [64],             # SGD batch size from the replay buffer
+        "warmup_steps": [1000],         # random-action steps before SAC kicks in
+        "updates_per_step": [1],        # gradient updates per env step
+        "auto_tune_alpha": [True],      # Default: True (Haarnoja et al., 2019). Set to [False] to use fixed alpha (Haarnoja et al., 2018).
+        "alpha_init": [1.0],            # Initial / fixed entropy temperature alpha. Used as the start point when auto_tune_alpha=True, or as the fixed value when auto_tune_alpha=False.
+        "legend_parameters": {          # [plot label, show flag]
+            "gamma": [r"$\gamma$: ", True],
+            "actor_lr": [r"Actor $\alpha$: ", True],
+            "critic_lr": [r"Critic $\beta$: ", True],
+            "actor_hidden_nn": [r"Actor NN: ", True],
+            "critic_hidden_nn": [r"Critic NN: ", True],
+            "alpha_lr": [r"$\alpha_{lr}$: ", False],
+            "tau": [r"$\tau$: ", True],
+            "target_entropy_ratio": [r"Tgt H ratio: ", False],
+            "replay_buffer_size": [r"Buff: ", False],
+            "batch_size": [r"Batch: ", False],
+            "warmup_steps": [r"Warm: ", False],
+            "updates_per_step": [r"UPS: ", False],
+            "auto_tune_alpha": [r"AutoTune $\alpha$: ", True],
+            "alpha_init": [r"$\alpha_0$: ", False],
+        },
+    }
+    # ------------- End SAC hyperparameters -----------
 
     # Using DQN implementation from the previous assignment (existing in the assignment2_repo directory)
     # ------------- Algorithm: DQN hyperparameters (optimal) ----
@@ -148,6 +220,10 @@ def experiment():
         experiments.append("AC")
     if include_A2C_in_training:
         experiments.append("A2C")
+    if include_PPO_in_training:
+        experiments.append("PPO")
+    if include_SAC_in_training:
+        experiments.append("SAC")
     if include_DQN_in_training:
         experiments.append("DQN")
 
@@ -158,6 +234,8 @@ def experiment():
         ac_config=ac_config,
         a2c_config=a2c_config,
         dqn_config=dqn_config,
+        ppo_config=ppo_config,
+        sac_config=sac_config,
     )
 
 

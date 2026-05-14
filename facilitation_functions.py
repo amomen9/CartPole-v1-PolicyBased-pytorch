@@ -8,6 +8,7 @@ Contains file/Excel utility helpers and algorithm job builders.
 import os
 import shutil
 import time
+import ast
 import glob
 from copy import copy
 from datetime import datetime
@@ -19,6 +20,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 from openpyxl import Workbook, load_workbook
 from openpyxl.utils import get_column_letter
+
+import pandas as pd
+from tqdm import tqdm
+from multiprocessing import Manager
 
 from functions import (
     LearningCurvePlot,
@@ -123,7 +128,6 @@ def _sheet_hp_text(value: Any) -> str:
         text = value.strip()
         if text.startswith("[") and text.endswith("]"):
             try:
-                import ast
                 parsed = ast.literal_eval(text)
                 return _sheet_hp_text(parsed)
             except Exception:
@@ -144,7 +148,6 @@ def _empty_data_sheets_dir(dir_path):
 
 
 def _save_results_to_excel(dir_path, base_filename, setting_jobs, setting_results):
-    import pandas as pd
     filepath = os.path.join(dir_path, f"{base_filename}.xlsx")
     with pd.ExcelWriter(filepath, engine='openpyxl') as writer:
         for idx, (job, result) in enumerate(zip(setting_jobs, setting_results)):
@@ -165,7 +168,14 @@ def _save_results_to_excel(dir_path, base_filename, setting_jobs, setting_result
     print(f"Saved {len(setting_results)} settings to {filepath}")
 
 
-def _load_results_from_excel(filepath, algo_config: dict[str, Any] | None, formatted_sheets: bool = False):
+def _load_results_from_excel(
+    filepath,
+    algo_config: dict[str, Any] | None,
+    formatted_sheets: bool = False,
+    *,
+    global_config: dict[str, Any] | None = None,
+    original_algo_config: dict[str, Any] | None = None,
+):
     """Load results from an Excel file, validating each sheet's hyperparameters
     against the current algo config.
 
@@ -174,20 +184,32 @@ def _load_results_from_excel(filepath, algo_config: dict[str, Any] | None, forma
     - Row 2 contains the actual column headers.
     - Data starts on row 3.
 
+    When ``global_config`` is provided, the workbook-level ``_run_meta`` sheet is
+    also validated against the running global and algo configs (n_timesteps is
+    checked with >= rather than ==). A mismatch invalidates the entire workbook.
+
     Returns a tuple (results, mismatches):
         results: list of dicts [{"learning_curve", "learning_curve_std", "timesteps", "curve_label"}, ...]
         mismatches: dict {param_name: (sheet_value, config_value)} for the first mismatch
                     encountered per parameter across all skipped sheets.
     Sheets that don't match are skipped.
     """
-    import pandas as pd
 
     algo_config = algo_config or {}
+
+    if global_config is not None:
+        stored_meta = _read_run_meta_sheet(filepath)
+        meta_algo_config = original_algo_config if original_algo_config is not None else algo_config
+        meta_ok, meta_mismatches = _validate_run_meta(stored_meta, global_config, meta_algo_config)
+        if not meta_ok:
+            return [], meta_mismatches
+
     header_row = 1 if formatted_sheets else 0
     try:
         sheets = pd.read_excel(filepath, sheet_name=None, engine="openpyxl", header=header_row)
     except Exception as exc:
         raise ValueError(f"Failed to read Excel file '{filepath}': {exc}") from exc
+    sheets = {name: df for name, df in sheets.items() if name != RUN_META_SHEET_NAME}
 
     def _extract_matching_results(sheet_map):
         basename = os.path.basename(filepath)
@@ -277,6 +299,7 @@ def _load_results_from_excel(filepath, algo_config: dict[str, Any] | None, forma
             fallback_sheets = pd.read_excel(filepath, sheet_name=None, engine="openpyxl", header=fallback_header)
         except Exception:
             return results, mismatches
+        fallback_sheets = {name: df for name, df in fallback_sheets.items() if name != RUN_META_SHEET_NAME}
         fallback_results, fallback_mismatches = _extract_matching_results(fallback_sheets)
         if fallback_results:
             return fallback_results, fallback_mismatches
@@ -308,14 +331,22 @@ def _values_equal(a, b):
     return str(a) == str(b)
 
 
-def _load_all_excel_curves(data_sheets_dir, algo_configs=None, formatted_sheets: bool = False):
+def _load_all_excel_curves(
+    data_sheets_dir,
+    algo_configs=None,
+    formatted_sheets: bool = False,
+    *,
+    global_config: dict[str, Any] | None = None,
+    original_algo_configs: dict[str, dict[str, Any]] | None = None,
+):
     """Load all .xlsx files from data_sheets_dir (non-recursive).
 
     algo_configs: dict mapping algo name (e.g. "REINFORCE", "DQN") to its config dict.
     Each file's algo is inferred from the filename stem, so only files named
     like ``REINFORCE.xlsx`` or ``DQN.xlsx`` are matched.
     Sheets are filtered by HP value matching and labels are built using legend_parameters,
-    both delegated to _load_results_from_excel.
+    both delegated to _load_results_from_excel. When ``global_config`` is supplied
+    the workbook-level ``_run_meta`` validation is also enforced.
 
     Returns a list of dicts: [{curve_label, learning_curve, learning_curve_std, timesteps, source_file}, ...]
     """
@@ -325,14 +356,189 @@ def _load_all_excel_curves(data_sheets_dir, algo_configs=None, formatted_sheets:
         basename = os.path.basename(filepath)
         algo_prefix = os.path.splitext(basename)[0].upper()
         algo_config = (algo_configs or {}).get(algo_prefix)
+        original_algo_config = (original_algo_configs or {}).get(algo_prefix)
         try:
-            results, _ = _load_results_from_excel(filepath, algo_config, formatted_sheets=formatted_sheets)
+            results, _ = _load_results_from_excel(
+                filepath,
+                algo_config,
+                formatted_sheets=formatted_sheets,
+                global_config=global_config,
+                original_algo_config=original_algo_config,
+            )
         except Exception:
             continue
         for entry in results:
             entry["source_file"] = basename
             all_curves.append(entry)
     return all_curves
+
+
+# ── Run-config meta sheet (workbook-level validation) ─────────────────────────
+
+RUN_META_SHEET_NAME = "_run_meta"
+
+# Keys that must NOT participate in workbook-level matching. Mirrors the
+# user-supplied exclusion list (see Experiment.py global_config / algo_config).
+GLOBAL_CONFIG_EXCLUSIONS = frozenset({
+    "UNUSED_CPU_CORES",
+    "benchmark_curve",
+    "benchmark_name",
+    "plot_smoothing_window",
+    "curve_confidence_interval",
+    "curve_shaded_area_opacity",
+    "curve_plot",
+    "show_curve_plots",
+    "show_curved_plots",
+    "animation_plot",
+    "use_existing_disk_data",
+    "use_existing_disk_trained_networks",
+    "use_existing_network_checkpoints",
+    "format_sheets",
+    "formatted_sheets",
+    "Environment",
+    "baseline_model",
+    "n_use_trained_model",
+    "action_selection_method",
+    "trained_model_reseed_seed",
+})
+
+ALGO_CONFIG_EXCLUSIONS = frozenset({
+    "legend_parameters",
+    "nn_include_hp_in_legend",
+    "nn_include_lr_in_legend",
+})
+
+# n_timesteps is matched with >= rather than equality (workbook may contain
+# longer training curves than the running project requires).
+GLOBAL_CONFIG_NTIMESTEPS_KEY = "n_timesteps"
+
+
+def _meta_value_text(value: Any) -> str:
+    """Stable string form for a config value written to / read from the meta sheet."""
+    return _value_to_text(value)
+
+
+def _meta_filtered_items(config: dict[str, Any] | None, exclusions: frozenset) -> dict[str, str]:
+    """Return the {key: text} mapping that should appear in the meta sheet for ``config``.
+
+    Filters out keys listed in ``exclusions`` and normalizes every value to a stable
+    string so writing and reading produce identical comparable representations.
+    """
+    if not config:
+        return {}
+    items: dict[str, str] = {}
+    for key, value in config.items():
+        if str(key) in exclusions:
+            continue
+        items[str(key)] = _meta_value_text(value)
+    return items
+
+
+def _write_run_meta_sheet(
+    workbook,
+    global_config: dict[str, Any] | None,
+    algo_config: dict[str, Any] | None,
+) -> None:
+    """Write (or overwrite) the workbook-level run-config meta sheet."""
+    if RUN_META_SHEET_NAME in workbook.sheetnames:
+        del workbook[RUN_META_SHEET_NAME]
+    worksheet = workbook.create_sheet(title=RUN_META_SHEET_NAME)
+    worksheet.cell(1, 1, "section")
+    worksheet.cell(1, 2, "key")
+    worksheet.cell(1, 3, "value")
+
+    row_index = 2
+    for key, text in sorted(_meta_filtered_items(global_config, GLOBAL_CONFIG_EXCLUSIONS).items()):
+        worksheet.cell(row_index, 1, "global")
+        worksheet.cell(row_index, 2, key)
+        worksheet.cell(row_index, 3, text)
+        row_index += 1
+    for key, text in sorted(_meta_filtered_items(algo_config, ALGO_CONFIG_EXCLUSIONS).items()):
+        worksheet.cell(row_index, 1, "algo")
+        worksheet.cell(row_index, 2, key)
+        worksheet.cell(row_index, 3, text)
+        row_index += 1
+
+    for column_index, header in enumerate(["section", "key", "value"], start=1):
+        worksheet.column_dimensions[get_column_letter(column_index)].width = max(
+            _excel_cell_display_width(header) + 2, 12
+        )
+
+
+def _read_run_meta_sheet(filepath: str) -> dict[str, dict[str, str]] | None:
+    """Read the run-config meta sheet from ``filepath``.
+
+    Returns ``{"global": {...}, "algo": {...}}`` of stored text values, or ``None``
+    if the workbook has no meta sheet.
+    """
+    try:
+        workbook = load_workbook(filepath, read_only=True, data_only=True)
+    except Exception:
+        return None
+    try:
+        if RUN_META_SHEET_NAME not in workbook.sheetnames:
+            return None
+        worksheet = workbook[RUN_META_SHEET_NAME]
+        stored: dict[str, dict[str, str]] = {"global": {}, "algo": {}}
+        for row in worksheet.iter_rows(min_row=2, values_only=True):
+            if not row or len(row) < 3:
+                continue
+            section, key, value = row[0], row[1], row[2]
+            if section is None or key is None:
+                continue
+            section_text = str(section).strip().lower()
+            if section_text not in stored:
+                continue
+            stored[section_text][str(key)] = "" if value is None else str(value)
+        return stored
+    finally:
+        try:
+            workbook.close()
+        except Exception:
+            pass
+
+
+def _validate_run_meta(
+    stored_meta: dict[str, dict[str, str]] | None,
+    current_global_config: dict[str, Any] | None,
+    current_algo_config: dict[str, Any] | None,
+) -> tuple[bool, dict[str, tuple[Any, Any]]]:
+    """Validate ``stored_meta`` against the running global and algo configs.
+
+    Returns ``(ok, mismatches)``. ``mismatches`` maps a tagged key (e.g.
+    ``"global:n_timesteps"``) to ``(sheet_value, config_value)`` for reporting.
+    Returns failure if no meta sheet exists at all.
+    """
+    if stored_meta is None:
+        return False, {"_run_meta": ("<missing>", "<required>")}
+
+    mismatches: dict[str, tuple[Any, Any]] = {}
+
+    current_global_filtered = _meta_filtered_items(current_global_config, GLOBAL_CONFIG_EXCLUSIONS)
+    current_algo_filtered = _meta_filtered_items(current_algo_config, ALGO_CONFIG_EXCLUSIONS)
+
+    stored_global = stored_meta.get("global", {})
+    stored_algo = stored_meta.get("algo", {})
+
+    for key, cfg_text in current_global_filtered.items():
+        sheet_text = stored_global.get(key, "<missing>")
+        if key == GLOBAL_CONFIG_NTIMESTEPS_KEY:
+            try:
+                if int(float(sheet_text)) >= int(float(cfg_text)):
+                    continue
+            except (TypeError, ValueError):
+                pass
+            mismatches[f"global:{key}"] = (sheet_text, f"{cfg_text} (need disk >= running)")
+            continue
+        if sheet_text != cfg_text:
+            mismatches[f"global:{key}"] = (sheet_text, cfg_text)
+
+    for key, cfg_text in current_algo_filtered.items():
+        sheet_text = stored_algo.get(key, "<missing>")
+        if sheet_text != cfg_text:
+            mismatches[f"algo:{key}"] = (sheet_text, cfg_text)
+
+    return len(mismatches) == 0, mismatches
 
 
 # ── Per-algorithm filename builder ────────────────────────────────────────────
@@ -694,6 +900,274 @@ def _build_a2c_jobs(
     return setting_jobs
 
 
+def _build_ppo_jobs(
+    *,
+    algo_config,
+    n_repetitions,
+    n_timesteps,
+    eval_interval,
+    max_train_episode_length,
+    max_eval_episode_length,
+    base_seed,
+    eval_with_env_episode_trials: bool,
+    n_eval_episodes: int,
+):
+    cfg = algo_config
+    gammas, actor_learning_rates, actor_architectures, legend = _parse_pg_config(cfg)
+    critic_learning_rates = np.atleast_1d(np.asarray(cfg.get("critic_lr", np.array([0.001])), dtype=np.float32))
+    raw_critic_nn = cfg.get("critic_hidden_nn", [[64, 64]])
+    if isinstance(raw_critic_nn, np.ndarray) and raw_critic_nn.ndim == 1:
+        critic_architectures = [raw_critic_nn]
+    elif isinstance(raw_critic_nn, list) and len(raw_critic_nn) > 0 and not isinstance(raw_critic_nn[0], (list, np.ndarray)):
+        critic_architectures = [np.asarray(raw_critic_nn, dtype=np.int32)]
+    else:
+        critic_architectures = [np.asarray(arch, dtype=np.int32) for arch in raw_critic_nn]
+
+    gae_lambdas = np.atleast_1d(np.asarray(cfg.get("gae_lambda", np.array([0.95])), dtype=np.float32))
+    clip_eps_list = np.atleast_1d(np.asarray(cfg.get("clip_eps", np.array([0.2])), dtype=np.float32))
+    n_epochs_list = np.atleast_1d(np.asarray(cfg.get("n_epochs", np.array([10])), dtype=np.int32))
+    rollout_steps_list = np.atleast_1d(np.asarray(cfg.get("rollout_steps", np.array([2048])), dtype=np.int32))
+    mini_batch_sizes = np.atleast_1d(np.asarray(cfg.get("mini_batch_size", np.array([64])), dtype=np.int32))
+    entropy_coefs = np.atleast_1d(np.asarray(cfg.get("entropy_coef", np.array([0.0])), dtype=np.float32))
+    value_coefs = np.atleast_1d(np.asarray(cfg.get("value_coef", np.array([0.5])), dtype=np.float32))
+    max_grad_norms = np.atleast_1d(np.asarray(cfg.get("max_grad_norm", np.array([0.5])), dtype=np.float32))
+
+    setting_jobs = []
+    for gamma_val in gammas:
+        gamma_val = float(gamma_val)
+        for actor_nn in actor_architectures:
+            actor_nn = np.asarray(actor_nn, dtype=np.int32)
+            for actor_lr_val in actor_learning_rates:
+                actor_lr_val = float(actor_lr_val)
+                for critic_nn in critic_architectures:
+                    critic_nn = np.asarray(critic_nn, dtype=np.int32)
+                    for critic_lr_val in critic_learning_rates:
+                        critic_lr_val = float(critic_lr_val)
+                        for gae_lambda_val in gae_lambdas:
+                            gae_lambda_val = float(gae_lambda_val)
+                            for clip_eps_val in clip_eps_list:
+                                clip_eps_val = float(clip_eps_val)
+                                for n_epochs_val in n_epochs_list:
+                                    n_epochs_val = int(n_epochs_val)
+                                    for rollout_steps_val in rollout_steps_list:
+                                        rollout_steps_val = int(rollout_steps_val)
+                                        for mini_batch_val in mini_batch_sizes:
+                                            mini_batch_val = int(mini_batch_val)
+                                            for entropy_coef_val in entropy_coefs:
+                                                entropy_coef_val = float(entropy_coef_val)
+                                                for value_coef_val in value_coefs:
+                                                    value_coef_val = float(value_coef_val)
+                                                    for max_grad_norm_val in max_grad_norms:
+                                                        max_grad_norm_val = float(max_grad_norm_val)
+                                                        iter_cfg = {
+                                                            **cfg,
+                                                            "gamma": gamma_val,
+                                                            "actor_lr": actor_lr_val,
+                                                            "actor_hidden_nn": actor_nn,
+                                                            "critic_lr": critic_lr_val,
+                                                            "critic_hidden_nn": critic_nn,
+                                                            "gae_lambda": gae_lambda_val,
+                                                            "clip_eps": clip_eps_val,
+                                                            "n_epochs": n_epochs_val,
+                                                            "rollout_steps": rollout_steps_val,
+                                                            "mini_batch_size": mini_batch_val,
+                                                            "entropy_coef": entropy_coef_val,
+                                                            "value_coef": value_coef_val,
+                                                            "max_grad_norm": max_grad_norm_val,
+                                                        }
+                                                        label_parts = ["PPO"] + _build_legend_parts(legend, iter_cfg)
+                                                        curve_label = ", ".join(label_parts)
+                                                        setting_jobs.append({
+                                                            "curve_label": curve_label,
+                                                            "method": "ppo",
+                                                            "kwargs": dict(
+                                                                method="ppo",
+                                                                n_repetitions=n_repetitions,
+                                                                n_timesteps=n_timesteps,
+                                                                eval_interval=eval_interval,
+                                                                max_train_episode_length=max_train_episode_length,
+                                                                max_eval_episode_length=max_eval_episode_length,
+                                                                actor_lr=actor_lr_val,
+                                                                critic_lr=critic_lr_val,
+                                                                gamma=gamma_val,
+                                                                actor_hidden_nn=actor_nn,
+                                                                critic_hidden_nn=critic_nn,
+                                                                gae_lambda=gae_lambda_val,
+                                                                clip_eps=clip_eps_val,
+                                                                n_epochs=n_epochs_val,
+                                                                rollout_steps=rollout_steps_val,
+                                                                mini_batch_size=mini_batch_val,
+                                                                entropy_coef=entropy_coef_val,
+                                                                value_coef=value_coef_val,
+                                                                max_grad_norm=max_grad_norm_val,
+                                                                base_seed=base_seed,
+                                                                eval_with_env_episode_trials=eval_with_env_episode_trials,
+                                                                n_eval_episodes=n_eval_episodes,
+                                                                plot_smoothing_window=1,
+                                                            ),
+                                                            "hyperparams": {
+                                                                "n_repetitions": n_repetitions,
+                                                                "n_timesteps": n_timesteps,
+                                                                "eval_interval": eval_interval,
+                                                                "max_train_episode_length": max_train_episode_length,
+                                                                "max_eval_episode_length": max_eval_episode_length,
+                                                                "actor_lr": actor_lr_val,
+                                                                "critic_lr": critic_lr_val,
+                                                                "gamma": gamma_val,
+                                                                "actor_hidden_nn": str(actor_nn.tolist()),
+                                                                "critic_hidden_nn": str(critic_nn.tolist()),
+                                                                "gae_lambda": gae_lambda_val,
+                                                                "clip_eps": clip_eps_val,
+                                                                "n_epochs": n_epochs_val,
+                                                                "rollout_steps": rollout_steps_val,
+                                                                "mini_batch_size": mini_batch_val,
+                                                                "entropy_coef": entropy_coef_val,
+                                                                "value_coef": value_coef_val,
+                                                                "max_grad_norm": max_grad_norm_val,
+                                                                "eval_with_env_episode_trials": eval_with_env_episode_trials,
+                                                                "n_eval_episodes": n_eval_episodes,
+                                                            },
+                                                        })
+    return setting_jobs
+
+
+def _build_sac_jobs(
+    *,
+    algo_config,
+    n_repetitions,
+    n_timesteps,
+    eval_interval,
+    max_train_episode_length,
+    max_eval_episode_length,
+    base_seed,
+    eval_with_env_episode_trials: bool,
+    n_eval_episodes: int,
+):
+    cfg = algo_config
+    gammas, actor_learning_rates, actor_architectures, legend = _parse_pg_config(cfg)
+    critic_learning_rates = np.atleast_1d(np.asarray(cfg.get("critic_lr", np.array([0.0003])), dtype=np.float32))
+    raw_critic_nn = cfg.get("critic_hidden_nn", [[128, 128]])
+    if isinstance(raw_critic_nn, np.ndarray) and raw_critic_nn.ndim == 1:
+        critic_architectures = [raw_critic_nn]
+    elif isinstance(raw_critic_nn, list) and len(raw_critic_nn) > 0 and not isinstance(raw_critic_nn[0], (list, np.ndarray)):
+        critic_architectures = [np.asarray(raw_critic_nn, dtype=np.int32)]
+    else:
+        critic_architectures = [np.asarray(arch, dtype=np.int32) for arch in raw_critic_nn]
+
+    alpha_lrs = np.atleast_1d(np.asarray(cfg.get("alpha_lr", np.array([0.0003])), dtype=np.float32))
+    taus = np.atleast_1d(np.asarray(cfg.get("tau", np.array([0.005])), dtype=np.float32))
+    target_entropy_ratios = np.atleast_1d(np.asarray(cfg.get("target_entropy_ratio", np.array([0.98])), dtype=np.float32))
+    replay_buffer_sizes = np.atleast_1d(np.asarray(cfg.get("replay_buffer_size", np.array([100000])), dtype=np.int64))
+    batch_sizes = np.atleast_1d(np.asarray(cfg.get("batch_size", np.array([64])), dtype=np.int32))
+    warmup_steps_list = np.atleast_1d(np.asarray(cfg.get("warmup_steps", np.array([1000])), dtype=np.int32))
+    updates_per_step_list = np.atleast_1d(np.asarray(cfg.get("updates_per_step", np.array([1])), dtype=np.int32))
+    auto_tune_alpha_list = np.atleast_1d(np.asarray(cfg.get("auto_tune_alpha", np.array([True]))))
+    alpha_init_list = np.atleast_1d(np.asarray(cfg.get("alpha_init", np.array([1.0])), dtype=np.float32))
+
+    setting_jobs = []
+    for gamma_val in gammas:
+        gamma_val = float(gamma_val)
+        for actor_nn in actor_architectures:
+            actor_nn = np.asarray(actor_nn, dtype=np.int32)
+            for actor_lr_val in actor_learning_rates:
+                actor_lr_val = float(actor_lr_val)
+                for critic_nn in critic_architectures:
+                    critic_nn = np.asarray(critic_nn, dtype=np.int32)
+                    for critic_lr_val in critic_learning_rates:
+                        critic_lr_val = float(critic_lr_val)
+                        for alpha_lr_val in alpha_lrs:
+                            alpha_lr_val = float(alpha_lr_val)
+                            for tau_val in taus:
+                                tau_val = float(tau_val)
+                                for tgt_ent_val in target_entropy_ratios:
+                                    tgt_ent_val = float(tgt_ent_val)
+                                    for buf_size in replay_buffer_sizes:
+                                        buf_size = int(buf_size)
+                                        for batch_val in batch_sizes:
+                                            batch_val = int(batch_val)
+                                            for warm_val in warmup_steps_list:
+                                                warm_val = int(warm_val)
+                                                for ups_val in updates_per_step_list:
+                                                    ups_val = int(ups_val)
+                                                    for auto_tune_val in auto_tune_alpha_list:
+                                                        auto_tune_val = bool(auto_tune_val)
+                                                        for alpha_init_val in alpha_init_list:
+                                                            alpha_init_val = float(alpha_init_val)
+                                                            iter_cfg = {
+                                                                **cfg,
+                                                                "gamma": gamma_val,
+                                                                "actor_lr": actor_lr_val,
+                                                                "actor_hidden_nn": actor_nn,
+                                                                "critic_lr": critic_lr_val,
+                                                                "critic_hidden_nn": critic_nn,
+                                                                "alpha_lr": alpha_lr_val,
+                                                                "tau": tau_val,
+                                                                "target_entropy_ratio": tgt_ent_val,
+                                                                "replay_buffer_size": buf_size,
+                                                                "batch_size": batch_val,
+                                                                "warmup_steps": warm_val,
+                                                                "updates_per_step": ups_val,
+                                                                "auto_tune_alpha": auto_tune_val,
+                                                                "alpha_init": alpha_init_val,
+                                                            }
+                                                            label_parts = ["SAC"] + _build_legend_parts(legend, iter_cfg)
+                                                            curve_label = ", ".join(label_parts)
+                                                            setting_jobs.append({
+                                                                "curve_label": curve_label,
+                                                                "method": "sac",
+                                                                "kwargs": dict(
+                                                                    method="sac",
+                                                                    n_repetitions=n_repetitions,
+                                                                    n_timesteps=n_timesteps,
+                                                                    eval_interval=eval_interval,
+                                                                    max_train_episode_length=max_train_episode_length,
+                                                                    max_eval_episode_length=max_eval_episode_length,
+                                                                    actor_lr=actor_lr_val,
+                                                                    critic_lr=critic_lr_val,
+                                                                    gamma=gamma_val,
+                                                                    actor_hidden_nn=actor_nn,
+                                                                    critic_hidden_nn=critic_nn,
+                                                                    alpha_lr=alpha_lr_val,
+                                                                    tau=tau_val,
+                                                                    target_entropy_ratio=tgt_ent_val,
+                                                                    replay_buffer_size=buf_size,
+                                                                    batch_size=batch_val,
+                                                                    warmup_steps=warm_val,
+                                                                    updates_per_step=ups_val,
+                                                                    auto_tune_alpha=auto_tune_val,
+                                                                    alpha_init=alpha_init_val,
+                                                                    base_seed=base_seed,
+                                                                    eval_with_env_episode_trials=eval_with_env_episode_trials,
+                                                                    n_eval_episodes=n_eval_episodes,
+                                                                    plot_smoothing_window=1,
+                                                                ),
+                                                                "hyperparams": {
+                                                                    "n_repetitions": n_repetitions,
+                                                                    "n_timesteps": n_timesteps,
+                                                                    "eval_interval": eval_interval,
+                                                                    "max_train_episode_length": max_train_episode_length,
+                                                                    "max_eval_episode_length": max_eval_episode_length,
+                                                                    "actor_lr": actor_lr_val,
+                                                                    "critic_lr": critic_lr_val,
+                                                                    "gamma": gamma_val,
+                                                                    "actor_hidden_nn": str(actor_nn.tolist()),
+                                                                    "critic_hidden_nn": str(critic_nn.tolist()),
+                                                                    "alpha_lr": alpha_lr_val,
+                                                                    "tau": tau_val,
+                                                                    "target_entropy_ratio": tgt_ent_val,
+                                                                    "replay_buffer_size": buf_size,
+                                                                    "batch_size": batch_val,
+                                                                    "warmup_steps": warm_val,
+                                                                    "updates_per_step": ups_val,
+                                                                    "auto_tune_alpha": auto_tune_val,
+                                                                    "alpha_init": alpha_init_val,
+                                                                    "eval_with_env_episode_trials": eval_with_env_episode_trials,
+                                                                    "n_eval_episodes": n_eval_episodes,
+                                                                },
+                                                            })
+    return setting_jobs
+
+
 def _build_dqn_jobs(*, dqn_config, n_repetitions, n_timesteps, eval_interval,
                     max_train_episode_length, max_eval_episode_length, base_seed):
     """Build setting_jobs for DQN using assignment2_repo infrastructure."""
@@ -907,7 +1381,9 @@ def _run_dqn_one_rep(trial_common: dict[str, Any], run_seed: int, rep_index: int
 
 def _run_pending_parallel(pending_settings, n_repetitions, n_timesteps, eval_interval,
                           max_train_episode_length, max_eval_episode_length, base_seed,
-                          setting_results: list[tuple[np.ndarray, np.ndarray, np.ndarray] | None]):
+                          use_existing_network_checkpoints: bool,
+                          setting_results: list[tuple[np.ndarray, np.ndarray, np.ndarray] | None],
+                          unused_cpu_cores: int = 0):
     """Run all pending (setting × rep) tasks in a single flat ProcessPoolExecutor.
 
     pending_settings: list of (global_idx, job)
@@ -915,11 +1391,7 @@ def _run_pending_parallel(pending_settings, n_repetitions, n_timesteps, eval_int
     Progress bars mirror the current per-rep format; a (S{n}) suffix is added when
     more than one setting is running simultaneously.
     """
-    from multiprocessing import Manager
-    from concurrent.futures import ProcessPoolExecutor
-    from tqdm import tqdm
     from functions import _run_single_repetition
-    import time as _time
 
     total_tasks = len(pending_settings) * n_repetitions
     multi = len(pending_settings) > 1
@@ -931,7 +1403,14 @@ def _run_pending_parallel(pending_settings, n_repetitions, n_timesteps, eval_int
                 for r in range(n_repetitions):
                     step_counters[(sp, r)] = mgr.Value('i', 0)
 
-        max_workers = min(total_tasks, os.cpu_count() or 1)
+        cpu_count = os.cpu_count() or 1
+        if unused_cpu_cores is None:
+            unused_cpu_cores = 0
+        unused_cpu_cores = int(unused_cpu_cores)
+        if unused_cpu_cores < 0:
+            unused_cpu_cores = 0
+        available_cpus = max(1, cpu_count - unused_cpu_cores)
+        max_workers = min(total_tasks, available_cpus)
         with ProcessPoolExecutor(max_workers=max_workers) as executor:
             futures = {}
             for sp, (_, job) in enumerate(pending_settings):
@@ -949,26 +1428,59 @@ def _run_pending_parallel(pending_settings, n_repetitions, n_timesteps, eval_int
                             n_repetitions=n_repetitions,
                         )
                     else:
-                        future = executor.submit(
-                            _run_single_repetition,
-                            method=method,
-                            actor_hidden_nn=kw["actor_hidden_nn"],
-                            critic_hidden_nn=kw.get("critic_hidden_nn", np.array([64, 64])),
-                            actor_lr=kw["actor_lr"],
-                            critic_lr=kw.get("critic_lr", 0.001),
-                            gamma=kw["gamma"],
-                            max_train_episode_length=max_train_episode_length,
-                            max_eval_episode_length=max_eval_episode_length,
-                            n_timesteps=n_timesteps,
-                            eval_interval=eval_interval,
-                            run_seed=run_seed,
-                            rep_index=r,
-                            n_repetitions=n_repetitions,
-                            enable_progress_bar=False,
-                            shared_step_counter=step_counters[(sp, r)],
-                            eval_with_env_episode_trials=bool(kw.get("eval_with_env_episode_trials", False)),
-                            n_eval_episodes=int(kw.get("n_eval_episodes", 5)),
-                        )
+                            algo_extra_kwargs: dict[str, Any] = {}
+                            # A2C-specific
+                            if "TN_step" in kw:
+                                algo_extra_kwargs["TN_step"] = int(kw["TN_step"])
+                            # PPO-specific
+                            for k in (
+                                "gae_lambda",
+                                "clip_eps",
+                                "n_epochs",
+                                "rollout_steps",
+                                "mini_batch_size",
+                                "entropy_coef",
+                                "value_coef",
+                                "max_grad_norm",
+                            ):
+                                if k in kw:
+                                    algo_extra_kwargs[k] = kw[k]
+                            # SAC-specific
+                            for k in (
+                                "alpha_lr",
+                                "tau",
+                                "target_entropy_ratio",
+                                "replay_buffer_size",
+                                "batch_size",
+                                "warmup_steps",
+                                "updates_per_step",
+                                "auto_tune_alpha",
+                                "alpha_init",
+                            ):
+                                if k in kw:
+                                    algo_extra_kwargs[k] = kw[k]
+                            future = executor.submit(
+                                _run_single_repetition,
+                                method=method,
+                                actor_hidden_nn=kw["actor_hidden_nn"],
+                                critic_hidden_nn=kw.get("critic_hidden_nn", np.array([64, 64])),
+                                actor_lr=kw["actor_lr"],
+                                critic_lr=kw.get("critic_lr", 0.001),
+                                gamma=kw["gamma"],
+                                max_train_episode_length=max_train_episode_length,
+                                max_eval_episode_length=max_eval_episode_length,
+                                n_timesteps=n_timesteps,
+                                eval_interval=eval_interval,
+                                run_seed=run_seed,
+                                rep_index=r,
+                                n_repetitions=n_repetitions,
+                                enable_progress_bar=False,
+                                shared_step_counter=step_counters[(sp, r)],
+                                eval_with_env_episode_trials=bool(kw.get("eval_with_env_episode_trials", False)),
+                                n_eval_episodes=int(kw.get("n_eval_episodes", 5)),
+                                use_existing_network_checkpoints=use_existing_network_checkpoints,
+                                **algo_extra_kwargs,
+                            )
                     futures[future] = (sp, r)
 
             pbars = {}
@@ -1000,11 +1512,27 @@ def _run_pending_parallel(pending_settings, n_repetitions, n_timesteps, eval_int
                         if f not in done and f.done():
                             done.add(f)
                             sp, r = futures[f]
-                            rep_results[(sp, r)] = f.result()
+                            try:
+                                rep_results[(sp, r)] = f.result()
+                            except Exception as exc:
+                                if use_existing_network_checkpoints:
+                                    print(
+                                        "\n[Trial failure detected with use_existing_disk_trained_networks=True]\n"
+                                        "Suggestion: verify that the model architecture hyperparameters\n"
+                                        "(actor_hidden_nn / critic_hidden_nn / TN_step, etc.) match the\n"
+                                        "saved checkpoint signature in Checkpoints/. If they differ,\n"
+                                        "set use_existing_disk_trained_networks=False to resume training.\n"
+                                        f"Error: {exc}\n"
+                                    )
+                                    try:
+                                        input("Press Enter to re-raise the error (no fallback will be applied) ...")
+                                    except Exception:
+                                        pass
+                                raise
                             rem = n_timesteps - pbars[(sp, r)].n
                             if rem > 0:
                                 pbars[(sp, r)].update(rem)
-                    _time.sleep(0.25)
+                    time.sleep(0.25)
             finally:
                 for pb in pbars.values():
                     pb.close()
@@ -1018,7 +1546,7 @@ def _run_pending_parallel(pending_settings, n_repetitions, n_timesteps, eval_int
         lc_mean = np.mean(all_ret, axis=0)
         lc_std = (np.std(all_ret, axis=0, ddof=1) if len(returns_list) > 1
                   else np.zeros_like(lc_mean))
-        setting_results[global_idx] = (lc_mean, lc_std, ts)
+        setting_results[global_idx] = (lc_mean, lc_std, ts, all_ret)
 
 
 # ── DQN repetitions via assignment2_repo ──────────────────────────────────────────────
@@ -1431,8 +1959,16 @@ def save_algorithm_workbook(
     setting_results: list[tuple[np.ndarray, np.ndarray, np.ndarray] | None],
     format_sheets: bool = False,
     verbose: bool = True,
+    *,
+    global_config: dict[str, Any] | None = None,
+    algo_config: dict[str, Any] | None = None,
 ) -> str:
-    """Save or append settings into an algorithm workbook."""
+    """Save or append settings into an algorithm workbook.
+
+    When ``global_config`` and/or ``algo_config`` are provided the workbook also
+    contains a hidden ``_run_meta`` sheet capturing the values that must match
+    those of any future run that loads this file.
+    """
     os.makedirs(dir_path, exist_ok=True)
     filepath = os.path.join(dir_path, f"{base_filename}.xlsx")
 
@@ -1508,6 +2044,8 @@ def save_algorithm_workbook(
                 )
             else:
                 _write_raw_excel_sheet(worksheet, headers, rows)
+
+    _write_run_meta_sheet(workbook, global_config, algo_config)
 
     workbook.save(filepath)
     if verbose:
