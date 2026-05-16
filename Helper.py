@@ -288,24 +288,55 @@ def average_over_repetitions(
                     )
                     future_to_rep[future] = rep
 
-                pbars = [
-                    _create_step_progress_bar(
-                        total=n_timesteps,
-                        desc=f"{method.upper()} Rep {rep + 1}/{n_repetitions}",
-                        position=rep,
+                max_visible_bars = min(
+                    n_repetitions,
+                    int(os.environ.get("RL_MAX_TQDM_BARS", "10")),
+                )
+                n_groups = max(1, max_visible_bars)
+
+                group_size = (n_repetitions + n_groups - 1) // n_groups
+
+                groups: list[list[int]] = []
+                for gi in range(n_groups):
+                    start = gi * group_size
+                    end = min((gi + 1) * group_size, n_repetitions)
+                    if start >= end:
+                        break
+                    groups.append(list(range(start, end)))
+
+                rep_to_group: dict[int, int] = {}
+                for gi, group in enumerate(groups):
+                    for rep in group:
+                        rep_to_group[rep] = gi
+
+                pbars = {}
+                for gi, group in enumerate(groups):
+                    rep_list_str = ",".join(str(rep + 1) for rep in group)
+                    pbars[gi] = _create_step_progress_bar(
+                        total=int(n_timesteps) * len(group),
+                        desc=f"{method.upper()} Rep {rep_list_str}/{len(groups)}",
+                        position=gi,
                         leave=True,
                     )
-                    for rep in range(n_repetitions)
-                ]
+
+                rep_last = [0 for _ in range(n_repetitions)]
 
                 done_futures = set()
                 try:
                     while len(done_futures) < n_repetitions:
-                        for rep in range(n_repetitions):
-                            current = step_counters[rep].value
-                            delta = current - pbars[rep].n
-                            if delta > 0:
-                                pbars[rep].update(delta)
+                        # Update merged/grouped bars as the SUM of rep progress.
+                        # Since each group's total is n_timesteps * (num_reps_in_group),
+                        # progress fills more slowly when multiple reps are merged.
+                        for gi, group in enumerate(groups):
+                            sum_delta = 0
+                            for rep in group:
+                                current = step_counters[rep].value
+                                delta = current - rep_last[rep]
+                                if delta > 0:
+                                    sum_delta += delta
+                                    rep_last[rep] = current
+                            if sum_delta > 0:
+                                pbars[gi].update(sum_delta)
 
                         for future in list(future_to_rep):
                             if future not in done_futures and future.done():
@@ -317,13 +348,18 @@ def average_over_repetitions(
                                 )
                                 if timesteps is None:
                                     timesteps = np.asarray(rep_timesteps, dtype=np.int32)
-                                remaining = n_timesteps - pbars[rep].n
-                                if remaining > 0:
-                                    pbars[rep].update(remaining)
+
+                                gid = rep_to_group.get(rep)
+                                if gid is not None:
+                                    current = step_counters[rep].value
+                                    delta = current - rep_last[rep]
+                                    if delta > 0:
+                                        pbars[gid].update(delta)
+                                        rep_last[rep] = current
 
                         _time.sleep(0.25)
                 finally:
-                    for pb in pbars:
+                    for pb in pbars.values():
                         pb.close()
                     print()
         finally:
@@ -2003,16 +2039,66 @@ def _run_pending_parallel(pending_settings, n_repetitions, n_timesteps, eval_int
                             )
                     futures[future] = (sp, r)
 
-            pbars = {}
-            for sp, (_, job) in enumerate(pending_settings):
-                m = job["method"].upper()
-                for r in range(n_repetitions):
-                    suffix = f" (S{sp + 1})" if multi else ""
-                    pbars[(sp, r)] = tqdm(
-                        total=n_timesteps,
-                        desc=f"{m} Rep {r + 1}/{n_repetitions}{suffix}",
+            max_visible_bars = int(os.environ.get("RL_MAX_TQDM_BARS", "10"))
+
+            # Build a stable, non-DQN task list based on which step_counters exist.
+            # step_counters contains entries only for jobs with method != "dqn".
+            task_keys: list[tuple[int, int]] = list(step_counters.keys())
+
+            # Create merged/grouped bars so we never exceed max_visible_bars.
+            # When a bar merges k reps, its tqdm total is multiplied by k and we
+            # update by the sum of the merged reps' progress -> it fills slower.
+            total_rep_tasks = len(task_keys)
+            if total_rep_tasks == 0:
+                pbars = {}
+                rep_last: dict[tuple[int, int], int] = {}
+                rep_to_group: dict[tuple[int, int], int] = {}
+                groups: list[list[tuple[int, int]]] = []
+            else:
+                n_groups = max(1, min(max_visible_bars, total_rep_tasks))
+                group_size = (total_rep_tasks + n_groups - 1) // n_groups
+
+                groups = [
+                    task_keys[i * group_size : min((i + 1) * group_size, total_rep_tasks)]
+                    for i in range(n_groups)
+                ]
+                # Drop potential empty trailing groups
+                groups = [g for g in groups if g]
+
+                rep_to_group = {}
+                for gi, group in enumerate(groups):
+                    for key in group:
+                        rep_to_group[key] = gi
+
+                rep_last = {key: 0 for key in task_keys}
+
+                pbars = {}
+                for gi, group in enumerate(groups):
+                    (sp0, _r0) = group[0]
+                    m = pending_settings[sp0][1]["method"].upper()
+
+                    same_sp_and_method = True
+                    sp0_val = group[0][0]
+                    for (sp, _r) in group:
+                        if sp != sp0_val or pending_settings[sp][1]["method"] != pending_settings[sp0_val][1]["method"]:
+                            same_sp_and_method = False
+                            break
+
+                    if same_sp_and_method:
+                        rep_ids = sorted(r + 1 for (_sp, r) in group)
+                        rep_list_str = ",".join(str(x) for x in rep_ids)
+                        suffix = f" (S{sp0_val + 1})" if multi else ""
+                        desc = f"{m} Rep {rep_list_str}/{n_repetitions}{suffix}"
+                    else:
+                        # Fallback: show which (S,Rep) are merged.
+                        entries = ",".join(f"S{sp + 1}R{r + 1}" for (sp, r) in group)
+                        desc = f"{m} Rep {entries} (merged)/{n_repetitions}"
+
+                    pbars[gi] = tqdm(
+                        total=n_timesteps * len(group),
+                        desc=desc,
                         unit="step",
-                        position=sp * n_repetitions + r,
+                        position=gi,
                         leave=True,
                         dynamic_ncols=True,
                         bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]",
@@ -2022,12 +2108,18 @@ def _run_pending_parallel(pending_settings, n_repetitions, n_timesteps, eval_int
             done = set()
             try:
                 while len(done) < total_tasks:
+                    # Update merged bars from shared step_counters.
                     for (sp, r), sc in step_counters.items():
+                        pb_gi = rep_to_group.get((sp, r))
+                        if pb_gi is None:
+                            continue
                         cur = sc.value
-                        pb = pbars[(sp, r)]
-                        delta = cur - pb.n
+                        last = rep_last[(sp, r)]
+                        delta = cur - last
                         if delta > 0:
-                            pb.update(delta)
+                            pbars[pb_gi].update(delta)
+                            rep_last[(sp, r)] = cur
+
                     for f in list(futures):
                         if f not in done and f.done():
                             done.add(f)
@@ -2049,9 +2141,18 @@ def _run_pending_parallel(pending_settings, n_repetitions, n_timesteps, eval_int
                                     except Exception:
                                         pass
                                 raise
-                            rem = n_timesteps - pbars[(sp, r)].n
-                            if rem > 0:
-                                pbars[(sp, r)].update(rem)
+                            # Ensure the merged bar catches up immediately on completion.
+                            pb_gi = rep_to_group.get((sp, r))
+                            if pb_gi is not None:
+                                sc = step_counters.get((sp, r))
+                                if sc is not None:
+                                    cur = sc.value
+                                    last = rep_last[(sp, r)]
+                                    delta = cur - last
+                                    if delta > 0:
+                                        pbars[pb_gi].update(delta)
+                                        rep_last[(sp, r)] = cur
+
                     time.sleep(0.25)
             finally:
                 for pb in pbars.values():

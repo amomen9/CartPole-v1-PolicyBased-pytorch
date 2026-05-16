@@ -597,7 +597,7 @@ def run_selected_experiments(
 
     # ── Allocate top headroom for legend ──
     expected_legend_entries = len(all_setting_jobs) + 2
-    legend_headroom = max(90, 80 + 20 * expected_legend_entries) * y_axis_episode_length_cap / 500.0
+    legend_headroom = max(90, 80 + 20 * expected_legend_entries) * y_axis_episode_length_cap / 400.0
     for pc in plot_configs:
         pc["plot"].set_ylim(0, y_axis_episode_length_cap + legend_headroom)
 
@@ -767,7 +767,7 @@ def run_selected_experiments(
         total_entries = len(all_setting_jobs) + len(extra_curves) + 2
         legend_headroom = max(90, 80 + 20 * total_entries)
         for pc in plot_configs:
-            pc["plot"].set_ylim(0, y_axis_episode_length_cap + legend_headroom)
+            pc["plot"].set_ylim(0, y_axis_episode_length_cap + legend_headroom) * 1.4
 
     # ── 1. Plot current experiment settings across all smoothing windows ──
     for idx, job in enumerate(all_setting_jobs):
