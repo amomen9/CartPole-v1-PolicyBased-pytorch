@@ -11,7 +11,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import Environment
-import functions as fn
+import Library as fn
 
 
 

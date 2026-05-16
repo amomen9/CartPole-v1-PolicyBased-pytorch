@@ -171,7 +171,8 @@ def train_dqn(model, optimizer, env, n_env_steps, discount_factor,
                     shared_step_counter=None,
                     er_active=False, er_replay_buffer_size=10000,
                     er_batch_size=64, er_min_replay_size=100,
-                    er_sample_train_frequency=1, er_replay_ratio=1.0):
+                    er_sample_train_frequency=1, er_replay_ratio=1.0,
+                    full_episode_updates: bool = False):
     if n_env_steps < 1:
         raise ValueError("n_env_steps must be >= 1")
     if max_episode_length is not None and max_episode_length < 1:
@@ -208,6 +209,11 @@ def train_dqn(model, optimizer, env, n_env_steps, discount_factor,
     replay_buffer: ReplayBuffer | None = None
     if er_active:
         replay_buffer = ReplayBuffer(er_replay_buffer_size)
+
+    # In full-episode-update mode, transitions and update triggers are
+    # accumulated during the episode and flushed when it ends.
+    pending_no_er_transitions: list = []
+    pending_er_updates: int = 0
 
     train_env = env if max_episode_length is None else make_env(max_episode_length=max_episode_length)
 
@@ -268,22 +274,32 @@ def train_dqn(model, optimizer, env, n_env_steps, discount_factor,
             next_obs, reward, terminated, truncated, _info = step_env.step(action)
             global_step += 1
             if not er_active:
-                dqn_update(
-                    model, optimizer, obs, action, reward, next_obs, terminated, discount_factor,
-                    target_network_step=target_network_step,
-                    global_step=global_step,
-                    target_network_active=bool(target_network_active),
-                )
+                if full_episode_updates:
+                    # Defer the per-step Q-learning update to episode end.
+                    pending_no_er_transitions.append(
+                        (obs, action, reward, next_obs, bool(terminated))
+                    )
+                else:
+                    dqn_update(
+                        model, optimizer, obs, action, reward, next_obs, terminated, discount_factor,
+                        target_network_step=target_network_step,
+                        global_step=global_step,
+                        target_network_active=bool(target_network_active),
+                    )
             # Also Experience Replay in the training:
             if er_active:
                 assert replay_buffer is not None
                 replay_buffer.push(obs, action, reward, next_obs, terminated)
                 if len(replay_buffer) >= er_min_replay_size and global_step % er_sample_train_frequency == 0:
-                    for _ in range(int(er_replay_ratio)):
-                        dqn_batch_update(model, optimizer, replay_buffer, er_batch_size, discount_factor,
-                                         target_network_step=target_network_step,
-                                         global_step=global_step,
-                                         target_network_active=bool(target_network_active))
+                    if full_episode_updates:
+                        # Defer the ER batch updates to episode end (same total count).
+                        pending_er_updates += int(er_replay_ratio)
+                    else:
+                        for _ in range(int(er_replay_ratio)):
+                            dqn_batch_update(model, optimizer, replay_buffer, er_batch_size, discount_factor,
+                                             target_network_step=target_network_step,
+                                             global_step=global_step,
+                                             target_network_active=bool(target_network_active))
             # Experience Replay end
             obs = next_obs
             total_reward += reward
@@ -298,6 +314,26 @@ def train_dqn(model, optimizer, env, n_env_steps, discount_factor,
                 last_progress_update = global_step
 
             if terminated or truncated:
+                if full_episode_updates:
+                    if not er_active and pending_no_er_transitions:
+                        for tr_obs, tr_action, tr_reward, tr_next_obs, tr_terminated in pending_no_er_transitions:
+                            dqn_update(
+                                model, optimizer, tr_obs, tr_action, tr_reward, tr_next_obs,
+                                tr_terminated, discount_factor,
+                                target_network_step=target_network_step,
+                                global_step=global_step,
+                                target_network_active=bool(target_network_active),
+                            )
+                        pending_no_er_transitions = []
+                    if er_active and pending_er_updates > 0:
+                        for _ in range(pending_er_updates):
+                            dqn_batch_update(
+                                model, optimizer, replay_buffer, er_batch_size, discount_factor,
+                                target_network_step=target_network_step,
+                                global_step=global_step,
+                                target_network_active=bool(target_network_active),
+                            )
+                        pending_er_updates = 0
                 if pbar is not None:
                     pbar.set_postfix_str(f"episode_reward={total_reward:.2f}", refresh=False)
                 last_episode_return = total_reward   # save completed episode return before resetting

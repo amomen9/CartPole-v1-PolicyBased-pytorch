@@ -44,6 +44,7 @@ def run_dqn_trial(
     max_eval_episode_length=None,
     eval_with_env_episode_trials: bool = False,
     n_eval_episodes: int = 5,
+    full_episode_updates: bool = False,
 ):
     """Run one DQN training trial and return model plus learning-curve data."""
     if seed is not None:
@@ -93,6 +94,7 @@ def run_dqn_trial(
         er_sample_train_frequency=er_sample_train_frequency,
         er_replay_ratio=er_replay_ratio,
         shared_step_counter=shared_step_counter,
+        full_episode_updates=full_episode_updates,
     )
     return model, returns, timesteps
 
@@ -130,6 +132,7 @@ def run_dqn_trial_returns(
     max_eval_episode_length=None,
     eval_with_env_episode_trials: bool = False,
     n_eval_episodes: int = 5,
+    full_episode_updates: bool = False,
 ):
     """Run one DQN trial and return only arrays to reduce IPC overhead."""
     _, returns, timesteps = run_dqn_trial(
@@ -165,6 +168,7 @@ def run_dqn_trial_returns(
         er_sample_train_frequency=er_sample_train_frequency,
         er_replay_ratio=er_replay_ratio,
         shared_step_counter=shared_step_counter,
+        full_episode_updates=full_episode_updates,
     )
     return np.asarray(returns, dtype=np.float32), np.asarray(timesteps, dtype=np.int32)
 

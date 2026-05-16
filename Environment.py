@@ -12,7 +12,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import time
 import gymnasium as gym
-import functions as fn
+import Library as fn
 
 # Begin Class CartPoleEnvironment ##############################################################
 class CartPoleEnvironment:

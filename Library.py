@@ -6,15 +6,143 @@ import torch
 import torch.nn as nn
 import numpy as np
 import Environment as environ
-import functions as fn
+import Library as fn
 import os
 import time
 from datetime import datetime
-from Helper import (
-    LearningCurvePlot,
-    smooth,
-)
+from Helper import smooth
+from scipy.stats import t as t_dist
 
+# Begin Class LearningCurvePlot ##############################################################
+class LearningCurvePlot:
+
+    def __init__(self, title=None):
+        self.fig, self.ax = plt.subplots()
+        self.ax.set_xlabel('Timestep')
+        self.ax.set_ylabel('Episode Return')
+        if title is not None:
+            self.ax.set_title(title)
+
+    def add_curve(self, x, y, label=None, ls="solid", color=None):
+        """y: vector of average reward results
+        label: string to appear as label in plot legend
+        """
+        plot_kwargs = {"ls": ls}
+        if color is not None:
+            plot_kwargs["color"] = color
+        if label is not None:
+            self.ax.plot(x, y, label=label, **plot_kwargs)
+        else:
+            self.ax.plot(x, y, **plot_kwargs)
+
+    def add_shaded_ci(
+        self,
+        x,
+        y_mean,
+        y_std,
+        n,
+        alpha=0.2,
+        fill_opacity=0.15,
+        y_lower_cap=None,
+        y_upper_cap=None,
+        color=None,
+    ):
+        """Add a shaded confidence band around the mean curve.
+        alpha controls CI significance (e.g., 0.05 for 95% CI),
+        fill_opacity controls the visual transparency of the shaded area.
+        """
+        t_crit = t_dist.ppf(1 - alpha / 2, df=max(n - 1, 1))
+        margin = t_crit * y_std / np.sqrt(max(n, 1))
+        y_lower = y_mean - margin
+        y_upper = y_mean + margin
+        if y_lower_cap is not None:
+            y_lower = np.maximum(y_lower, y_lower_cap)
+        if y_upper_cap is not None:
+            y_upper = np.minimum(y_upper, y_upper_cap)
+        if color is None:
+            color = self.ax.get_lines()[-1].get_color()  # match the last plotted line
+        self.ax.fill_between(x, y_lower, y_upper, alpha=fill_opacity, color=color)
+
+    def set_ylim(self, lower, upper):
+        self.ax.set_ylim([lower, upper])
+
+    def add_hline(self, height, label):
+        self.ax.axhline(height, ls='--', c='k', label=label)
+
+    @staticmethod
+    def _resolve_non_overwriting_path(output_path: str) -> str:
+        """Return output_path if it doesn't exist; otherwise add (1), (2), ... before the extension."""
+        if not os.path.exists(output_path):
+            return output_path
+
+        root, ext = os.path.splitext(output_path)
+        i = 1
+        while True:
+            candidate = f"{root} ({i}){ext}"
+            if not os.path.exists(candidate):
+                return candidate
+            i += 1
+
+    def save(self, name='test.png') -> str:
+        """name: string for filename of saved figure.
+
+        If the target filename already exists, saves to an enumerated name:
+        file.png -> file (1).png -> file (2).png -> ...
+        """
+        self.ax.legend(
+            fontsize=8,
+            handlelength=1.2,
+            handletextpad=0.4,
+            borderpad=0.25,
+            labelspacing=0.25,
+            borderaxespad=0.3,
+        )
+        self.fig.tight_layout()
+
+        output_path = name
+        if not os.path.isabs(name):
+            os.makedirs("plots", exist_ok=True)
+            output_path = os.path.join("plots", os.path.basename(name))
+        else:
+            # Ensure parent folder exists for absolute paths
+            out_dir = os.path.dirname(output_path)
+            if out_dir:
+                os.makedirs(out_dir, exist_ok=True)
+
+        output_path = self._resolve_non_overwriting_path(output_path)
+        self.fig.savefig(output_path, dpi=300)
+        return output_path
+# End Class LearningCurvePlot ##############################################################
+
+def argmax(x):
+    """Own variant of np.argmax with random tie breaking."""
+    try:
+        return np.random.choice(np.where(x == np.max(x))[0])
+    except Exception:
+        return np.argmax(x)
+
+def egreedy(Qa_s, eps):
+    """Sample one action using epsilon-greedy policy.
+    Qa_s: 1D array of Q-values for current state's actions
+    eps: epsilon in the closed boundary [0,1]
+    """
+    n_A = len(Qa_s)     # number of actions
+    greedy_a = argmax(Qa_s)  # tie breaking argmax()
+    # Base probability for all actions, fill probs matrix with the same values (will not sum up to 1 yet)
+    probs = np.full(n_A, eps / n_A, dtype=float)
+    # Greedy action gets the remaining probability mass (1 - eps) plus its share of the exploration probability (eps/n_A)
+    probs[greedy_a] = 1.0 - eps * (n_A - 1) / n_A
+    selected_action = np.random.choice(n_A, p=probs)
+    # Sample action from this distribution
+    return selected_action
+
+def softmax(x, temp):
+    """Computes the softmax of vector x with temperature parameter 'temp'."""
+    x = x / temp  # scale by temperature
+    z = x - max(x)  # subtract max to prevent overflow of softmax
+    probs = np.exp(z) / np.sum(np.exp(z))  # compute softmax
+    selected_action = np.random.choice(len(x), p=probs)  # Sample action from
+    return int(selected_action)
 
 
 
@@ -196,12 +324,12 @@ def run_selected_experiments(
     experiments,
     *,
     global_config=None,
-    reinforce_config=None,
-    ac_config=None,
-    a2c_config=None,
-    dqn_config=None,
-    ppo_config=None,
-    sac_config=None,
+    REINFORCE_config=None,
+    AC_config=None,
+    A2C_config=None,
+    DQN_config=None,
+    PPO_config=None,
+    SAC_config=None,
 ):
     """Orchestrate training, data loading, and plotting for all selected experiments.
 
@@ -211,17 +339,17 @@ def run_selected_experiments(
         Algorithm names to run. Supported: "REINFORCE", "AC", "A2C", "DQN", "PPO", "SAC".
     global_config : dict
         Global/shared parameters (benchmark, plotting, environment, seed).
-    reinforce_config : dict or None
+    REINFORCE_config : dict or None
         REINFORCE-specific hyperparameters. Required when "REINFORCE" in experiments.
-    ac_config : dict or None
+    AC_config : dict or None
         AC-specific hyperparameters. Required when "AC" in experiments.
-    a2c_config : dict or None
+    A2C_config : dict or None
         A2C-specific hyperparameters. Required when "A2C" in experiments.
-    dqn_config : dict or None
+    DQN_config : dict or None
         DQN-specific hyperparameters. Required when "DQN" in experiments.
-    ppo_config : dict or None
+    PPO_config : dict or None
         PPO-specific hyperparameters. Required when "PPO" in experiments.
-    sac_config : dict or None
+    SAC_config : dict or None
         SAC-specific hyperparameters. Required when "SAC" in experiments.
     """
     # ── Unpack global config ──
@@ -281,7 +409,7 @@ def run_selected_experiments(
         f.write(f"Start the process at: {start_human}\n")
     print(f"Included experiments: {', '.join(experiments)}\n")
 
-    from facilitation_functions import (
+    from Helper import (
         _build_a2c_jobs,
         _build_ac_jobs,
         _build_algo_filename,
@@ -319,12 +447,12 @@ def run_selected_experiments(
     # ── Build setting jobs for each selected algorithm (grouped by algo) ──
     algo_jobs = {}  # algo_upper -> list of setting_jobs
     algo_configs_map = {
-        "REINFORCE": reinforce_config,
-        "AC": ac_config,
-        "A2C": a2c_config,
-        "DQN": dqn_config,
-        "PPO": ppo_config,
-        "SAC": sac_config,
+        "REINFORCE": REINFORCE_config,
+        "AC": AC_config,
+        "A2C": A2C_config,
+        "DQN": DQN_config,
+        "PPO": PPO_config,
+        "SAC": SAC_config,
     }
     # Preserve the original (un-augmented) algo configs for workbook-level
     # meta validation. The augmented copies merge in global keys for per-sheet
@@ -351,10 +479,10 @@ def run_selected_experiments(
         algo_upper = algo.upper()
         jobs = []
         if algo_upper == "REINFORCE":
-            if reinforce_config is None:
-                raise ValueError("reinforce_config dict is required when REINFORCE is included.")
+            if REINFORCE_config is None:
+                raise ValueError("REINFORCE_config dict is required when REINFORCE is included.")
             jobs = _build_reinforce_jobs(
-                algo_config=reinforce_config,
+                algo_config=REINFORCE_config,
                 n_repetitions=n_repetitions,
                 n_timesteps=n_timesteps,
                 eval_interval=eval_interval,
@@ -365,10 +493,10 @@ def run_selected_experiments(
                 n_eval_episodes=n_eval_episodes,
             )
         elif algo_upper == "AC":
-            if ac_config is None:
-                raise ValueError("ac_config dict is required when AC is included.")
+            if AC_config is None:
+                raise ValueError("AC_config dict is required when AC is included.")
             jobs = _build_ac_jobs(
-                algo_config=ac_config,
+                algo_config=AC_config,
                 n_repetitions=n_repetitions,
                 n_timesteps=n_timesteps,
                 eval_interval=eval_interval,
@@ -379,10 +507,10 @@ def run_selected_experiments(
                 n_eval_episodes=n_eval_episodes,
             )
         elif algo_upper == "A2C":
-            if a2c_config is None:
-                raise ValueError("a2c_config dict is required when A2C is included.")
+            if A2C_config is None:
+                raise ValueError("A2C_config dict is required when A2C is included.")
             jobs = _build_a2c_jobs(
-                algo_config=a2c_config,
+                algo_config=A2C_config,
                 n_repetitions=n_repetitions,
                 n_timesteps=n_timesteps,
                 eval_interval=eval_interval,
@@ -393,10 +521,10 @@ def run_selected_experiments(
                 n_eval_episodes=n_eval_episodes,
             )
         elif algo_upper == "DQN":
-            if dqn_config is None:
-                raise ValueError("dqn_config dict is required when DQN is included.")
+            if DQN_config is None:
+                raise ValueError("DQN_config dict is required when DQN is included.")
             jobs = _build_dqn_jobs(
-                dqn_config=dqn_config,
+                dqn_config=DQN_config,
                 n_repetitions=n_repetitions,
                 n_timesteps=n_timesteps,
                 eval_interval=eval_interval,
@@ -405,10 +533,10 @@ def run_selected_experiments(
                 base_seed=base_seed,
             )
         elif algo_upper == "PPO":
-            if ppo_config is None:
-                raise ValueError("ppo_config dict is required when PPO is included.")
+            if PPO_config is None:
+                raise ValueError("PPO_config dict is required when PPO is included.")
             jobs = _build_ppo_jobs(
-                algo_config=ppo_config,
+                algo_config=PPO_config,
                 n_repetitions=n_repetitions,
                 n_timesteps=n_timesteps,
                 eval_interval=eval_interval,
@@ -419,10 +547,10 @@ def run_selected_experiments(
                 n_eval_episodes=n_eval_episodes,
             )
         elif algo_upper == "SAC":
-            if sac_config is None:
-                raise ValueError("sac_config dict is required when SAC is included.")
+            if SAC_config is None:
+                raise ValueError("SAC_config dict is required when SAC is included.")
             jobs = _build_sac_jobs(
-                algo_config=sac_config,
+                algo_config=SAC_config,
                 n_repetitions=n_repetitions,
                 n_timesteps=n_timesteps,
                 eval_interval=eval_interval,
@@ -796,13 +924,8 @@ if __name__ == "__main__":
 
 
 def _apply_optional_smoothing(learning_curve, plot_smoothing_window):
-    if plot_smoothing_window is None:
-        return learning_curve
-    max_window = len(learning_curve) if len(learning_curve) % 2 == 1 else len(learning_curve) - 1
-    window = min(int(plot_smoothing_window), max_window)
-    if window >= 3:
-        return smooth(learning_curve, window)
-    return learning_curve
+    from Helper import _apply_optional_smoothing as _impl
+    return _impl(learning_curve, plot_smoothing_window)
 
 
 def _load_benchmark_curve(
@@ -812,58 +935,14 @@ def _load_benchmark_curve(
     benchmark_eval_interval=250,
     episode_return_column="Episode_Return",
 ):
-    benchmark_files = {
-        1: os.path.join("Baseline data", "BaselineDataCartPole_run1.csv"),
-        2: os.path.join("Baseline data", "BaselineDataCartPole_run2.csv"),
-    }
-    if benchmark_curve not in benchmark_files:
-        raise ValueError("benchmark_curve must be 1 or 2.")
-
-    data = np.genfromtxt(benchmark_files[benchmark_curve], delimiter=",", names=True)
-    if data.dtype.names is None or episode_return_column not in data.dtype.names:
-        raise ValueError(
-            f"Selected benchmark file does not contain requested column '{episode_return_column}'."
-        )
-
-    env_steps = np.atleast_1d(np.asarray(data["env_step"], dtype=np.float32))
-    returns = np.atleast_1d(np.asarray(data[episode_return_column], dtype=np.float32))
-
-    if env_steps.size == 0 or returns.size == 0:
-        raise ValueError("Selected benchmark file has no usable data.")
-
-    valid_rows = np.isfinite(env_steps) & np.isfinite(returns)
-    env_steps = env_steps[valid_rows]
-    returns = returns[valid_rows]
-
-    if env_steps.size == 0:
-        raise ValueError("Selected benchmark file contains only invalid rows.")
-
-    sort_idx = np.argsort(env_steps)
-    env_steps = env_steps[sort_idx]
-    returns = returns[sort_idx]
-
-    if project_eval_interval != benchmark_eval_interval and env_steps.size >= 2:
-        normalized_steps = np.arange(
-            env_steps[0],
-            env_steps[-1] + project_eval_interval,
-            project_eval_interval,
-            dtype=np.float32,
-        )
-        normalized_steps = normalized_steps[normalized_steps <= env_steps[-1]]
-        returns = np.interp(normalized_steps, env_steps, returns).astype(np.float32)
-        env_steps = normalized_steps
-
-    in_horizon = env_steps <= float(project_n_timesteps)
-    if not np.any(in_horizon):
-        print(
-            f"[benchmark] No benchmark points fall within project_n_timesteps={project_n_timesteps}; "
-            "using the full benchmark curve instead."
-        )
-        return env_steps.astype(np.int32), returns
-
-    env_steps = env_steps[in_horizon]
-    returns = returns[in_horizon]
-    return env_steps.astype(np.int32), returns
+    from Helper import _load_benchmark_curve as _impl
+    return _impl(
+        benchmark_curve=benchmark_curve,
+        project_eval_interval=project_eval_interval,
+        project_n_timesteps=project_n_timesteps,
+        benchmark_eval_interval=benchmark_eval_interval,
+        episode_return_column=episode_return_column,
+    )
 
 
 def average_over_repetitions(
@@ -886,138 +965,25 @@ def average_over_repetitions(
 ):
     """Run ``n_repetitions`` of the given method and return (mean, std, timesteps)."""
 
-    from concurrent.futures import ProcessPoolExecutor, as_completed
-    from multiprocessing import Manager
-    from Helper import _create_step_progress_bar
-    import time as _time
-
-    returns_over_repetitions = []
-    timesteps = None
-
-    cpu_count = os.cpu_count() or 1
-    if unused_cpu_cores is None:
-        unused_cpu_cores = 0
-    unused_cpu_cores = int(unused_cpu_cores)
-    if unused_cpu_cores < 0:
-        unused_cpu_cores = 0
-
-    available_cpus = max(1, cpu_count - unused_cpu_cores)
-    parallel_workers = max(1, min(n_repetitions, available_cpus))
-    use_parallel = parallel_workers > 1 and n_repetitions > 1
-
-    if use_parallel:
-        manager = Manager()
-        step_counters = [manager.Value("i", 0) for _ in range(n_repetitions)]
-        try:
-            with ProcessPoolExecutor(max_workers=parallel_workers) as executor:
-                future_to_rep = {}
-                for rep in range(n_repetitions):
-                    run_seed = base_seed + rep
-                    future = executor.submit(
-                        _run_single_repetition,
-                        method=method,
-                        actor_hidden_nn=actor_hidden_nn,
-                        critic_hidden_nn=critic_hidden_nn,
-                        actor_lr=actor_lr,
-                        critic_lr=critic_lr,
-                        gamma=gamma,
-                        max_episode_length=max_episode_length,
-                        n_timesteps=n_timesteps,
-                        eval_interval=eval_interval,
-                        run_seed=run_seed,
-                        rep_index=rep,
-                        n_repetitions=n_repetitions,
-                        enable_progress_bar=False,
-                        shared_step_counter=step_counters[rep],
-                        eval_with_env_episode_trials=eval_with_env_episode_trials,
-                        n_eval_episodes=n_eval_episodes,
-                    )
-                    future_to_rep[future] = rep
-
-                pbars = [
-                    _create_step_progress_bar(
-                        total=n_timesteps,
-                        desc=f"{method.upper()} Rep {rep + 1}/{n_repetitions}",
-                        position=rep,
-                        leave=True,
-                    )
-                    for rep in range(n_repetitions)
-                ]
-
-                done_futures = set()
-                try:
-                    while len(done_futures) < n_repetitions:
-                        for rep in range(n_repetitions):
-                            current = step_counters[rep].value
-                            delta = current - pbars[rep].n
-                            if delta > 0:
-                                pbars[rep].update(delta)
-
-                        for future in list(future_to_rep):
-                            if future not in done_futures and future.done():
-                                done_futures.add(future)
-                                rep = future_to_rep[future]
-                                rep_returns, rep_timesteps = future.result()
-                                returns_over_repetitions.append(np.asarray(rep_returns, dtype=np.float32))
-                                if timesteps is None:
-                                    timesteps = np.asarray(rep_timesteps, dtype=np.int32)
-                                remaining = n_timesteps - pbars[rep].n
-                                if remaining > 0:
-                                    pbars[rep].update(remaining)
-
-                        _time.sleep(0.25)
-                finally:
-                    for pb in pbars:
-                        pb.close()
-                    print()
-        finally:
-            manager.shutdown()
-    else:
-        for rep in range(n_repetitions):
-            run_seed = base_seed + rep
-            rep_returns, rep_timesteps = _run_single_repetition(
-                method=method,
-                actor_hidden_nn=actor_hidden_nn,
-                critic_hidden_nn=critic_hidden_nn,
-                actor_lr=actor_lr,
-                critic_lr=critic_lr,
-                gamma=gamma,
-                max_episode_length=max_episode_length,
-                n_timesteps=n_timesteps,
-                eval_interval=eval_interval,
-                run_seed=run_seed,
-                rep_index=rep,
-                n_repetitions=n_repetitions,
-                enable_progress_bar=True,
-                eval_with_env_episode_trials=eval_with_env_episode_trials,
-                n_eval_episodes=n_eval_episodes,
-            )
-            returns_over_repetitions.append(np.asarray(rep_returns, dtype=np.float32))
-            if timesteps is None:
-                timesteps = np.asarray(rep_timesteps, dtype=np.int32)
-
-    min_length = min(len(rep_returns) for rep_returns in returns_over_repetitions)
-    returns_over_repetitions = [
-        np.asarray(rep_returns[:min_length], dtype=np.float32)
-        for rep_returns in returns_over_repetitions
-    ]
-    if timesteps is not None:
-        timesteps = np.asarray(timesteps[:min_length], dtype=np.int32)
-
-    all_returns = np.array(returns_over_repetitions)
-    learning_curve = np.mean(all_returns, axis=0)
-    learning_curve_std = (
-        np.std(all_returns, axis=0, ddof=1)
-        if all_returns.shape[0] > 1
-        else np.zeros_like(learning_curve)
+    from Helper import average_over_repetitions as _impl
+    return _impl(
+        method=method,
+        n_repetitions=n_repetitions,
+        n_timesteps=n_timesteps,
+        eval_interval=eval_interval,
+        max_episode_length=max_episode_length,
+        actor_lr=actor_lr,
+        gamma=gamma,
+        actor_hidden_nn=actor_hidden_nn,
+        critic_hidden_nn=critic_hidden_nn,
+        critic_lr=critic_lr,
+        base_seed=base_seed,
+        plot_smoothing_window=plot_smoothing_window,
+        eval_with_env_episode_trials=eval_with_env_episode_trials,
+        n_eval_episodes=n_eval_episodes,
+        return_raw=return_raw,
+        unused_cpu_cores=unused_cpu_cores,
     )
-    learning_curve = _apply_optional_smoothing(learning_curve, plot_smoothing_window)
-    learning_curve_std = _apply_optional_smoothing(learning_curve_std, plot_smoothing_window)
-
-    if return_raw:
-        raw_returns = np.asarray(returns_over_repetitions, dtype=np.float32)
-        return learning_curve, learning_curve_std, timesteps, raw_returns
-    return learning_curve, learning_curve_std, timesteps
 
 
 def _run_single_repetition(
@@ -1062,6 +1028,8 @@ def _run_single_repetition(
     updates_per_step: int = 1,
     auto_tune_alpha: bool = True,
     alpha_init: float = 1.0,
+    # Shared: full-episode vs per-step update mode (None = use algorithm default)
+    full_episode_updates: bool | None = None,
 ):
     """Run one training repetition (pickle-safe for ProcessPoolExecutor)."""
 
@@ -1080,7 +1048,7 @@ def _run_single_repetition(
 
     if method == "REINFORCE":
         from REINFORCE import REINFORCE_Agent, run_reinforce
-        from checkpointing import (
+        from Checkpointing import (
             load_state_dict_if_present,
             pg_actor_checkpoint_path,
             save_state_dict_overwrite,
@@ -1119,6 +1087,7 @@ def _run_single_repetition(
             shared_step_counter=shared_step_counter,
             eval_with_env_episode_trials=eval_with_env_episode_trials,
             n_eval_episodes=n_eval_episodes,
+            full_episode_updates=True if full_episode_updates is None else bool(full_episode_updates),
         )
 
         if rep_index == 0:
@@ -1129,7 +1098,7 @@ def _run_single_repetition(
 
     elif method == "ac":
         from AC import AC_Agent, run_ac
-        from checkpointing import (
+        from Checkpointing import (
             load_state_dict_if_present,
             pg_actor_checkpoint_path,
             pg_critic_checkpoint_path,
@@ -1179,6 +1148,7 @@ def _run_single_repetition(
             shared_step_counter=shared_step_counter,
             eval_with_env_episode_trials=eval_with_env_episode_trials,
             n_eval_episodes=n_eval_episodes,
+            full_episode_updates=True if full_episode_updates is None else bool(full_episode_updates),
         )
 
         if rep_index == 0:
@@ -1193,7 +1163,7 @@ def _run_single_repetition(
 
     elif method == "a2c":
         from A2C import A2C_Agent, run_a2c
-        from checkpointing import (
+        from Checkpointing import (
             load_state_dict_if_present,
             pg_actor_checkpoint_path,
             pg_critic_checkpoint_path,
@@ -1247,6 +1217,7 @@ def _run_single_repetition(
             max_eval_episode_length=max_eval_episode_length,
             eval_with_env_episode_trials=eval_with_env_episode_trials,
             n_eval_episodes=n_eval_episodes,
+            full_episode_updates=True if full_episode_updates is None else bool(full_episode_updates),
         )
 
         if rep_index == 0:
@@ -1261,7 +1232,7 @@ def _run_single_repetition(
 
     elif method == "ppo":
         from PPO import PPO_Agent, run_ppo
-        from checkpointing import (
+        from Checkpointing import (
             load_state_dict_if_present,
             pg_actor_checkpoint_path,
             pg_critic_checkpoint_path,
@@ -1322,6 +1293,7 @@ def _run_single_repetition(
             max_eval_episode_length=max_eval_episode_length,
             eval_with_env_episode_trials=eval_with_env_episode_trials,
             n_eval_episodes=n_eval_episodes,
+            full_episode_updates=False if full_episode_updates is None else bool(full_episode_updates),
         )
 
         if rep_index == 0:
@@ -1336,7 +1308,7 @@ def _run_single_repetition(
 
     elif method == "sac":
         from SAC import SAC_Agent, run_sac
-        from checkpointing import (
+        from Checkpointing import (
             load_state_dict_if_present,
             pg_actor_checkpoint_path,
             sac_q_checkpoint_path,
@@ -1408,6 +1380,7 @@ def _run_single_repetition(
             max_eval_episode_length=max_eval_episode_length,
             eval_with_env_episode_trials=eval_with_env_episode_trials,
             n_eval_episodes=n_eval_episodes,
+            full_episode_updates=False if full_episode_updates is None else bool(full_episode_updates),
         )
 
         if rep_index == 0:

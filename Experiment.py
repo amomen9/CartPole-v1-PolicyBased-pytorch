@@ -6,7 +6,7 @@ Leiden University, The Netherlands
 By Thomas Moerland
 """
 
-from functions import run_selected_experiments
+from Library import run_selected_experiments
 
 
 # ── Main experiment ───────────────────────────────────────────────────────────
@@ -29,24 +29,35 @@ def experiment():
         "use_existing_disk_data": True,     # Whether to use existing data (.xlsx files) from disk if exists.
         "use_existing_disk_trained_networks": True,
         # Environment
-        "max_train_episode_length": 1000, #500        # Episode truncation step. Default: 500.
+        "max_train_episode_length": 500, #500        # Episode truncation step. Default: 500.
         "base_seed": 42,                    # Base seed for CartPole environment and agent initialization. Each repetition will use a different seed derived from this base seed (e.g., base_seed + repetition_index).
         # Agent
-        "n_timesteps": 200000,              # Total number of training timesteps. Default: 1000000.
-        "max_eval_episode_length": 20000, #500        # Episode truncation step. Default: 500.
+        "n_timesteps": 1e6,              # Total number of training timesteps. Default: 1000000.
+        "max_eval_episode_length": 500, #500        # Episode truncation step. Default: 500.
         "eval_interval": 250,
         "eval_with_env_episode_trials": True, # Default: True. Set to False to use the fast proxy from training (last_episode_return) for evaluation instead of running separate greedy environment episode trials via agent.evaluate(). Note: setting to False will speed up training and plotting, but will not provide true evaluation curves. Setting to True will provide true evaluation curves but will significantly increase training time due to the need to run separate evaluation episodes at each eval_interval.
         "n_eval_episodes": 5,
     }
-    ################[ End Global Parameters ]################
+    ################[           End Global Parameters            ]################
 
+    ################[ Algorithm Hyperparameters & Configurations ]##############
+    # Select which algorithms to include in the training and plotting using included_algorithms.
+    # Set value to True to include, False to exclude.
+    included_algorithms = {
+        "DQN": True,
+        "REINFORCE": False,
+        "AC": False,
+        "A2C": True,
+        "PPO": True,
+        "SAC": True,
+    }
     # Using DQN implementation from the previous assignment (existing in the assignment2_repo directory)
     # ------------- Algorithm: DQN hyperparameters (optimal) ----
-    include_DQN_in_training = True
-    dqn_config = {
+    DQN_config = {
         "gamma": 0.99,
-        "learning_rate": [0.001],
+        "learning_rate": [1e-3],
         "nn_hidden_layer_widths": [[128, 128]],
+        "FULL_EPISODE_UPDATES": [False, True],          # If True, update Q-values at the end of each episode with the full episode's trajectory. If False, update at each step with the trajectory so far (bootstrapped).
         "exploration_method": "egreedy",
         "epsilons": [0.05],
         "epsilon_start": 0.05,
@@ -66,6 +77,7 @@ def experiment():
             "gamma": [r"$\gamma$: ", True],
             "learning_rate": [r"$\alpha$: ", True],
             "nn_hidden_layer_widths": [r"NN Widths: ", True],
+            "FULL_EPISODE_UPDATES": [r"Full-Ep:", True],
             "exploration_method": [r"Exp Method: ", False],
             "epsilons": [r"$\epsilon$: ", True],
             "epsilon_start": [r"$\epsilon$ Start: ", False],
@@ -87,29 +99,27 @@ def experiment():
 
     ###############[ Training hyperparameters ]##############
     # ------------- Algorithm Type: REINFORCE hyperparameters (optimal) ----
-    include_REINFORCE_in_training = True
-    reinforce_config = {
+    REINFORCE_config = {
         "gamma": [0.99],                # list of discount factors to sweep
-        "actor_lr": [0.001],            # actor learning rate(s) to sweep
-        "actor_hidden_nn": [[32,32]],   # list of NN architectures to sweep
+        "actor_lr": [1e-3],            # actor learning rate(s) to sweep
+        "actor_hidden_nn": [[128, 128]],   # list of NN architectures to sweep
         "legend_parameters": {          # [plot label, show flag]
             "gamma": [r"$\gamma$: ", True],
-            "actor_lr": [r"Actor $\alpha:$ ", True],
+            "actor_lr": [r"Actor $\alpha$: ", True],
             "actor_hidden_nn": [r"Actor NN: ", True],
         },
     }
     # ------------- End REINFORCE hyperparameters -----------
 
     # ------------- Algorithm Type: AC hyperparameters (optimal) ----
-    include_AC_in_training = False
-    ac_config = {
+    AC_config = {
         "gamma": [0.99],
-        "FULL_EPISODE_RETURN": [True],           # Whether to use full-episode return (Monte Carlo) or n-step return (TD) for the critic target. Default: True (MC). Set to [False] to use n-step return (TD) for the critic target.
-        "actor_lr": [0.001],                   # 2D actor learning rate(s) to sweep
+        "actor_lr": [1e-3],                   # 2D actor learning rate(s) to sweep
         "actor_hidden_nn": [[64, 64]],         # 2D list of NN architectures to sweep
-        "critic_lr": [0.001],                  # critic learning rate(s) to sweep
+        "critic_lr": [1e-3],                  # critic learning rate(s) to sweep
         "critic_hidden_nn": [[128, 128]],      # critic NN architectures to sweep
-        "TN_step": [10],                      # list of n-step returns to sweep (Target Network). Default: [10]. Set to [1] to skip n-step return trials.        
+        "FULL_EPISODE_UPDATES": [False, True],          # If True, update actor and critic at the end of each episode with the full episode's trajectory. If False, update at each step with the trajectory so far (bootstrapped).
+        "TN_step": [10],                      # list of n-step returns to sweep (Target Network). Default: [10]. Set to [1] to skip n-step return trials.
         "legend_parameters": {                 # [plot label, show flag]
             "gamma": [r"$\gamma$: ", True],
             "actor_lr": [r"Actor $\alpha$: ", True],
@@ -117,19 +127,20 @@ def experiment():
             "critic_lr": [r"Critic $\beta$: ", True],
             "critic_hidden_nn": [r"Critic NN: ", True],
             "TN_step": [r"TN Step: ", False],
+            "FULL_EPISODE_UPDATES": [r"Full-Ep:", True],
         },
     }
     # ------------- End AC hyperparameters -----------
 
     # ------------- Algorithm Type: A2C hyperparameters (optimal) ----
-    include_A2C_in_training = False
-    a2c_config = {
+    A2C_config = {
         "gamma": [0.99],                # list of discount factors to sweep
-        "actor_lr": [0.0001],          # policy learning rate(s) to sweep
+        "actor_lr": [1e-4],          # policy learning rate(s) to sweep
         "actor_hidden_nn": [[64, 64]],        # list of NN architectures to sweep for policy network
         "critic_lr": [0.01],        # value function learning rate(s) to sweep
         "critic_hidden_nn": [[128, 128]],  # list of NN architectures to sweep for value function network
-        "TN_step": [10],                 # list of n-step returns to sweep (Target Network). Default: [10]. Set to [1] to skip n-step return trials.    
+        "FULL_EPISODE_UPDATES": [False, True],          # If True, update actor and critic at the end of each episode with the full episode's trajectory. If False, update at each step with the trajectory so far (bootstrapped).
+        "TN_step": [10],                 # list of n-step returns to sweep (Target Network). Default: [10]. Set to [1] to skip n-step return trials.
         "legend_parameters": {          # [plot label, show flag]
             "gamma": [r"$\gamma$: ", True],
             "actor_lr": [r"Actor $\alpha$: ", True],
@@ -137,19 +148,20 @@ def experiment():
             "actor_hidden_nn": [r"Actor NN: ", True],
             "critic_hidden_nn": [r"Critic NN: ", True],
             "TN_step": [r"TN Step: ", False],
+            "FULL_EPISODE_UPDATES": [r"Full-Ep:", True],
         },
     }
     # ------------- End A2C hyperparameters -----------
 
     # ------------- Algorithm Type: PPO hyperparameters (optimal) ----
     # Proximal Policy Optimisation (PPO-clipped) - Schulman et al., 2017
-    include_PPO_in_training = False
-    ppo_config = {
+    PPO_config = {
         "gamma": [0.99],                # list of discount factors to sweep
-        "actor_lr": [0.0003],           # actor learning rate(s) to sweep
+        "actor_lr": [3e-4],           # actor learning rate(s) to sweep
         "actor_hidden_nn": [[64, 64]],  # actor NN architectures to sweep
-        "critic_lr": [0.001],           # critic learning rate(s) to sweep
+        "critic_lr": [1e-3],           # critic learning rate(s) to sweep
         "critic_hidden_nn": [[64, 64]], # critic NN architectures to sweep
+        "FULL_EPISODE_UPDATES": [False, True],          # If True, update actor and critic at the end of each episode with the full episode's trajectory. If False, update at each step with the trajectory so far (bootstrapped).
         "gae_lambda": [0.95],           # GAE lambda (Schulman et al., 2015)
         "clip_eps": [0.2],              # PPO clipping epsilon
         "n_epochs": [10],               # # of optimisation epochs per rollout
@@ -164,6 +176,7 @@ def experiment():
             "critic_lr": [r"Critic $\beta$: ", False],
             "actor_hidden_nn": [r"Actor NN: ", False],
             "critic_hidden_nn": [r"Critic NN: ", True],
+            "FULL_EPISODE_UPDATES": [r"Full-Ep:", True],
             "gae_lambda": [r"$\lambda_{GAE}$: ", True],
             "clip_eps": [r"$\epsilon_{clip}$: ", True],
             "n_epochs": [r"Epochs: ", False],
@@ -178,19 +191,19 @@ def experiment():
 
     # ------------- Algorithm Type: SAC hyperparameters (optimal) ----
     # Soft Actor-Critic (discrete) - Haarnoja et al., 2018/2019 + Christodoulou, 2019
-    include_SAC_in_training = False
-    sac_config = {
+    SAC_config = {
         "gamma": [0.99],                # list of discount factors to sweep
-        "actor_lr": [0.0003],           # actor learning rate(s) to sweep
+        "actor_lr": [3e-4],           # actor learning rate(s) to sweep
         "actor_hidden_nn": [[64, 64]],  # actor NN architectures to sweep
-        "critic_lr": [0.0003],          # critic learning rate(s) to sweep
+        "critic_lr": [3e-4],          # critic learning rate(s) to sweep
         "critic_hidden_nn": [[128, 128]], # critic (twin Q) NN architectures
-        "alpha_lr": [0.0003],           # entropy-temperature learning rate
-        "tau": [0.005],                 # soft target update rate
+        "FULL_EPISODE_UPDATES": [False, True],          # If True, update actor and critic at the end of each episode with the full episode's trajectory. If False, update at each step with the trajectory so far (bootstrapped).
+        "alpha_lr": [3e-4],           # entropy-temperature learning rate
+        "tau": [5e-3],                 # soft target update rate
         "target_entropy_ratio": [0.98], # target entropy = ratio * log(n_actions)
-        "replay_buffer_size": [100000], # replay buffer capacity
+        "replay_buffer_size": [1e5], # replay buffer capacity
         "batch_size": [64],             # SGD batch size from the replay buffer
-        "warmup_steps": [1000],         # random-action steps before SAC kicks in
+        "warmup_steps": [1e3],         # random-action steps before SAC kicks in
         "updates_per_step": [1],        # gradient updates per env step
         "auto_tune_alpha": [True],      # Default: True (Haarnoja et al., 2019). Set to [False] to use fixed alpha (Haarnoja et al., 2018).
         "alpha_init": [1.0],            # Initial / fixed entropy temperature alpha. Used as the start point when auto_tune_alpha=True, or as the fixed value when auto_tune_alpha=False.
@@ -200,6 +213,7 @@ def experiment():
             "critic_lr": [r"Critic $\beta$: ", False],
             "actor_hidden_nn": [r"Actor NN: ", True],
             "critic_hidden_nn": [r"Critic NN: ", False],
+            "FULL_EPISODE_UPDATES": [r"Full-Ep:", True],
             "alpha_lr": [r"$\alpha_{lr}$: ", True],
             "tau": [r"$\tau$: ", True],
             "target_entropy_ratio": [r"Tgt H ratio: ", True],
@@ -212,31 +226,21 @@ def experiment():
         },
     }
     # ------------- End SAC hyperparameters -----------
+
     ##########################################################
 
-    experiments = []
-    if include_REINFORCE_in_training:
-        experiments.append("REINFORCE")
-    if include_AC_in_training:
-        experiments.append("AC")
-    if include_A2C_in_training:
-        experiments.append("A2C")
-    if include_PPO_in_training:
-        experiments.append("PPO")
-    if include_SAC_in_training:
-        experiments.append("SAC")
-    if include_DQN_in_training:
-        experiments.append("DQN")
+    ordered_algorithms = ["REINFORCE", "AC", "A2C", "PPO", "SAC", "DQN"]
+    experiments = [algo for algo in ordered_algorithms if included_algorithms.get(algo, False)]
 
     run_selected_experiments(
         experiments,
         global_config=global_config,
-        reinforce_config=reinforce_config,
-        ac_config=ac_config,
-        a2c_config=a2c_config,
-        dqn_config=dqn_config,
-        ppo_config=ppo_config,
-        sac_config=sac_config,
+        REINFORCE_config=REINFORCE_config,
+        AC_config=AC_config,
+        A2C_config=A2C_config,
+        DQN_config=DQN_config,
+        PPO_config=PPO_config,
+        SAC_config=SAC_config,
     )
 
 

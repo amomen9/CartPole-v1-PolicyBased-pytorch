@@ -266,6 +266,7 @@ def run_ppo(
     max_eval_episode_length=None,
     eval_with_env_episode_trials: bool = True,
     n_eval_episodes: int = 5,
+    full_episode_updates: bool = True,
 ):
     """PPO training loop with eval-interval return recording.
 
@@ -355,11 +356,19 @@ def run_ppo(
                 episode_steps = 0
                 state, _ = env.reset()
 
-            # Perform PPO update when the rollout buffer is full
-            # or when training is about to end.
-            rollout_full = len(states) >= int(rollout_steps)
+            # Decide when to flush the buffer and update.
+            # - full_episode_updates=True: update at the end of every episode
+            #   using only that episode's trajectory.
+            # - full_episode_updates=False: standard PPO with a fixed-length
+            #   rollout buffer that may span multiple episodes.
             horizon_reached = global_step >= n_timesteps
-            if rollout_full or horizon_reached:
+            if full_episode_updates:
+                should_update = episode_done or horizon_reached
+            else:
+                rollout_full = len(states) >= int(rollout_steps)
+                should_update = rollout_full or horizon_reached
+
+            if should_update and len(states) > 0:
                 with torch.no_grad():
                     last_value_t = agent.value_func(state)
                 last_value = float(last_value_t.item())

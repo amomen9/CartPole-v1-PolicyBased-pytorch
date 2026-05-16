@@ -341,6 +341,7 @@ def run_sac(
     max_eval_episode_length=None,
     eval_with_env_episode_trials: bool = True,
     n_eval_episodes: int = 5,
+    full_episode_updates: bool = True,
 ):
     """SAC training loop with eval-interval return recording.
 
@@ -382,6 +383,9 @@ def run_sac(
     state, _ = env.reset()
     episode_steps = 0
     n_actions = agent.n_actions
+    # In full-episode-update mode we accumulate the per-step update budget and
+    # apply it in a single burst when the episode terminates.
+    pending_updates = 0
 
     try:
         while global_step < n_timesteps:
@@ -404,8 +408,11 @@ def run_sac(
             episode_steps += 1
 
             if global_step >= agent.warmup_steps and len(agent.replay_buffer) >= agent.batch_size:
-                for _ in range(agent.updates_per_step):
-                    agent.update()
+                if full_episode_updates:
+                    pending_updates += agent.updates_per_step
+                else:
+                    for _ in range(agent.updates_per_step):
+                        agent.update()
 
             if (global_step - last_progress_update) >= 512 or global_step >= n_timesteps:
                 progress_delta = global_step - last_progress_update
@@ -427,6 +434,10 @@ def run_sac(
                 eval_write_idx += 1
 
             if episode_done or episode_steps >= truncation_step:
+                if full_episode_updates and pending_updates > 0:
+                    for _ in range(pending_updates):
+                        agent.update()
+                    pending_updates = 0
                 last_episode_return = current_episode_return
                 if pbar is not None:
                     pbar.set_postfix_str(
