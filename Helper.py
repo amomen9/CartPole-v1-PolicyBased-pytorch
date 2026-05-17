@@ -33,6 +33,11 @@ from scipy.signal import savgol_filter
 from scipy.stats import t as t_dist
 
 
+# Timestamp captured at module import time — represents the start of execution
+# for the current run. Used to suffix plot filenames so all plots from one run
+# share the same timestamp (format: YYYY.MM.DD_HH.MM.SS).
+RUN_TIMESTAMP = datetime.now().strftime("%Y.%m.%d_%H.%M.%S")
+
 
 def _create_step_progress_bar(total, desc, position=None, leave=True):
     """Create a tqdm progress bar with the shared project formatting."""
@@ -132,6 +137,9 @@ class LearningCurvePlot:
             out_dir = os.path.dirname(output_path)
             if out_dir:
                 os.makedirs(out_dir, exist_ok=True)
+
+        root, ext = os.path.splitext(output_path)
+        output_path = f"{root}_{RUN_TIMESTAMP}{ext}"
 
         output_path = self._resolve_non_overwriting_path(output_path)
         self.fig.savefig(output_path,dpi=300)
@@ -861,7 +869,6 @@ GLOBAL_CONFIG_EXCLUSIONS = frozenset({
     "curve_shaded_area_opacity",
     "curve_plot",
     "show_curve_plots",
-    "show_curved_plots",
     "animation_plot",
     "use_existing_disk_data",
     "use_existing_disk_trained_networks",
@@ -1459,11 +1466,6 @@ def _build_ppo_jobs(
     n_epochs_list = np.atleast_1d(np.asarray(cfg.get("n_epochs", np.array([10])), dtype=np.int32))
     rollout_steps_list = np.atleast_1d(np.asarray(cfg.get("rollout_steps", np.array([2048])), dtype=np.int32))
     mini_batch_sizes = np.atleast_1d(np.asarray(cfg.get("mini_batch_size", np.array([64])), dtype=np.int32))
-    entropy_coefs = np.atleast_1d(np.asarray(cfg.get("entropy_coef", np.array([0.0])), dtype=np.float32))
-    value_coefs = np.atleast_1d(np.asarray(cfg.get("value_coef", np.array([0.5])), dtype=np.float32))
-    max_grad_norms = np.atleast_1d(np.asarray(cfg.get("max_grad_norm", np.array([0.5])), dtype=np.float32))
-    # PPO default preserves prior rollout-buffer behavior (False).
-    full_episode_updates_list = [bool(v) for v in _as_list(cfg.get("FULL_EPISODE_UPDATES", [False]))]
 
     setting_jobs = []
     for gamma_val in gammas:
@@ -1486,85 +1488,66 @@ def _build_ppo_jobs(
                                         rollout_steps_val = int(rollout_steps_val)
                                         for mini_batch_val in mini_batch_sizes:
                                             mini_batch_val = int(mini_batch_val)
-                                            for entropy_coef_val in entropy_coefs:
-                                                entropy_coef_val = float(entropy_coef_val)
-                                                for value_coef_val in value_coefs:
-                                                    value_coef_val = float(value_coef_val)
-                                                    for max_grad_norm_val in max_grad_norms:
-                                                        max_grad_norm_val = float(max_grad_norm_val)
-                                                        for feu_val in full_episode_updates_list:
-                                                            iter_cfg = {
-                                                                **cfg,
-                                                                "gamma": gamma_val,
-                                                                "actor_lr": actor_lr_val,
-                                                                "actor_hidden_nn": actor_nn,
-                                                                "critic_lr": critic_lr_val,
-                                                                "critic_hidden_nn": critic_nn,
-                                                                "gae_lambda": gae_lambda_val,
-                                                                "clip_eps": clip_eps_val,
-                                                                "n_epochs": n_epochs_val,
-                                                                "rollout_steps": rollout_steps_val,
-                                                                "mini_batch_size": mini_batch_val,
-                                                                "entropy_coef": entropy_coef_val,
-                                                                "value_coef": value_coef_val,
-                                                                "max_grad_norm": max_grad_norm_val,
-                                                                "FULL_EPISODE_UPDATES": feu_val,
-                                                            }
-                                                            label_parts = ["PPO"] + _build_legend_parts(legend, iter_cfg)
-                                                            curve_label = ", ".join(label_parts)
-                                                            setting_jobs.append({
-                                                                "curve_label": curve_label,
-                                                                "method": "ppo",
-                                                                "kwargs": dict(
-                                                                    method="ppo",
-                                                                    n_repetitions=n_repetitions,
-                                                                    n_timesteps=n_timesteps,
-                                                                    eval_interval=eval_interval,
-                                                                    max_train_episode_length=max_train_episode_length,
-                                                                    max_eval_episode_length=max_eval_episode_length,
-                                                                    actor_lr=actor_lr_val,
-                                                                    critic_lr=critic_lr_val,
-                                                                    gamma=gamma_val,
-                                                                    actor_hidden_nn=actor_nn,
-                                                                    critic_hidden_nn=critic_nn,
-                                                                    gae_lambda=gae_lambda_val,
-                                                                    clip_eps=clip_eps_val,
-                                                                    n_epochs=n_epochs_val,
-                                                                    rollout_steps=rollout_steps_val,
-                                                                    mini_batch_size=mini_batch_val,
-                                                                    entropy_coef=entropy_coef_val,
-                                                                    value_coef=value_coef_val,
-                                                                    max_grad_norm=max_grad_norm_val,
-                                                                    base_seed=base_seed,
-                                                                    eval_with_env_episode_trials=eval_with_env_episode_trials,
-                                                                    n_eval_episodes=n_eval_episodes,
-                                                                    full_episode_updates=feu_val,
-                                                                    plot_smoothing_window=1,
-                                                                ),
-                                                                "hyperparams": {
-                                                                    "n_repetitions": n_repetitions,
-                                                                    "n_timesteps": n_timesteps,
-                                                                    "eval_interval": eval_interval,
-                                                                    "max_train_episode_length": max_train_episode_length,
-                                                                    "max_eval_episode_length": max_eval_episode_length,
-                                                                    "actor_lr": actor_lr_val,
-                                                                    "critic_lr": critic_lr_val,
-                                                                    "gamma": gamma_val,
-                                                                    "actor_hidden_nn": str(actor_nn.tolist()),
-                                                                    "critic_hidden_nn": str(critic_nn.tolist()),
-                                                                    "gae_lambda": gae_lambda_val,
-                                                                    "clip_eps": clip_eps_val,
-                                                                    "n_epochs": n_epochs_val,
-                                                                    "rollout_steps": rollout_steps_val,
-                                                                    "mini_batch_size": mini_batch_val,
-                                                                    "entropy_coef": entropy_coef_val,
-                                                                    "value_coef": value_coef_val,
-                                                                    "max_grad_norm": max_grad_norm_val,
-                                                                    "eval_with_env_episode_trials": eval_with_env_episode_trials,
-                                                                    "n_eval_episodes": n_eval_episodes,
-                                                                    "FULL_EPISODE_UPDATES": feu_val,
-                                                                },
-                                                            })
+                                            iter_cfg = {
+                                                **cfg,
+                                                "gamma": gamma_val,
+                                                "actor_lr": actor_lr_val,
+                                                "actor_hidden_nn": actor_nn,
+                                                "critic_lr": critic_lr_val,
+                                                "critic_hidden_nn": critic_nn,
+                                                "gae_lambda": gae_lambda_val,
+                                                "clip_eps": clip_eps_val,
+                                                "n_epochs": n_epochs_val,
+                                                "rollout_steps": rollout_steps_val,
+                                                "mini_batch_size": mini_batch_val,
+                                            }
+                                            label_parts = ["PPO"] + _build_legend_parts(legend, iter_cfg)
+                                            curve_label = ", ".join(label_parts)
+                                            setting_jobs.append({
+                                                "curve_label": curve_label,
+                                                "method": "ppo",
+                                                "kwargs": dict(
+                                                    method="ppo",
+                                                    n_repetitions=n_repetitions,
+                                                    n_timesteps=n_timesteps,
+                                                    eval_interval=eval_interval,
+                                                    max_train_episode_length=max_train_episode_length,
+                                                    max_eval_episode_length=max_eval_episode_length,
+                                                    actor_lr=actor_lr_val,
+                                                    critic_lr=critic_lr_val,
+                                                    gamma=gamma_val,
+                                                    actor_hidden_nn=actor_nn,
+                                                    critic_hidden_nn=critic_nn,
+                                                    gae_lambda=gae_lambda_val,
+                                                    clip_eps=clip_eps_val,
+                                                    n_epochs=n_epochs_val,
+                                                    rollout_steps=rollout_steps_val,
+                                                    mini_batch_size=mini_batch_val,
+                                                    base_seed=base_seed,
+                                                    eval_with_env_episode_trials=eval_with_env_episode_trials,
+                                                    n_eval_episodes=n_eval_episodes,
+                                                    plot_smoothing_window=1,
+                                                ),
+                                                "hyperparams": {
+                                                    "n_repetitions": n_repetitions,
+                                                    "n_timesteps": n_timesteps,
+                                                    "eval_interval": eval_interval,
+                                                    "max_train_episode_length": max_train_episode_length,
+                                                    "max_eval_episode_length": max_eval_episode_length,
+                                                    "actor_lr": actor_lr_val,
+                                                    "critic_lr": critic_lr_val,
+                                                    "gamma": gamma_val,
+                                                    "actor_hidden_nn": str(actor_nn.tolist()),
+                                                    "critic_hidden_nn": str(critic_nn.tolist()),
+                                                    "gae_lambda": gae_lambda_val,
+                                                    "clip_eps": clip_eps_val,
+                                                    "n_epochs": n_epochs_val,
+                                                    "rollout_steps": rollout_steps_val,
+                                                    "mini_batch_size": mini_batch_val,
+                                                    "eval_with_env_episode_trials": eval_with_env_episode_trials,
+                                                    "n_eval_episodes": n_eval_episodes,
+                                                },
+                                            })
     return setting_jobs
 
 
@@ -1591,17 +1574,10 @@ def _build_sac_jobs(
     else:
         critic_architectures = [np.asarray(arch, dtype=np.int32) for arch in raw_critic_nn]
 
-    alpha_lrs = np.atleast_1d(np.asarray(cfg.get("alpha_lr", np.array([0.0003])), dtype=np.float32))
     taus = np.atleast_1d(np.asarray(cfg.get("tau", np.array([0.005])), dtype=np.float32))
-    target_entropy_ratios = np.atleast_1d(np.asarray(cfg.get("target_entropy_ratio", np.array([0.98])), dtype=np.float32))
     replay_buffer_sizes = np.atleast_1d(np.asarray(cfg.get("replay_buffer_size", np.array([100000])), dtype=np.int64))
     batch_sizes = np.atleast_1d(np.asarray(cfg.get("batch_size", np.array([64])), dtype=np.int32))
-    warmup_steps_list = np.atleast_1d(np.asarray(cfg.get("warmup_steps", np.array([1000])), dtype=np.int32))
-    updates_per_step_list = np.atleast_1d(np.asarray(cfg.get("updates_per_step", np.array([1])), dtype=np.int32))
-    auto_tune_alpha_list = np.atleast_1d(np.asarray(cfg.get("auto_tune_alpha", np.array([True]))))
-    alpha_init_list = np.atleast_1d(np.asarray(cfg.get("alpha_init", np.array([1.0])), dtype=np.float32))
-    # SAC default preserves prior per-step update behavior (False).
-    full_episode_updates_list = [bool(v) for v in _as_list(cfg.get("FULL_EPISODE_UPDATES", [False]))]
+    alpha_list = np.atleast_1d(np.asarray(cfg.get("alpha", np.array([1.0])), dtype=np.float32))
 
     setting_jobs = []
     for gamma_val in gammas:
@@ -1614,100 +1590,71 @@ def _build_sac_jobs(
                     critic_nn = np.asarray(critic_nn, dtype=np.int32)
                     for critic_lr_val in critic_learning_rates:
                         critic_lr_val = float(critic_lr_val)
-                        for alpha_lr_val in alpha_lrs:
-                            alpha_lr_val = float(alpha_lr_val)
-                            for tau_val in taus:
-                                tau_val = float(tau_val)
-                                for tgt_ent_val in target_entropy_ratios:
-                                    tgt_ent_val = float(tgt_ent_val)
-                                    for buf_size in replay_buffer_sizes:
-                                        buf_size = int(buf_size)
-                                        for batch_val in batch_sizes:
-                                            batch_val = int(batch_val)
-                                            for warm_val in warmup_steps_list:
-                                                warm_val = int(warm_val)
-                                                for ups_val in updates_per_step_list:
-                                                    ups_val = int(ups_val)
-                                                    for auto_tune_val in auto_tune_alpha_list:
-                                                        auto_tune_val = bool(auto_tune_val)
-                                                        for alpha_init_val in alpha_init_list:
-                                                            alpha_init_val = float(alpha_init_val)
-                                                            for feu_val in full_episode_updates_list:
-                                                                iter_cfg = {
-                                                                    **cfg,
-                                                                    "gamma": gamma_val,
-                                                                    "actor_lr": actor_lr_val,
-                                                                    "actor_hidden_nn": actor_nn,
-                                                                    "critic_lr": critic_lr_val,
-                                                                    "critic_hidden_nn": critic_nn,
-                                                                    "alpha_lr": alpha_lr_val,
-                                                                    "tau": tau_val,
-                                                                    "target_entropy_ratio": tgt_ent_val,
-                                                                    "replay_buffer_size": buf_size,
-                                                                    "batch_size": batch_val,
-                                                                    "warmup_steps": warm_val,
-                                                                    "updates_per_step": ups_val,
-                                                                    "auto_tune_alpha": auto_tune_val,
-                                                                    "alpha_init": alpha_init_val,
-                                                                    "FULL_EPISODE_UPDATES": feu_val,
-                                                                }
-                                                                label_parts = ["SAC"] + _build_legend_parts(legend, iter_cfg)
-                                                                curve_label = ", ".join(label_parts)
-                                                                setting_jobs.append({
-                                                                    "curve_label": curve_label,
-                                                                    "method": "sac",
-                                                                    "kwargs": dict(
-                                                                        method="sac",
-                                                                        n_repetitions=n_repetitions,
-                                                                        n_timesteps=n_timesteps,
-                                                                        eval_interval=eval_interval,
-                                                                        max_train_episode_length=max_train_episode_length,
-                                                                        max_eval_episode_length=max_eval_episode_length,
-                                                                        actor_lr=actor_lr_val,
-                                                                        critic_lr=critic_lr_val,
-                                                                        gamma=gamma_val,
-                                                                        actor_hidden_nn=actor_nn,
-                                                                        critic_hidden_nn=critic_nn,
-                                                                        alpha_lr=alpha_lr_val,
-                                                                        tau=tau_val,
-                                                                        target_entropy_ratio=tgt_ent_val,
-                                                                        replay_buffer_size=buf_size,
-                                                                        batch_size=batch_val,
-                                                                        warmup_steps=warm_val,
-                                                                        updates_per_step=ups_val,
-                                                                        auto_tune_alpha=auto_tune_val,
-                                                                        alpha_init=alpha_init_val,
-                                                                        base_seed=base_seed,
-                                                                        eval_with_env_episode_trials=eval_with_env_episode_trials,
-                                                                        n_eval_episodes=n_eval_episodes,
-                                                                        full_episode_updates=feu_val,
-                                                                        plot_smoothing_window=1,
-                                                                    ),
-                                                                    "hyperparams": {
-                                                                        "n_repetitions": n_repetitions,
-                                                                        "n_timesteps": n_timesteps,
-                                                                        "eval_interval": eval_interval,
-                                                                        "max_train_episode_length": max_train_episode_length,
-                                                                        "max_eval_episode_length": max_eval_episode_length,
-                                                                        "actor_lr": actor_lr_val,
-                                                                        "critic_lr": critic_lr_val,
-                                                                        "gamma": gamma_val,
-                                                                        "actor_hidden_nn": str(actor_nn.tolist()),
-                                                                        "critic_hidden_nn": str(critic_nn.tolist()),
-                                                                        "alpha_lr": alpha_lr_val,
-                                                                        "tau": tau_val,
-                                                                        "target_entropy_ratio": tgt_ent_val,
-                                                                        "replay_buffer_size": buf_size,
-                                                                        "batch_size": batch_val,
-                                                                        "warmup_steps": warm_val,
-                                                                        "updates_per_step": ups_val,
-                                                                        "auto_tune_alpha": auto_tune_val,
-                                                                        "alpha_init": alpha_init_val,
-                                                                        "eval_with_env_episode_trials": eval_with_env_episode_trials,
-                                                                        "n_eval_episodes": n_eval_episodes,
-                                                                        "FULL_EPISODE_UPDATES": feu_val,
-                                                                    },
-                                                                })
+                        for tau_val in taus:
+                            tau_val = float(tau_val)
+                            for buf_size in replay_buffer_sizes:
+                                buf_size = int(buf_size)
+                                for batch_val in batch_sizes:
+                                    batch_val = int(batch_val)
+                                    for alpha_val in alpha_list:
+                                        alpha_val = float(alpha_val)
+                                        iter_cfg = {
+                                            **cfg,
+                                            "gamma": gamma_val,
+                                            "actor_lr": actor_lr_val,
+                                            "actor_hidden_nn": actor_nn,
+                                            "critic_lr": critic_lr_val,
+                                            "critic_hidden_nn": critic_nn,
+                                            "tau": tau_val,
+                                            "replay_buffer_size": buf_size,
+                                            "batch_size": batch_val,
+                                            "alpha": alpha_val,
+                                        }
+                                        label_parts = ["SAC"] + _build_legend_parts(legend, iter_cfg)
+                                        curve_label = ", ".join(label_parts)
+                                        setting_jobs.append({
+                                            "curve_label": curve_label,
+                                            "method": "sac",
+                                            "kwargs": dict(
+                                                method="sac",
+                                                n_repetitions=n_repetitions,
+                                                n_timesteps=n_timesteps,
+                                                eval_interval=eval_interval,
+                                                max_train_episode_length=max_train_episode_length,
+                                                max_eval_episode_length=max_eval_episode_length,
+                                                actor_lr=actor_lr_val,
+                                                critic_lr=critic_lr_val,
+                                                gamma=gamma_val,
+                                                actor_hidden_nn=actor_nn,
+                                                critic_hidden_nn=critic_nn,
+                                                tau=tau_val,
+                                                replay_buffer_size=buf_size,
+                                                batch_size=batch_val,
+                                                alpha=alpha_val,
+                                                base_seed=base_seed,
+                                                eval_with_env_episode_trials=eval_with_env_episode_trials,
+                                                n_eval_episodes=n_eval_episodes,
+                                                plot_smoothing_window=1,
+                                            ),
+                                            "hyperparams": {
+                                                "n_repetitions": n_repetitions,
+                                                "n_timesteps": n_timesteps,
+                                                "eval_interval": eval_interval,
+                                                "max_train_episode_length": max_train_episode_length,
+                                                "max_eval_episode_length": max_eval_episode_length,
+                                                "actor_lr": actor_lr_val,
+                                                "critic_lr": critic_lr_val,
+                                                "gamma": gamma_val,
+                                                "actor_hidden_nn": str(actor_nn.tolist()),
+                                                "critic_hidden_nn": str(critic_nn.tolist()),
+                                                "tau": tau_val,
+                                                "replay_buffer_size": buf_size,
+                                                "batch_size": batch_val,
+                                                "alpha": alpha_val,
+                                                "eval_with_env_episode_trials": eval_with_env_episode_trials,
+                                                "n_eval_episodes": n_eval_episodes,
+                                            },
+                                        })
     return setting_jobs
 
 
@@ -1995,23 +1942,15 @@ def _run_pending_parallel(pending_settings, n_repetitions, n_timesteps, eval_int
                                 "n_epochs",
                                 "rollout_steps",
                                 "mini_batch_size",
-                                "entropy_coef",
-                                "value_coef",
-                                "max_grad_norm",
                             ):
                                 if k in kw:
                                     algo_extra_kwargs[k] = kw[k]
                             # SAC-specific
                             for k in (
-                                "alpha_lr",
                                 "tau",
-                                "target_entropy_ratio",
                                 "replay_buffer_size",
                                 "batch_size",
-                                "warmup_steps",
-                                "updates_per_step",
-                                "auto_tune_alpha",
-                                "alpha_init",
+                                "alpha",
                             ):
                                 if k in kw:
                                     algo_extra_kwargs[k] = kw[k]

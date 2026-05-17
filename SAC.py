@@ -3,24 +3,13 @@
 Soft Actor-Critic (SAC) for the discrete CartPole-v1 action space.
 
 Implementation follows Haarnoja et al., 2018 (https://arxiv.org/abs/1801.01290)
-and the discrete-action adaptation by Christodoulou, 2019
-(https://arxiv.org/abs/1910.07207). The structure, training-loop signature,
-progress-bar handling and parallelisation hooks mirror ``A2C.py`` so that SAC
-plugs into the same experiment pipeline.
-
-Engineering tricks employed (all standard SAC additions on top of A2C):
-- Off-policy learning with an experience replay buffer.
-- Twin Q-networks (clipped double Q-learning) to mitigate value overestimation
-  (Fujimoto et al., 2018).
-- Polyak (soft) target-network updates with rate ``tau``.
-- Optional automatic entropy-temperature tuning (Haarnoja et al., 2019) with a
-  learned ``log_alpha`` and the discrete-action target entropy
-  ``target_entropy_ratio * log(n_actions)``. When ``auto_tune_alpha`` is
-  ``False`` the original SAC formulation (Haarnoja et al., 2018) is used with
-  a fixed ``alpha_init``.
-- Random uniform warm-up phase (``warmup_steps``) before training kicks in.
-- Mini-batch SGD via ``batch_size`` samples per gradient step and
-  ``updates_per_step`` updates per environment step.
+adapted to discrete actions (Christodoulou, 2019,
+https://arxiv.org/abs/1910.07207). This file implements the *core* discrete
+SAC algorithm: a stochastic policy, a soft Q-network with a Polyak-averaged
+target, a fixed entropy temperature ``alpha``, and a replay buffer. No
+additional engineering tricks are applied: no twin Q-networks (clipped
+double-Q), no automatic entropy temperature tuning, no random warm-up phase,
+and one gradient update per environment step.
 """
 
 from Agent import BaseAgent
@@ -28,7 +17,6 @@ from Agent import BaseAgent
 import math
 import random
 from collections import deque
-from typing import Any, cast
 
 import numpy as np
 import torch
@@ -73,7 +61,7 @@ class ReplayBuffer:
 
 
 class SAC_Agent(BaseAgent):
-    """Discrete Soft Actor-Critic agent."""
+    """Discrete Soft Actor-Critic agent (core formulation)."""
 
     def __init__(
         self,
@@ -81,39 +69,22 @@ class SAC_Agent(BaseAgent):
         n_actions,
         actor_lr,
         critic_lr,
-        alpha_lr,
         gamma,
         tau,
-        target_entropy_ratio,
         replay_buffer_size,
         batch_size,
-        warmup_steps,
-        updates_per_step,
         actor_hidden_nn,
         critic_hidden_nn,
-        auto_tune_alpha: bool = True,
-        alpha_init: float = 1.0,
+        alpha: float = 1.0,
     ):
-        """Initialise the discrete SAC agent.
-
-        When ``auto_tune_alpha`` is ``True`` the entropy temperature is learned
-        (Haarnoja et al., 2019). Otherwise ``alpha`` is fixed to ``alpha_init``
-        as in the original SAC (Haarnoja et al., 2018).
-        """
-
         self.n_agent_state_elements = n_agent_state_elements
         self.n_actions = n_actions
         self.actor_lr = actor_lr
         self.critic_lr = critic_lr
-        self.alpha_lr = alpha_lr
         self.gamma = gamma
         self.tau = tau
-        self.target_entropy_ratio = target_entropy_ratio
         self.batch_size = int(batch_size)
-        self.warmup_steps = int(warmup_steps)
-        self.updates_per_step = int(updates_per_step)
-        self.auto_tune_alpha = bool(auto_tune_alpha)
-        self.alpha_init = float(alpha_init)
+        self.alpha = float(alpha)
 
         self.policy = PolicyNetwork(
             n_agent_state_elements,
@@ -121,60 +92,26 @@ class SAC_Agent(BaseAgent):
             actor_hidden_nn,
             activation=nn.ReLU,
         )
-        self.q1 = QNetwork(
+        self.q = QNetwork(
             n_agent_state_elements,
             n_actions,
             critic_hidden_nn,
             activation=nn.ReLU,
         )
-        self.q2 = QNetwork(
+        self.q_target = QNetwork(
             n_agent_state_elements,
             n_actions,
             critic_hidden_nn,
             activation=nn.ReLU,
         )
-        self.q1_target = QNetwork(
-            n_agent_state_elements,
-            n_actions,
-            critic_hidden_nn,
-            activation=nn.ReLU,
-        )
-        self.q2_target = QNetwork(
-            n_agent_state_elements,
-            n_actions,
-            critic_hidden_nn,
-            activation=nn.ReLU,
-        )
-        self.q1_target.load_state_dict(self.q1.state_dict())
-        self.q2_target.load_state_dict(self.q2.state_dict())
-        for param in self.q1_target.parameters():
-            param.requires_grad = False
-        for param in self.q2_target.parameters():
+        self.q_target.load_state_dict(self.q.state_dict())
+        for param in self.q_target.parameters():
             param.requires_grad = False
 
         self.opt_actor = torch.optim.Adam(self.policy.parameters(), lr=actor_lr)
-        self.opt_q1 = torch.optim.Adam(self.q1.parameters(), lr=critic_lr)
-        self.opt_q2 = torch.optim.Adam(self.q2.parameters(), lr=critic_lr)
-
-        # For discrete actions, the target entropy is a fraction of the maximum
-        # entropy ``log(n_actions)`` (Christodoulou, 2019). Only used when
-        # ``auto_tune_alpha`` is ``True`` (Haarnoja et al., 2019).
-        self.target_entropy = float(target_entropy_ratio) * math.log(n_actions)
-        log_alpha_init = math.log(max(self.alpha_init, 1e-8))
-        if self.auto_tune_alpha:
-            self.log_alpha = torch.tensor([log_alpha_init], requires_grad=True)
-            self.opt_alpha = torch.optim.Adam([self.log_alpha], lr=alpha_lr)
-        else:
-            # Fixed temperature: keep as a non-trainable tensor for a uniform
-            # ``alpha`` property and no optimiser is created.
-            self.log_alpha = torch.tensor([log_alpha_init], requires_grad=False)
-            self.opt_alpha = None
+        self.opt_q = torch.optim.Adam(self.q.parameters(), lr=critic_lr)
 
         self.replay_buffer = ReplayBuffer(replay_buffer_size)
-
-    @property
-    def alpha(self) -> torch.Tensor:
-        return self.log_alpha.exp()
 
     def select_action(self, obs, deterministic: bool = False):
         """Sample (or take argmax) an action from the soft policy."""
@@ -204,64 +141,39 @@ class SAC_Agent(BaseAgent):
         states, actions, rewards, next_states, dones = self.replay_buffer.sample(self.batch_size)
         actions = actions.unsqueeze(-1)
 
-        # ── Critic update ─────────────────────────────────────────────────
+        # Critic update
         with torch.no_grad():
             next_probs = self.policy(next_states)
             next_log_probs = torch.log(next_probs + 1e-8)
-            next_q1 = self.q1_target(next_states)
-            next_q2 = self.q2_target(next_states)
-            next_q = torch.min(next_q1, next_q2)
+            next_q = self.q_target(next_states)
             # Soft value V(s') = sum_a pi(a|s') * (Q(s',a) - alpha * log pi(a|s'))
-            next_v = (next_probs * (next_q - self.alpha.detach() * next_log_probs)).sum(dim=-1)
+            next_v = (next_probs * (next_q - self.alpha * next_log_probs)).sum(dim=-1)
             target_q = rewards + (1.0 - dones) * self.gamma * next_v
 
-        q1_pred = self.q1(states).gather(1, actions).squeeze(-1)
-        q2_pred = self.q2(states).gather(1, actions).squeeze(-1)
-        q1_loss = F.mse_loss(q1_pred, target_q)
-        q2_loss = F.mse_loss(q2_pred, target_q)
+        q_pred = self.q(states).gather(1, actions).squeeze(-1)
+        q_loss = F.mse_loss(q_pred, target_q)
 
-        self.opt_q1.zero_grad()
-        q1_loss.backward()
-        self.opt_q1.step()
+        self.opt_q.zero_grad()
+        q_loss.backward()
+        self.opt_q.step()
 
-        self.opt_q2.zero_grad()
-        q2_loss.backward()
-        self.opt_q2.step()
-
-        # ── Actor update ──────────────────────────────────────────────────
+        # Actor update
         probs = self.policy(states)
         log_probs = torch.log(probs + 1e-8)
         with torch.no_grad():
-            q1_cur = self.q1(states)
-            q2_cur = self.q2(states)
-            q_cur = torch.min(q1_cur, q2_cur)
+            q_cur = self.q(states)
         # J_pi = E_s [ sum_a pi(a|s) * (alpha * log pi(a|s) - Q(s,a)) ]
-        actor_loss = (probs * (self.alpha.detach() * log_probs - q_cur)).sum(dim=-1).mean()
+        actor_loss = (probs * (self.alpha * log_probs - q_cur)).sum(dim=-1).mean()
 
         self.opt_actor.zero_grad()
         actor_loss.backward()
         self.opt_actor.step()
 
-        # ── Temperature (alpha) update ────────────────────────────────────
-        if self.auto_tune_alpha:
-            # Policy entropy estimate H_pi = - sum_a pi(a|s) * log pi(a|s)
-            entropy = -(probs.detach() * log_probs.detach()).sum(dim=-1)
-            alpha_loss = -(self.log_alpha * (self.target_entropy - entropy).detach()).mean()
-
-            self.opt_alpha.zero_grad()
-            alpha_loss.backward()
-            self.opt_alpha.step()
-
-        # ── Soft target update ────────────────────────────────────────────
-        self._polyak_update(self.q1, self.q1_target)
-        self._polyak_update(self.q2, self.q2_target)
+        # Soft target update
+        self._polyak_update(self.q, self.q_target)
 
     def evaluate(self, n_eval_episodes: int = 30, max_steps: int = 500) -> np.floating:
-        """Evaluate the current policy greedily (deterministic).
-
-        Uses environment episode rollouts (slower than the training-loop proxy
-        ``last_episode_return``).
-        """
+        """Evaluate the current policy greedily (deterministic)."""
         env = CartPoleEnvironment(max_episode_length=max_steps, render_mode="rgb_array")
 
         total_returns: list[float] = []
@@ -341,15 +253,12 @@ def run_sac(
     max_eval_episode_length=None,
     eval_with_env_episode_trials: bool = True,
     n_eval_episodes: int = 5,
-    full_episode_updates: bool = True,
 ):
     """SAC training loop with eval-interval return recording.
 
     Steps through the environment one transition at a time, pushing into a
-    replay buffer. After ``warmup_steps`` random-action steps, ``updates_per_step``
-    gradient updates are performed per environment interaction. Progress
-    handling mirrors the A2C/REINFORCE loops so parent-owned parallel tqdm bars
-    behave consistently across algorithms.
+    replay buffer. Once the buffer has at least ``batch_size`` samples, one
+    gradient update is performed per environment interaction.
     """
 
     data_count = math.ceil(n_timesteps / eval_interval)
@@ -382,17 +291,10 @@ def run_sac(
 
     state, _ = env.reset()
     episode_steps = 0
-    n_actions = agent.n_actions
-    # In full-episode-update mode we accumulate the per-step update budget and
-    # apply it in a single burst when the episode terminates.
-    pending_updates = 0
 
     try:
         while global_step < n_timesteps:
-            if global_step < agent.warmup_steps:
-                action = int(np.random.randint(0, n_actions))
-            else:
-                action, _ = agent.select_action(state, deterministic=False)
+            action, _ = agent.select_action(state, deterministic=False)
 
             next_state, reward, terminated, truncated, _ = env.step(action)
             episode_done = bool(terminated or truncated)
@@ -407,12 +309,8 @@ def run_sac(
             global_step += 1
             episode_steps += 1
 
-            if global_step >= agent.warmup_steps and len(agent.replay_buffer) >= agent.batch_size:
-                if full_episode_updates:
-                    pending_updates += agent.updates_per_step
-                else:
-                    for _ in range(agent.updates_per_step):
-                        agent.update()
+            if len(agent.replay_buffer) >= agent.batch_size:
+                agent.update()
 
             if (global_step - last_progress_update) >= 512 or global_step >= n_timesteps:
                 progress_delta = global_step - last_progress_update
@@ -434,10 +332,6 @@ def run_sac(
                 eval_write_idx += 1
 
             if episode_done or episode_steps >= truncation_step:
-                if full_episode_updates and pending_updates > 0:
-                    for _ in range(pending_updates):
-                        agent.update()
-                    pending_updates = 0
                 last_episode_return = current_episode_return
                 if pbar is not None:
                     pbar.set_postfix_str(

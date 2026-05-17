@@ -10,7 +10,7 @@ import Library as fn
 import os
 import time
 from datetime import datetime
-from Helper import smooth
+from Helper import smooth, RUN_TIMESTAMP
 from scipy.stats import t as t_dist
 
 # Begin Class LearningCurvePlot ##############################################################
@@ -109,6 +109,9 @@ class LearningCurvePlot:
             if out_dir:
                 os.makedirs(out_dir, exist_ok=True)
 
+        root, ext = os.path.splitext(output_path)
+        output_path = f"{root}_{RUN_TIMESTAMP}{ext}"
+
         output_path = self._resolve_non_overwriting_path(output_path)
         self.fig.savefig(output_path, dpi=300)
         return output_path
@@ -149,9 +152,9 @@ def softmax(x, temp):
 # Begin Class CartPoleAgentPlot ##############################################################
 class CartPoleAgentPlot:
     ''' Class for plotting CartPole agent behavior during training '''
-    def __init__(self, env, title=None, show_curved_plots=False, animation_plot=False):
+    def __init__(self, env, title=None, show_curve_plots=False, animation_plot=False):
         self.env = env
-        if show_curved_plots:
+        if show_curve_plots:
             self.fig,self.ax = visplt.subplots()
             ###### Setting plot parameters for better visualization
             self.ax.set_xlim(-2.4,2.4)
@@ -396,10 +399,11 @@ def run_selected_experiments(
     unused_cpu_cores = int(gc.get("UNUSED_CPU_CORES", 0))
     if unused_cpu_cores < 0:
         unused_cpu_cores = 0
-    # Backward/forward compatible key names (some configs use show_curve_plots)
-    # Keep the *original* show_curve_plots value for the matplotlib `block=` behavior.
-    show_curve_plots = bool(gc.get("show_curved_plots", gc.get("show_curve_plots", False)))
-    show_curved_plots = show_curve_plots
+    # Keep the *original* show_curve_plots value for the matplotlib `block=` behavior;
+    # show_individual_plots is the derived flag that can be turned off when the
+    # combined preview replaces the individual curve plots.
+    show_curve_plots = bool(gc.get("show_curve_plots", False))
+    show_individual_plots = show_curve_plots
     animation_plot = bool(gc.get("animation_plot", False))
 
     start_time = time.perf_counter()
@@ -441,7 +445,7 @@ def run_selected_experiments(
     available_windows = {int(w) for w in plot_smoothing_windows}
     will_have_combined_preview = all(w in available_windows for w in desired_windows)
     if will_have_combined_preview:
-        show_curved_plots = False
+        show_individual_plots = False
         animation_plot = False
 
     # ── Build setting jobs for each selected algorithm (grouped by algo) ──
@@ -824,7 +828,7 @@ def run_selected_experiments(
     #### Save all plots with a filename that includes the experiment names and smoothing window info
     plots_dir = "plots"
     os.makedirs(plots_dir, exist_ok=True)
-    close_individual_plot_figs = (not show_curved_plots) and (not animation_plot)
+    close_individual_plot_figs = (not show_individual_plots) and (not animation_plot)
 
     saved_paths_by_window: dict[int, str] = {}
     new_plot_count = 0
@@ -895,14 +899,14 @@ def run_selected_experiments(
         )
         anim = CartPoleAgentPlot(
             test_env, title="CartPole Agent Plot",
-            show_curved_plots=show_curved_plots, animation_plot=animation_plot,
+            show_curve_plots=show_individual_plots, animation_plot=animation_plot,
         )
         anim.test_one_episode(
             test_env,
             policy=lambda obs: trained_nn_policy(agent.actor, obs),
         )
 
-    if show_curved_plots or animation_plot or combined_fig_shown:
+    if show_individual_plots or animation_plot or combined_fig_shown:
         plt.show(block=show_curve_plots)
 
     total_time = (time.perf_counter() - start_time) / 60.0
@@ -917,7 +921,7 @@ def run_selected_experiments(
 if __name__ == "__main__":
     base_seed = 47
     env=environ.CartPoleEnvironment(max_episode_length=500, render_mode="rgb_array",seed=base_seed)
-    plot=fn.CartPoleAgentPlot(env, title="Test CartPole Agent Plot", show_curved_plots=False)
+    plot=fn.CartPoleAgentPlot(env, title="Test CartPole Agent Plot", show_curve_plots=False)
     preview_animation = plot.test_one_episode(env=env, policy="test_policy")
     plt.show()
 ####################################################################
@@ -1015,19 +1019,11 @@ def _run_single_repetition(
     n_epochs: int = 10,
     rollout_steps: int = 2048,
     mini_batch_size: int = 64,
-    entropy_coef: float = 0.0,
-    value_coef: float = 0.5,
-    max_grad_norm: float = 0.5,
     # SAC-specific
-    alpha_lr: float = 3e-4,
     tau: float = 0.005,
-    target_entropy_ratio: float = 0.98,
     replay_buffer_size: int = 100000,
     batch_size: int = 64,
-    warmup_steps: int = 1000,
-    updates_per_step: int = 1,
-    auto_tune_alpha: bool = True,
-    alpha_init: float = 1.0,
+    alpha: float = 1.0,
     # Shared: full-episode vs per-step update mode (None = use algorithm default)
     full_episode_updates: bool | None = None,
 ):
@@ -1249,9 +1245,6 @@ def _run_single_repetition(
             clip_eps=clip_eps,
             n_epochs=n_epochs,
             mini_batch_size=mini_batch_size,
-            entropy_coef=entropy_coef,
-            value_coef=value_coef,
-            max_grad_norm=max_grad_norm,
             actor_hidden_nn=actor_hidden_nn,
             critic_hidden_nn=critic_hidden_nn,
         )
@@ -1293,7 +1286,6 @@ def _run_single_repetition(
             max_eval_episode_length=max_eval_episode_length,
             eval_with_env_episode_trials=eval_with_env_episode_trials,
             n_eval_episodes=n_eval_episodes,
-            full_episode_updates=False if full_episode_updates is None else bool(full_episode_updates),
         )
 
         if rep_index == 0:
@@ -1320,31 +1312,22 @@ def _run_single_repetition(
             n_actions=n_actions,
             actor_lr=actor_lr,
             critic_lr=critic_lr,
-            alpha_lr=alpha_lr,
             gamma=gamma,
             tau=tau,
-            target_entropy_ratio=target_entropy_ratio,
             replay_buffer_size=replay_buffer_size,
             batch_size=batch_size,
-            warmup_steps=warmup_steps,
-            updates_per_step=updates_per_step,
             actor_hidden_nn=actor_hidden_nn,
             critic_hidden_nn=critic_hidden_nn,
-            auto_tune_alpha=auto_tune_alpha,
-            alpha_init=alpha_init,
+            alpha=alpha,
         )
 
         actor_ck = pg_actor_checkpoint_path(
             algo_type="SAC",
             actor_hidden_nn=actor_hidden_nn,
         )
-        q1_ck = sac_q_checkpoint_path(
+        q_ck = sac_q_checkpoint_path(
             critic_hidden_nn=critic_hidden_nn,
             q_index=1,
-        )
-        q2_ck = sac_q_checkpoint_path(
-            critic_hidden_nn=critic_hidden_nn,
-            q_index=2,
         )
 
         if use_existing_network_checkpoints:
@@ -1353,15 +1336,10 @@ def _run_single_repetition(
                 checkpoint_path=actor_ck.file_path,
             )
             if load_state_dict_if_present(
-                model=agent.q1,
-                checkpoint_path=q1_ck.file_path,
+                model=agent.q,
+                checkpoint_path=q_ck.file_path,
             ):
-                agent.q1_target.load_state_dict(agent.q1.state_dict())
-            if load_state_dict_if_present(
-                model=agent.q2,
-                checkpoint_path=q2_ck.file_path,
-            ):
-                agent.q2_target.load_state_dict(agent.q2.state_dict())
+                agent.q_target.load_state_dict(agent.q.state_dict())
 
         env = environ.CartPoleEnvironment(
             max_episode_length=max_train_episode_length,
@@ -1380,7 +1358,6 @@ def _run_single_repetition(
             max_eval_episode_length=max_eval_episode_length,
             eval_with_env_episode_trials=eval_with_env_episode_trials,
             n_eval_episodes=n_eval_episodes,
-            full_episode_updates=False if full_episode_updates is None else bool(full_episode_updates),
         )
 
         if rep_index == 0:
@@ -1389,12 +1366,8 @@ def _run_single_repetition(
                 checkpoint_path=actor_ck.file_path,
             )
             save_state_dict_overwrite(
-                model=agent.q1,
-                checkpoint_path=q1_ck.file_path,
-            )
-            save_state_dict_overwrite(
-                model=agent.q2,
-                checkpoint_path=q2_ck.file_path,
+                model=agent.q,
+                checkpoint_path=q_ck.file_path,
             )
 
     return rep_returns, rep_timesteps

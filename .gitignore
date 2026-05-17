@@ -12,3 +12,6 @@ project_info*.md
 tmp_*
 tmp/
 temp/
+Engineering Tricks.ipynb
+Report/
+HPO.ipynb

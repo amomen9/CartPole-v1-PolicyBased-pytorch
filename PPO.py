@@ -3,22 +3,10 @@
 Proximal Policy Optimisation (PPO-clipped) for CartPole-v1.
 
 Implementation follows Schulman et al., 2017 (https://arxiv.org/abs/1707.06347).
-The structure, training-loop signature, progress-bar handling and parallelisation
-hooks mirror ``A2C.py`` so that PPO plugs into the same experiment pipeline.
-
-Engineering tricks employed (all standard PPO additions on top of A2C):
-- Rollout buffer of fixed length (``rollout_steps``) that may span multiple episodes.
-- Generalised Advantage Estimation (GAE, Schulman et al., 2015) with
-  ``gae_lambda`` for the advantage estimator A_t.
-- Advantage normalisation (zero-mean / unit-variance) per rollout for variance
-  reduction.
-- Multiple gradient-ascent epochs over the same rollout with random mini-batches
-  (``n_epochs`` × ``mini_batch_size``).
-- Clipped surrogate objective ``L^CLIP``.
-- Value-function clipping (Schulman et al., 2017 §5) bounding the TD target by
-  ``clip_eps`` around the old value estimate.
-- Entropy bonus to encourage exploration (``entropy_coef``).
-- Global gradient-norm clipping (``max_grad_norm``).
+This file implements the *core* PPO-clipped algorithm with GAE
+(Schulman et al., 2015) as the advantage estimator. No additional engineering
+tricks are applied: no advantage normalisation, no value-function clipping,
+no entropy bonus, no gradient-norm clipping.
 """
 
 from Agent import BaseAgent
@@ -27,7 +15,6 @@ import math
 import numpy as np
 import torch
 from torch import nn
-from typing import Any, cast
 
 from Environment import CartPoleEnvironment
 from tqdm import tqdm
@@ -47,14 +34,9 @@ class PPO_Agent(BaseAgent):
         clip_eps,
         n_epochs,
         mini_batch_size,
-        entropy_coef,
-        value_coef,
-        max_grad_norm,
         actor_hidden_nn,
         critic_hidden_nn,
     ):
-        """Initialise the PPO agent."""
-
         self.n_agent_state_elements = n_agent_state_elements
         self.n_actions = n_actions
         self.actor_lr = actor_lr
@@ -64,9 +46,6 @@ class PPO_Agent(BaseAgent):
         self.clip_eps = clip_eps
         self.n_epochs = n_epochs
         self.mini_batch_size = mini_batch_size
-        self.entropy_coef = entropy_coef
-        self.value_coef = value_coef
-        self.max_grad_norm = max_grad_norm
 
         self.policy = PolicyNetwork(
             n_agent_state_elements,
@@ -121,19 +100,12 @@ class PPO_Agent(BaseAgent):
         old_log_probs = kwargs["log_probs"]
         advantages = kwargs["advantages"]
         returns = kwargs["returns"]
-        old_values = kwargs["values"]
 
         states_t = torch.tensor(np.array(states), dtype=torch.float32)
         actions_t = torch.tensor(np.array(actions), dtype=torch.long)
         old_log_probs_t = torch.tensor(np.array(old_log_probs), dtype=torch.float32)
         advantages_t = torch.tensor(np.array(advantages), dtype=torch.float32)
         returns_t = torch.tensor(np.array(returns), dtype=torch.float32)
-        old_values_t = torch.tensor(np.array(old_values), dtype=torch.float32)
-
-        # Advantage normalisation (per-rollout) for variance reduction.
-        adv_std = advantages_t.std(unbiased=False)
-        if torch.isfinite(adv_std) and adv_std.item() > 1e-8:
-            advantages_t = (advantages_t - advantages_t.mean()) / (adv_std + 1e-8)
 
         n_samples = states_t.shape[0]
         mini_batch = min(int(self.mini_batch_size), n_samples) if n_samples > 0 else 0
@@ -148,7 +120,6 @@ class PPO_Agent(BaseAgent):
                 probs = self.policy(states_t[idx])
                 dist = torch.distributions.Categorical(probs)
                 new_log_probs = dist.log_prob(actions_t[idx])
-                entropy = dist.entropy().mean()
 
                 ratio = torch.exp(new_log_probs - old_log_probs_t[idx])
                 adv_batch = advantages_t[idx]
@@ -157,37 +128,18 @@ class PPO_Agent(BaseAgent):
                 policy_loss = -torch.min(surr1, surr2).mean()
 
                 values_pred = self.value_func(states_t[idx])
-                # Clipped value loss (Schulman et al., 2017 §5)
-                values_clipped = old_values_t[idx] + torch.clamp(
-                    values_pred - old_values_t[idx],
-                    -self.clip_eps,
-                    self.clip_eps,
-                )
-                v_loss1 = (values_pred - returns_t[idx]) ** 2
-                v_loss2 = (values_clipped - returns_t[idx]) ** 2
-                value_loss = 0.5 * torch.max(v_loss1, v_loss2).mean()
-
-                actor_loss = policy_loss - self.entropy_coef * entropy
-                critic_loss = self.value_coef * value_loss
+                value_loss = 0.5 * (values_pred - returns_t[idx]).pow(2).mean()
 
                 self.opt_actor.zero_grad()
-                actor_loss.backward()
-                if self.max_grad_norm is not None and self.max_grad_norm > 0:
-                    nn.utils.clip_grad_norm_(self.policy.parameters(), self.max_grad_norm)
+                policy_loss.backward()
                 self.opt_actor.step()
 
                 self.opt_critic.zero_grad()
-                critic_loss.backward()
-                if self.max_grad_norm is not None and self.max_grad_norm > 0:
-                    nn.utils.clip_grad_norm_(self.value_func.parameters(), self.max_grad_norm)
+                value_loss.backward()
                 self.opt_critic.step()
 
     def evaluate(self, n_eval_episodes: int = 30, max_steps: int = 500) -> np.floating:
-        """Evaluate the current policy greedily (deterministic).
-
-        Uses environment episode rollouts (slower than the training-loop proxy
-        ``last_episode_return``).
-        """
+        """Evaluate the current policy greedily (deterministic)."""
         env = CartPoleEnvironment(max_episode_length=max_steps, render_mode="rgb_array")
 
         total_returns: list[float] = []
@@ -266,15 +218,12 @@ def run_ppo(
     max_eval_episode_length=None,
     eval_with_env_episode_trials: bool = True,
     n_eval_episodes: int = 5,
-    full_episode_updates: bool = True,
 ):
     """PPO training loop with eval-interval return recording.
 
     Steps through the environment one transition at a time, filling a
-    fixed-length rollout buffer (``rollout_steps``). Once full (or when the
-    horizon is reached) PPO performs ``n_epochs`` mini-batch updates and the
-    buffer is cleared. Progress handling mirrors the REINFORCE/A2C loops so
-    parent-owned parallel tqdm bars behave consistently across algorithms.
+    fixed-length rollout buffer (``rollout_steps``). Once full PPO performs
+    ``n_epochs`` mini-batch updates and the buffer is cleared.
     """
 
     data_count = math.ceil(n_timesteps / eval_interval)
@@ -356,23 +305,14 @@ def run_ppo(
                 episode_steps = 0
                 state, _ = env.reset()
 
-            # Decide when to flush the buffer and update.
-            # - full_episode_updates=True: update at the end of every episode
-            #   using only that episode's trajectory.
-            # - full_episode_updates=False: standard PPO with a fixed-length
-            #   rollout buffer that may span multiple episodes.
             horizon_reached = global_step >= n_timesteps
-            if full_episode_updates:
-                should_update = episode_done or horizon_reached
-            else:
-                rollout_full = len(states) >= int(rollout_steps)
-                should_update = rollout_full or horizon_reached
+            rollout_full = len(states) >= int(rollout_steps)
+            should_update = rollout_full or horizon_reached
 
             if should_update and len(states) > 0:
                 with torch.no_grad():
                     last_value_t = agent.value_func(state)
                 last_value = float(last_value_t.item())
-                # If episode just ended, terminal bootstrap is 0.
                 if dones[-1]:
                     last_value = 0.0
 
@@ -388,7 +328,6 @@ def run_ppo(
                     log_probs=log_probs,
                     advantages=advantages,
                     returns=returns_buf,
-                    values=values,
                 )
                 states, actions, rewards, log_probs, values, dones = [], [], [], [], [], []
     finally:
