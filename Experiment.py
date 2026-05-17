@@ -19,7 +19,7 @@ def experiment():
         "UNUSED_CPU_CORES": 3,              # Number of CPU cores to leave unused when using multiprocessing, for appropriate other applications' performance. Cap degree of parallelism: <#total CPU cores>-UNUSED_CPU_CORES Default: 2.
         # Plotting parameters
         "benchmark_curve": 1,               # Default: 1, choose one: 1 or 2 for the benchmark CSV (BaselineDataCartPole_run1.csv or BaselineDataCartPole_run2.csv).
-        "benchmark_name": "Baseline",
+        "benchmark_name": "Baseline",       # Benchmark name to show in the legend for the benchmark curve. Default: "Baseline".
         "plot_smoothing_window": [1, 101, 201, 251, 351],  # Use multiple values to plot multiple curves. Default: [1, 51, 101, 201, 251, 301]. Set to [1] to skip smoothing.
         "curve_confidence_interval": 0.6,   # Curve shading confidence interval. Default: 0.95. Set to 0 to skip CI shading.
         "curve_shaded_area_opacity": 0.06,  # Opacity of the shaded area for confidence intervals. Default: 0.05 (5% opacity).
