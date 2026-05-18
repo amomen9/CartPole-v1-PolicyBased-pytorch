@@ -414,7 +414,7 @@ def run_selected_experiments(
         _build_ppo_jobs,
         _build_reinforce_jobs,
         _load_all_excel_curves,
-        _load_results_from_excel,
+        _match_sheets_to_jobs,
         _run_pending_parallel,
         save_algorithm_workbook,
     )
@@ -530,6 +530,8 @@ def run_selected_experiments(
                 max_train_episode_length=max_train_episode_length,
                 max_eval_episode_length=max_eval_episode_length,
                 base_seed=base_seed,
+                eval_with_env_episode_trials=eval_with_env_episode_trials,
+                n_eval_episodes=n_eval_episodes,
             )
         elif algo_upper == "PPO":
             if PPO_config is None:
@@ -631,54 +633,53 @@ def run_selected_experiments(
 
         if use_existing_disk_data and os.path.isfile(excel_path):
             try:
-                algo_results, _mismatches = _load_results_from_excel(
+                aligned_results, _mismatches = _match_sheets_to_jobs(
                     excel_path,
-                    cfg,
+                    jobs,
                     formatted_sheets=formatted_sheets,
                     global_config=gc,
-                    original_algo_config=original_algo_configs_map.get(algo_upper),
+                    algo_config=cfg,
                 )
             except Exception as exc:
                 print(f"[{algo_upper}] Existing Excel data is incompatible. Re-running from scratch. Reason: {exc}")
-                algo_results = []
+                aligned_results = [None] * n_jobs
                 _mismatches = {}
 
-            if algo_results:
-                print(f"[{algo_upper}] Loaded {len(algo_results)} matching setting(s) from: {excel_path}")
-                loaded_count = min(len(algo_results), n_jobs)
-                for i, entry in enumerate(algo_results[:loaded_count]):
+            matched_count = sum(1 for r in aligned_results if r is not None)
+
+            if matched_count > 0:
+                print(f"[{algo_upper}] Loaded {matched_count}/{n_jobs} matching setting(s) from: {excel_path}")
+
+            for i, entry in enumerate(aligned_results):
+                if entry is None:
+                    pending_settings.append((offset + i, jobs[i]))
+                else:
                     setting_results[offset + i] = (
                         entry["learning_curve"],
                         entry["learning_curve_std"],
                         entry["timesteps"],
                     )
                     jobs[i]["curve_label"] = entry["curve_label"]
-                if len(algo_results) > n_jobs:
-                    print(
-                        f"[{algo_upper}] Ignoring {len(algo_results) - n_jobs} extra matching sheet(s) "
-                        f"because only {n_jobs} job(s) are configured."
-                    )
-                if len(algo_results) < n_jobs:
-                    print(f"[{algo_upper}] Only {len(algo_results)}/{n_jobs} sheets matched. "
-                          f"Running remaining {n_jobs - len(algo_results)} from scratch.")
-                    for i in range(len(algo_results), n_jobs):
-                        pending_settings.append((offset + i, jobs[i]))
-                    algos_needing_save.add(algo_upper)
-            else:
-                mismatch_str = ""
-                if _mismatches:
-                    parts = []
-                    for param, (sheet_val, cfg_val) in _mismatches.items():
-                        cfg_display = (
-                            str(list(cfg_val)) if isinstance(cfg_val, (list, np.ndarray))
-                            else str(cfg_val)
-                        )
-                        parts.append(f"{param} (Disk data: {sheet_val}, Config: {cfg_display})")
-                    mismatch_str = "  Mismatch reason(s): " + "; ".join(parts)
-                print(f"[{algo_upper}] No matching sheets found in Excel. Re-running from scratch.{mismatch_str}")
-                for i, job in enumerate(jobs):
-                    pending_settings.append((offset + i, job))
+
+            if matched_count < n_jobs:
                 algos_needing_save.add(algo_upper)
+                if matched_count == 0:
+                    mismatch_str = ""
+                    if _mismatches:
+                        parts = []
+                        for param, (sheet_val, cfg_val) in _mismatches.items():
+                            cfg_display = (
+                                str(list(cfg_val)) if isinstance(cfg_val, (list, np.ndarray))
+                                else str(cfg_val)
+                            )
+                            parts.append(f"{param} (Disk data: {sheet_val}, Config: {cfg_display})")
+                        mismatch_str = "  Mismatch reason(s): " + "; ".join(parts)
+                    print(f"[{algo_upper}] No matching sheets found in Excel. Re-running all {n_jobs} from scratch.{mismatch_str}")
+                else:
+                    print(
+                        f"[{algo_upper}] {n_jobs - matched_count}/{n_jobs} setting(s) not on disk. "
+                        f"Running those from scratch."
+                    )
         else:
             print(f"[{algo_upper}] Running experiments from scratch.\n")
             for i, job in enumerate(jobs):

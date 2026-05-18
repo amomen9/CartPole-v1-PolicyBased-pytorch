@@ -808,6 +808,179 @@ def _parse_sheet_value(val):
     return _sheet_hp_text(val)
 
 
+def _match_sheets_to_jobs(
+    filepath: str,
+    setting_jobs: list[dict[str, Any]],
+    *,
+    formatted_sheets: bool = False,
+    global_config: dict[str, Any] | None = None,
+    algo_config: dict[str, Any] | None = None,
+) -> tuple[list[dict[str, Any] | None], dict[str, tuple[Any, Any]]]:
+    """For every job, scan every sheet in the workbook for the first match.
+
+    A sheet matches a job when every non-excluded key in the job's combined
+    hyperparams (its own ``hyperparams`` plus the relevant ``global_config``
+    keys) agrees with the corresponding sheet column. ``n_timesteps`` is
+    matched with ``>=`` (the learning curve is cropped to the running value).
+    Lenient back-compat: if the sheet is missing ``eval_with_env_episode_trials``
+    the job still matches when its value is False; similarly for
+    ``n_eval_episodes`` when env-episode evaluation is disabled. Sheet columns
+    not referenced by the job are ignored. Each sheet matches at most one job
+    (first-job-first-match wins).
+
+    Returns (aligned, mismatches) where ``aligned[i]`` is ``None`` when job
+    ``i`` has no match, otherwise a result dict with the cropped learning
+    curve, std, timesteps and a curve label rebuilt from the current legend.
+    ``mismatches`` aggregates the first informative reason per parameter that
+    blocked any candidate match.
+    """
+    algo_config = algo_config or {}
+    global_filtered = (
+        _meta_filtered_items(global_config, GLOBAL_CONFIG_EXCLUSIONS) if global_config else {}
+    )
+
+    aligned: list[dict[str, Any] | None] = [None] * len(setting_jobs)
+    mismatches: dict[str, tuple[Any, Any]] = {}
+
+    if not setting_jobs:
+        return aligned, mismatches
+
+    required = {"timestep", "learning_curve_mean", "learning_curve_std"}
+
+    def _parse_sheets(sheet_map):
+        out: list[tuple[str, dict[str, str], np.ndarray, np.ndarray, np.ndarray, Any]] = []
+        for sheet_name in sorted(sheet_map.keys()):
+            df = sheet_map[sheet_name]
+            if not required.issubset(set(df.columns)):
+                continue
+            try:
+                ts = df["timestep"].values.astype(np.int32)
+                lc = df["learning_curve_mean"].values.astype(np.float32)
+                lc_s = df["learning_curve_std"].values.astype(np.float32)
+            except Exception:
+                continue
+            sheet_hp: dict[str, str] = {}
+            for col in df.columns:
+                col_name = str(col)
+                if col_name in required or col_name == "curve_label" or col_name.startswith("rep_"):
+                    continue
+                sheet_hp[col_name] = _parse_sheet_value(df[col].iloc[0])
+            out.append((sheet_name, sheet_hp, ts, lc, lc_s, df))
+        return out
+
+    header_row = 1 if formatted_sheets else 0
+    try:
+        sheets = pd.read_excel(filepath, sheet_name=None, engine="openpyxl", header=header_row)
+    except Exception as exc:
+        raise ValueError(f"Failed to read Excel file '{filepath}': {exc}") from exc
+
+    parsed = _parse_sheets(sheets)
+    if not parsed:
+        try:
+            sheets = pd.read_excel(
+                filepath, sheet_name=None, engine="openpyxl",
+                header=(0 if formatted_sheets else 1),
+            )
+        except Exception:
+            return aligned, mismatches
+        parsed = _parse_sheets(sheets)
+    if not parsed:
+        return aligned, mismatches
+
+    legend: dict[str, tuple[str, bool]] = _resolve_legend_flags(
+        algo_config or {}, warn_on_suppression=False
+    )
+    basename = os.path.basename(filepath)
+    algo_prefix = os.path.splitext(basename)[0].upper()
+
+    used: set[int] = set()
+    for job_idx, job in enumerate(setting_jobs):
+        job_hp = dict(job["hyperparams"])
+        for gc_key, gc_text in global_filtered.items():
+            job_hp.setdefault(gc_key, gc_text)
+
+        try:
+            running_n_ts = int(float(_sheet_hp_text(job_hp.get(GLOBAL_CONFIG_NTIMESTEPS_KEY))))
+        except (TypeError, ValueError):
+            running_n_ts = None
+
+        for sheet_idx, (_sn, sheet_hp, ts, lc, lc_s, df) in enumerate(parsed):
+            if sheet_idx in used:
+                continue
+
+            ok = True
+            for key, job_val in job_hp.items():
+                if key in ALGO_CONFIG_EXCLUSIONS or key in GLOBAL_CONFIG_EXCLUSIONS:
+                    continue
+                job_text = _sheet_hp_text(job_val)
+                if key in sheet_hp:
+                    sheet_text = sheet_hp[key]
+                    if key == GLOBAL_CONFIG_NTIMESTEPS_KEY:
+                        try:
+                            if int(float(sheet_text)) < int(float(job_text)):
+                                mismatches.setdefault(
+                                    key, (sheet_text, f"{job_text} (need disk >= running)")
+                                )
+                                ok = False
+                                break
+                            continue
+                        except (TypeError, ValueError):
+                            pass
+                    if sheet_text != job_text:
+                        mismatches.setdefault(key, (sheet_text, job_text))
+                        ok = False
+                        break
+                else:
+                    if key == "eval_with_env_episode_trials":
+                        if str(job_text).lower() == "true":
+                            mismatches.setdefault(key, ("<missing_column>", job_text))
+                            ok = False
+                            break
+                    elif key == "n_eval_episodes":
+                        eet = _sheet_hp_text(job_hp.get("eval_with_env_episode_trials", False))
+                        if str(eet).lower() == "true":
+                            mismatches.setdefault(key, ("<missing_column>", job_text))
+                            ok = False
+                            break
+                    # else: missing column tolerated for back-compat.
+            if not ok:
+                continue
+
+            ts_out, lc_out, lc_s_out = ts, lc, lc_s
+            if running_n_ts is not None:
+                mask = ts_out <= running_n_ts
+                ts_out = ts_out[mask]
+                lc_out = lc_out[mask]
+                lc_s_out = lc_s_out[mask]
+
+            label_parts = [algo_prefix]
+            for legend_key, (legend_label, show) in legend.items():
+                if not show:
+                    continue
+                if legend_key in df.columns:
+                    val = _parse_sheet_value(df[legend_key].iloc[0])
+                elif legend_key in algo_config:
+                    val = algo_config[legend_key]
+                else:
+                    continue
+                legend_label = _format_legend_label(legend_label)
+                if isinstance(val, bool):
+                    label_parts.append(f"{legend_label}{val}")
+                else:
+                    label_parts.append(f"{legend_label}{_format_legend_value(val)}")
+
+            aligned[job_idx] = {
+                "learning_curve": lc_out,
+                "learning_curve_std": lc_s_out,
+                "timesteps": ts_out,
+                "curve_label": ", ".join(label_parts),
+            }
+            used.add(sheet_idx)
+            break
+
+    return aligned, mismatches
+
+
 def _hp_value_matches(cfg_key, cfg_val, sheet_val):
     """Check whether a sheet's HP value is compatible with the config value."""
     sheet_text = _sheet_hp_text(sheet_val)
@@ -1425,7 +1598,8 @@ def _build_ppo_jobs(
 
 
 def _build_dqn_jobs(*, dqn_config, n_repetitions, n_timesteps, eval_interval,
-                    max_train_episode_length, max_eval_episode_length, base_seed):
+                    max_train_episode_length, max_eval_episode_length, base_seed,
+                    eval_with_env_episode_trials: bool, n_eval_episodes: int):
     """Build setting_jobs for DQN using assignment2_repo infrastructure."""
     cfg = dqn_config
     learning_rates = np.atleast_1d(np.asarray(cfg.get("learning_rate", np.array([0.001])), dtype=np.float32))
@@ -1459,8 +1633,8 @@ def _build_dqn_jobs(*, dqn_config, n_repetitions, n_timesteps, eval_interval,
     epsilon_decay_enabled = epsilon_decay_interval > 0
     skip_decay_trials = exploration_method == "egreedy" and not epsilon_decay_enabled
 
-    eval_with_env_episode_trials = bool(cfg.get("eval_with_env_episode_trials", False))
-    n_eval_episodes = int(cfg.get("n_eval_episodes", 5))
+    eval_with_env_episode_trials = bool(eval_with_env_episode_trials)
+    n_eval_episodes = int(n_eval_episodes)
 
     setting_jobs = []
     for nn_arch in nn_architectures:
