@@ -1465,7 +1465,6 @@ def _build_ppo_jobs(
     clip_eps_list = np.atleast_1d(np.asarray(cfg.get("clip_eps", np.array([0.2])), dtype=np.float32))
     n_epochs_list = np.atleast_1d(np.asarray(cfg.get("n_epochs", np.array([10])), dtype=np.int32))
     rollout_steps_list = np.atleast_1d(np.asarray(cfg.get("rollout_steps", np.array([2048])), dtype=np.int32))
-    mini_batch_sizes = np.atleast_1d(np.asarray(cfg.get("mini_batch_size", np.array([64])), dtype=np.int32))
 
     setting_jobs = []
     for gamma_val in gammas:
@@ -1486,68 +1485,63 @@ def _build_ppo_jobs(
                                     n_epochs_val = int(n_epochs_val)
                                     for rollout_steps_val in rollout_steps_list:
                                         rollout_steps_val = int(rollout_steps_val)
-                                        for mini_batch_val in mini_batch_sizes:
-                                            mini_batch_val = int(mini_batch_val)
-                                            iter_cfg = {
-                                                **cfg,
-                                                "gamma": gamma_val,
+                                        iter_cfg = {
+                                            **cfg,
+                                            "gamma": gamma_val,
+                                            "actor_lr": actor_lr_val,
+                                            "actor_hidden_nn": actor_nn,
+                                            "critic_lr": critic_lr_val,
+                                            "critic_hidden_nn": critic_nn,
+                                            "gae_lambda": gae_lambda_val,
+                                            "clip_eps": clip_eps_val,
+                                            "n_epochs": n_epochs_val,
+                                            "rollout_steps": rollout_steps_val,
+                                        }
+                                        label_parts = ["PPO"] + _build_legend_parts(legend, iter_cfg)
+                                        curve_label = ", ".join(label_parts)
+                                        setting_jobs.append({
+                                            "curve_label": curve_label,
+                                            "method": "ppo",
+                                            "kwargs": dict(
+                                                method="ppo",
+                                                n_repetitions=n_repetitions,
+                                                n_timesteps=n_timesteps,
+                                                eval_interval=eval_interval,
+                                                max_train_episode_length=max_train_episode_length,
+                                                max_eval_episode_length=max_eval_episode_length,
+                                                actor_lr=actor_lr_val,
+                                                critic_lr=critic_lr_val,
+                                                gamma=gamma_val,
+                                                actor_hidden_nn=actor_nn,
+                                                critic_hidden_nn=critic_nn,
+                                                gae_lambda=gae_lambda_val,
+                                                clip_eps=clip_eps_val,
+                                                n_epochs=n_epochs_val,
+                                                rollout_steps=rollout_steps_val,
+                                                base_seed=base_seed,
+                                                eval_with_env_episode_trials=eval_with_env_episode_trials,
+                                                n_eval_episodes=n_eval_episodes,
+                                                plot_smoothing_window=1,
+                                            ),
+                                            "hyperparams": {
+                                                "n_repetitions": n_repetitions,
+                                                "n_timesteps": n_timesteps,
+                                                "eval_interval": eval_interval,
+                                                "max_train_episode_length": max_train_episode_length,
+                                                "max_eval_episode_length": max_eval_episode_length,
                                                 "actor_lr": actor_lr_val,
-                                                "actor_hidden_nn": actor_nn,
                                                 "critic_lr": critic_lr_val,
-                                                "critic_hidden_nn": critic_nn,
+                                                "gamma": gamma_val,
+                                                "actor_hidden_nn": str(actor_nn.tolist()),
+                                                "critic_hidden_nn": str(critic_nn.tolist()),
                                                 "gae_lambda": gae_lambda_val,
                                                 "clip_eps": clip_eps_val,
                                                 "n_epochs": n_epochs_val,
                                                 "rollout_steps": rollout_steps_val,
-                                                "mini_batch_size": mini_batch_val,
-                                            }
-                                            label_parts = ["PPO"] + _build_legend_parts(legend, iter_cfg)
-                                            curve_label = ", ".join(label_parts)
-                                            setting_jobs.append({
-                                                "curve_label": curve_label,
-                                                "method": "ppo",
-                                                "kwargs": dict(
-                                                    method="ppo",
-                                                    n_repetitions=n_repetitions,
-                                                    n_timesteps=n_timesteps,
-                                                    eval_interval=eval_interval,
-                                                    max_train_episode_length=max_train_episode_length,
-                                                    max_eval_episode_length=max_eval_episode_length,
-                                                    actor_lr=actor_lr_val,
-                                                    critic_lr=critic_lr_val,
-                                                    gamma=gamma_val,
-                                                    actor_hidden_nn=actor_nn,
-                                                    critic_hidden_nn=critic_nn,
-                                                    gae_lambda=gae_lambda_val,
-                                                    clip_eps=clip_eps_val,
-                                                    n_epochs=n_epochs_val,
-                                                    rollout_steps=rollout_steps_val,
-                                                    mini_batch_size=mini_batch_val,
-                                                    base_seed=base_seed,
-                                                    eval_with_env_episode_trials=eval_with_env_episode_trials,
-                                                    n_eval_episodes=n_eval_episodes,
-                                                    plot_smoothing_window=1,
-                                                ),
-                                                "hyperparams": {
-                                                    "n_repetitions": n_repetitions,
-                                                    "n_timesteps": n_timesteps,
-                                                    "eval_interval": eval_interval,
-                                                    "max_train_episode_length": max_train_episode_length,
-                                                    "max_eval_episode_length": max_eval_episode_length,
-                                                    "actor_lr": actor_lr_val,
-                                                    "critic_lr": critic_lr_val,
-                                                    "gamma": gamma_val,
-                                                    "actor_hidden_nn": str(actor_nn.tolist()),
-                                                    "critic_hidden_nn": str(critic_nn.tolist()),
-                                                    "gae_lambda": gae_lambda_val,
-                                                    "clip_eps": clip_eps_val,
-                                                    "n_epochs": n_epochs_val,
-                                                    "rollout_steps": rollout_steps_val,
-                                                    "mini_batch_size": mini_batch_val,
-                                                    "eval_with_env_episode_trials": eval_with_env_episode_trials,
-                                                    "n_eval_episodes": n_eval_episodes,
-                                                },
-                                            })
+                                                "eval_with_env_episode_trials": eval_with_env_episode_trials,
+                                                "n_eval_episodes": n_eval_episodes,
+                                            },
+                                        })
     return setting_jobs
 
 
@@ -1883,13 +1877,22 @@ def _run_pending_parallel(pending_settings, n_repetitions, n_timesteps, eval_int
         tuple[np.ndarray, np.ndarray, np.ndarray] | tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]
         | None
     ],
-                          unused_cpu_cores: int = 0):
+                          unused_cpu_cores: int = 0,
+                          on_setting_complete=None,
+                          poll_callback=None):
     """Run all pending (setting × rep) tasks in a single flat ProcessPoolExecutor.
 
     pending_settings: list of (global_idx, job)
     Fills setting_results[global_idx] = (lc_mean, lc_std, timesteps) for each entry.
     Progress bars mirror the current per-rep format; a (S{n}) suffix is added when
     more than one setting is running simultaneously.
+
+    on_setting_complete: optional callable(global_idx) invoked from the main
+        process as soon as every repetition of a single setting has finished and
+        its aggregated entry has been written to setting_results.
+    poll_callback: optional callable invoked once per polling tick (after sleep).
+        Used by the caller to pump the matplotlib GUI event loop while
+        per-algo plot windows are being shown non-blocking.
     """
     from Library import _run_single_repetition
 
@@ -1941,7 +1944,6 @@ def _run_pending_parallel(pending_settings, n_repetitions, n_timesteps, eval_int
                                 "clip_eps",
                                 "n_epochs",
                                 "rollout_steps",
-                                "mini_batch_size",
                             ):
                                 if k in kw:
                                     algo_extra_kwargs[k] = kw[k]
@@ -2045,6 +2047,7 @@ def _run_pending_parallel(pending_settings, n_repetitions, n_timesteps, eval_int
 
             rep_results = {}
             done = set()
+            aggregated_settings: set[int] = set()
             try:
                 while len(done) < total_tasks:
                     # Update merged bars from shared step_counters.
@@ -2092,21 +2095,43 @@ def _run_pending_parallel(pending_settings, n_repetitions, n_timesteps, eval_int
                                         pbars[pb_gi].update(delta)
                                         rep_last[(sp, r)] = cur
 
+                    # Aggregate any settings whose reps have all finished, and
+                    # notify the caller as soon as each setting's entry is ready.
+                    for sp in range(len(pending_settings)):
+                        if sp in aggregated_settings:
+                            continue
+                        if not all((sp, r) in rep_results for r in range(n_repetitions)):
+                            continue
+                        global_idx_done = pending_settings[sp][0]
+                        returns_list = [
+                            np.asarray(rep_results[(sp, r)][0], dtype=np.float32)
+                            for r in range(n_repetitions)
+                        ]
+                        ts = np.asarray(rep_results[(sp, 0)][1], dtype=np.int32)
+                        all_ret = np.array(returns_list)
+                        lc_mean = np.mean(all_ret, axis=0)
+                        lc_std = (
+                            np.std(all_ret, axis=0, ddof=1)
+                            if len(returns_list) > 1 else np.zeros_like(lc_mean)
+                        )
+                        setting_results[global_idx_done] = (lc_mean, lc_std, ts, all_ret)
+                        aggregated_settings.add(sp)
+                        if on_setting_complete is not None:
+                            try:
+                                on_setting_complete(global_idx_done)
+                            except Exception as cb_exc:
+                                print(f"[on_setting_complete] callback raised: {cb_exc}")
+
                     time.sleep(0.25)
+                    if poll_callback is not None:
+                        try:
+                            poll_callback()
+                        except Exception as cb_exc:
+                            print(f"[poll_callback] raised: {cb_exc}")
             finally:
                 for pb in pbars.values():
                     pb.close()
                 print()
-
-    for sp, (global_idx, _) in enumerate(pending_settings):
-        returns_list = [np.asarray(rep_results[(sp, r)][0], dtype=np.float32)
-                        for r in range(n_repetitions)]
-        ts = np.asarray(rep_results[(sp, 0)][1], dtype=np.int32)
-        all_ret = np.array(returns_list)
-        lc_mean = np.mean(all_ret, axis=0)
-        lc_std = (np.std(all_ret, axis=0, ddof=1) if len(returns_list) > 1
-                  else np.zeros_like(lc_mean))
-        setting_results[global_idx] = (lc_mean, lc_std, ts, all_ret)
 
 
 # ── DQN repetitions via assignment2_repo ──────────────────────────────────────────────

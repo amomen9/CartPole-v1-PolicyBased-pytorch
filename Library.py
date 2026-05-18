@@ -405,6 +405,7 @@ def run_selected_experiments(
     show_curve_plots = bool(gc.get("show_curve_plots", False))
     show_individual_plots = show_curve_plots
     animation_plot = bool(gc.get("animation_plot", False))
+    separate_algorithm_plots = bool(gc.get("separate_algorithm_plots", False))
 
     start_time = time.perf_counter()
     start_human = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -441,9 +442,13 @@ def run_selected_experiments(
 
     # User request: only show the combined 2-subplot plot during execution.
     # If the required windows exist (101 and 201), disable other plot display (curve figures + animation).
+    # In separate-plots mode each algo gets its own per-window figures shown live, so we suppress the combined preview.
     desired_windows = [101, 201]
     available_windows = {int(w) for w in plot_smoothing_windows}
-    will_have_combined_preview = all(w in available_windows for w in desired_windows)
+    will_have_combined_preview = (
+        (not separate_algorithm_plots)
+        and all(w in available_windows for w in desired_windows)
+    )
     if will_have_combined_preview:
         show_individual_plots = False
         animation_plot = False
@@ -577,33 +582,55 @@ def run_selected_experiments(
         episode_return_column="Episode_Return",
     )
 
-    # ── Prepare one plot per smoothing window ──
+    # ── Prepare plot config(s) ──
+    # In combined mode (default): one shared figure per smoothing window across all algorithms.
+    # In separate_algorithm_plots mode: one figure per (algorithm, smoothing window) pair so that
+    # each algo's plots can be finalized and shown the moment that algo finishes executing.
     title_tag = " + ".join(experiments)
-    plot_configs = []
-    for window in plot_smoothing_windows:
-        window = int(window)
-        is_not_smoothed = window <= 1
-        benchmark_returns = _apply_optional_smoothing(
-            np.asarray(benchmark_returns_raw, dtype=np.float32), window
-        )
-        benchmark_returns = np.minimum(benchmark_returns, float(optimal_episode_return))
-        if is_not_smoothed:
-            plot_obj = LearningCurvePlot(title=f"{title_tag} - not smoothed plot")
-        else:
-            plot_obj = LearningCurvePlot(title=f"{title_tag} - smoothed plot")
-        plot_configs.append({
-            "window": window,
-            "is_not_smoothed": is_not_smoothed,
-            "plot": plot_obj,
-            "benchmark_steps": benchmark_steps,
-            "benchmark_returns": benchmark_returns,
-        })
 
-    # ── Allocate top headroom for legend ──
-    expected_legend_entries = len(all_setting_jobs) + 2
-    legend_headroom = max(90, 80 + 20 * expected_legend_entries) * y_axis_episode_length_cap / 400.0
-    for pc in plot_configs:
-        pc["plot"].set_ylim(0, y_axis_episode_length_cap + legend_headroom)
+    def _build_pc_for_title(title_prefix: str, create_figures: bool = True) -> list[dict]:
+        cfgs = []
+        for window in plot_smoothing_windows:
+            window = int(window)
+            is_not_smoothed = window <= 1
+            benchmark_returns = _apply_optional_smoothing(
+                np.asarray(benchmark_returns_raw, dtype=np.float32), window
+            )
+            benchmark_returns = np.minimum(benchmark_returns, float(optimal_episode_return))
+            suffix_label = "not smoothed plot" if is_not_smoothed else "smoothed plot"
+            title_str = f"{title_prefix} - {suffix_label}"
+            # In separate mode, defer figure creation to _finalize_algo_plot so that
+            # not-yet-populated algo windows don't pop up as empty placeholders the
+            # moment another algo's plot is shown non-blocking.
+            plot_obj = LearningCurvePlot(title=title_str) if create_figures else None
+            cfgs.append({
+                "window": window,
+                "is_not_smoothed": is_not_smoothed,
+                "title": title_str,
+                "plot": plot_obj,
+                "benchmark_steps": benchmark_steps,
+                "benchmark_returns": benchmark_returns,
+            })
+        return cfgs
+
+    if separate_algorithm_plots:
+        algo_plot_configs: dict[str, list[dict]] = {
+            algo_upper: _build_pc_for_title(algo_upper, create_figures=False)
+            for algo_upper in algo_jobs.keys()
+        }
+        # plot_configs kept for shared code paths that iterate "all current plots"
+        plot_configs = [pc for cfgs in algo_plot_configs.values() for pc in cfgs]
+    else:
+        algo_plot_configs = {}
+        plot_configs = _build_pc_for_title(title_tag)
+
+    # ── Allocate top headroom for legend (per-algo headroom is set inside
+    #    _finalize_algo_plot in separate mode where the figures don't exist yet). ──
+    if not separate_algorithm_plots:
+        expected_legend_entries = len(all_setting_jobs) + 2
+        legend_headroom = max(90, 80 + 20 * expected_legend_entries) * y_axis_episode_length_cap / 400.0
+        for pc in plot_configs:
+            pc["plot"].set_ylim(0, y_axis_episode_length_cap + legend_headroom)
 
     # ── Load existing results or run experiments (per algorithm) ──
     data_sheets_dir = "data sheets"
@@ -684,6 +711,162 @@ def run_selected_experiments(
 
         offset += n_jobs
 
+    # ── Separate-plots bookkeeping: precompute extras (so per-algo plots can include them)
+    #    and define the per-algo finalize helper that saves + (optionally) shows live.
+    plots_dir = "plots"
+    os.makedirs(plots_dir, exist_ok=True)
+
+    extra_curves_early: list[dict] = []
+    if separate_algorithm_plots and use_existing_disk_data:
+        algo_configs_for_extras = {k: v for k, v in algo_configs_map.items() if v is not None}
+        all_disk_curves_early = _load_all_excel_curves(
+            data_sheets_dir,
+            algo_configs_for_extras,
+            formatted_sheets=formatted_sheets,
+            global_config=gc,
+            original_algo_configs=original_algo_configs_map,
+        )
+        current_basenames_pre = set(f"{fn}.xlsx" for fn in algo_filenames.values())
+        for curve_info in all_disk_curves_early:
+            if curve_info["source_file"] in current_basenames_pre:
+                continue
+            source_algo = os.path.splitext(curve_info["source_file"])[0].upper()
+            if source_algo not in algo_jobs:
+                continue
+            extra_curves_early.append(curve_info)
+        if extra_curves_early:
+            from collections import Counter
+            counts = Counter(c["source_file"] for c in extra_curves_early)
+            for fname, n in sorted(counts.items()):
+                print(f"Loaded {n} additional curve(s) from '{fname}' Excel file in '{data_sheets_dir}'.")
+
+    algo_pending_count: dict[str, int] = {algo_upper: 0 for algo_upper in algo_jobs.keys()}
+    for global_idx, _job in pending_settings:
+        for _algo_upper, _off in algo_job_offsets.items():
+            _n = len(algo_jobs[_algo_upper])
+            if _off <= global_idx < _off + _n:
+                algo_pending_count[_algo_upper] += 1
+                break
+    algo_finalized: set[str] = set()
+    saved_paths_by_window: dict[int, str] = {}
+
+    def _finalize_algo_plot(algo_upper: str) -> None:
+        """Populate, save, and (optionally) display one algo's per-window plots."""
+        if algo_upper in algo_finalized:
+            return
+        cfgs = algo_plot_configs[algo_upper]
+        off_a = algo_job_offsets[algo_upper]
+        jobs_a = algo_jobs[algo_upper]
+
+        # Lazily create this algo's figures now (separate mode defers creation so
+        # other not-yet-finalized algos' empty figures don't pop up when we call
+        # plt.show(block=False) / plt.pause for THIS algo).
+        for pc in cfgs:
+            if pc.get("plot") is None:
+                pc["plot"] = LearningCurvePlot(title=pc["title"])
+
+        extras_for_algo = [
+            c for c in extra_curves_early
+            if os.path.splitext(c["source_file"])[0].upper() == algo_upper
+        ]
+        entries = len(jobs_a) + len(extras_for_algo) + 2
+        headroom = max(90, 80 + 20 * entries) * y_axis_episode_length_cap / 400.0
+        for pc in cfgs:
+            pc["plot"].set_ylim(0, y_axis_episode_length_cap + headroom)
+
+        for i, job in enumerate(jobs_a):
+            entry = setting_results[off_a + i]
+            if entry is None:
+                continue
+            lc_raw, lc_std_raw, timesteps = entry[:3]
+            curve_label = job["curve_label"]
+            for pc in cfgs:
+                window = int(pc["window"])
+                lc_w = _apply_optional_smoothing(np.asarray(lc_raw, dtype=np.float32), window)
+                lc_std_w = _apply_optional_smoothing(np.asarray(lc_std_raw, dtype=np.float32), window)
+                y_cap = float(optimal_episode_return)
+                lc_w = np.minimum(lc_w, y_cap)
+                plot_obj = pc["plot"]
+                plot_obj.add_curve(timesteps, lc_w, label=curve_label)
+                if shade_ci:
+                    plot_obj.add_shaded_ci(
+                        timesteps, lc_w, lc_std_w, n=n_repetitions,
+                        alpha=curve_ci_alpha, fill_opacity=curve_shaded_area_opacity,
+                        y_upper_cap=y_cap,
+                    )
+
+        for curve_info in extras_for_algo:
+            lc_raw = curve_info["learning_curve"]
+            lc_std_raw = curve_info["learning_curve_std"]
+            timesteps = curve_info["timesteps"]
+            curve_label = curve_info["curve_label"]
+            for pc in cfgs:
+                window = int(pc["window"])
+                lc_w = _apply_optional_smoothing(np.asarray(lc_raw, dtype=np.float32), window)
+                lc_std_w = _apply_optional_smoothing(np.asarray(lc_std_raw, dtype=np.float32), window)
+                y_cap = float(optimal_episode_return)
+                lc_w = np.minimum(lc_w, y_cap)
+                plot_obj = pc["plot"]
+                plot_obj.add_curve(timesteps, lc_w, label=curve_label, ls="solid")
+                if shade_ci and "n_repetitions" in curve_info:
+                    plot_obj.add_shaded_ci(
+                        timesteps, lc_w, lc_std_w,
+                        n=curve_info.get("n_repetitions", n_repetitions),
+                        alpha=curve_ci_alpha, fill_opacity=curve_shaded_area_opacity,
+                        y_upper_cap=y_cap,
+                    )
+
+        for pc in cfgs:
+            plot_obj = pc["plot"]
+            plot_obj.ax.plot(
+                pc["benchmark_steps"], pc["benchmark_returns"],
+                label=benchmark_name, ls=":", c="gray",
+            )
+            plot_obj.add_hline(optimal_episode_return, label="CartPole optimum")
+
+        saved = 0
+        for pc in cfgs:
+            window = int(pc["window"])
+            suffix = f"w{window}-not-smoothed" if window <= 1 else f"w{window}-smoothed"
+            filename = f"{algo_upper}_{suffix}.png"
+            output_path = os.path.join(plots_dir, filename)
+            saved_path = pc["plot"].save(output_path)
+            saved_paths_by_window[window] = saved_path
+            saved += 1
+
+        if show_curve_plots:
+            try:
+                plt.show(block=False)
+                plt.pause(0.001)
+            except Exception as exc:
+                print(f"[plot] Could not display {algo_upper} plot(s) non-blocking: {exc}")
+        print(f"[{algo_upper}] Saved {saved} plot(s) to {plots_dir}/")
+        algo_finalized.add(algo_upper)
+
+    if separate_algorithm_plots:
+        # Algos with no pending settings are already fully loaded from disk -> finalize now.
+        for _algo_upper in list(algo_jobs.keys()):
+            if algo_pending_count[_algo_upper] == 0:
+                _finalize_algo_plot(_algo_upper)
+
+    def _on_setting_complete(global_idx: int) -> None:
+        if not separate_algorithm_plots:
+            return
+        for _algo_upper, _off in algo_job_offsets.items():
+            _n = len(algo_jobs[_algo_upper])
+            if _off <= global_idx < _off + _n:
+                algo_pending_count[_algo_upper] -= 1
+                if algo_pending_count[_algo_upper] == 0:
+                    _finalize_algo_plot(_algo_upper)
+                return
+
+    def _poll_callback() -> None:
+        if separate_algorithm_plots and show_curve_plots:
+            try:
+                plt.pause(0.001)
+            except Exception:
+                pass
+
     # ── Pass 2: run all pending settings (not found in disk data) in one parallel pool ──
     if pending_settings:
         cpu_count = os.cpu_count() or 1
@@ -711,6 +894,8 @@ def run_selected_experiments(
             use_existing_network_checkpoints=use_existing_network_checkpoints,
             setting_results=setting_results,
             unused_cpu_cores=unused_cpu_cores,
+            on_setting_complete=_on_setting_complete,
+            poll_callback=_poll_callback,
         )
 
     # ── Pass 3: save newly computed results per algo to excel files, algo_upper: algorithm name uppercased ──
@@ -737,139 +922,141 @@ def run_selected_experiments(
             )
             algo_added_counts[algo_upper] = int(added_count)
 
-    # Collect all generated filenames for this run (used to skip in extra-curve loading)
-    current_basenames = set(f"{fn}.xlsx" for fn in algo_filenames.values())
-
-    # ── Also load all OTHER Excel files from the "data sheets" directory ──
-    # Only files whose algo prefix (first word of filename) matches a selected
-    # algorithm are loaded - this enforces include_<algo>_in_training = False.
-    extra_curves = []
-    if use_existing_disk_data:
-        algo_configs = {k: v for k, v in algo_configs_map.items() if v is not None}
-        all_disk_curves = _load_all_excel_curves(
-            data_sheets_dir,
-            algo_configs,
-            formatted_sheets=formatted_sheets,
-            global_config=gc,
-            original_algo_configs=original_algo_configs_map,
-        )
-        for curve_info in all_disk_curves:
-            if curve_info["source_file"] in current_basenames:
-                continue  # skip - already handled above
-            source_algo = os.path.splitext(curve_info["source_file"])[0].upper()
-            if source_algo not in algo_jobs:
-                continue  # include_<algo>_in_training is False - skip
-            extra_curves.append(curve_info)
-        if extra_curves:
-            from collections import Counter
-            counts = Counter(c["source_file"] for c in extra_curves)
-            for fname, n in sorted(counts.items()):
-                print(f"Loaded {n} additional curve(s) from '{fname}' Excel file in '{data_sheets_dir}'.")
-
-    # Update legend headroom for extra curves
-    if extra_curves:
-        total_entries = len(all_setting_jobs) + len(extra_curves) + 2
-        legend_headroom = max(90, 80 + 20 * total_entries)
-        for pc in plot_configs:
-            pc["plot"].set_ylim(0, y_axis_episode_length_cap + legend_headroom) * 1.4
-
-    # ── 1. Plot current experiment settings across all smoothing windows ──
-    for idx, job in enumerate(all_setting_jobs):
-        lc_raw, lc_std_raw, timesteps = setting_results[idx][:3]
-        curve_label = job["curve_label"]
-        for pc in plot_configs:
-            window = int(pc["window"])
-            lc_w = _apply_optional_smoothing(np.asarray(lc_raw, dtype=np.float32), window)
-            lc_std_w = _apply_optional_smoothing(np.asarray(lc_std_raw, dtype=np.float32), window)
-            y_cap = float(optimal_episode_return)
-            lc_w = np.minimum(lc_w, y_cap)
-            plot_obj = pc["plot"]
-            plot_obj.add_curve(timesteps, lc_w, label=curve_label)
-            if shade_ci:
-                plot_obj.add_shaded_ci(
-                    timesteps, lc_w, lc_std_w, n=n_repetitions,
-                    alpha=curve_ci_alpha, fill_opacity=curve_shaded_area_opacity,
-                    y_upper_cap=y_cap,
-                )
-
-    # ── 2. Plot extra curves from other Excel files ──
-    for curve_info in extra_curves:
-        lc_raw = curve_info["learning_curve"]
-        lc_std_raw = curve_info["learning_curve_std"]
-        timesteps = curve_info["timesteps"]
-        curve_label = curve_info["curve_label"]
-        for pc in plot_configs:
-            window = int(pc["window"])
-            lc_w = _apply_optional_smoothing(np.asarray(lc_raw, dtype=np.float32), window)
-            lc_std_w = _apply_optional_smoothing(np.asarray(lc_std_raw, dtype=np.float32), window)
-            y_cap = float(optimal_episode_return)
-            lc_w = np.minimum(lc_w, y_cap)
-            plot_obj = pc["plot"]
-            plot_obj.add_curve(timesteps, lc_w, label=curve_label, ls="solid")
-            if shade_ci and "n_repetitions" in curve_info:
-                plot_obj.add_shaded_ci(
-                    timesteps, lc_w, lc_std_w,
-                    n=curve_info.get("n_repetitions", n_repetitions),
-                    alpha=curve_ci_alpha, fill_opacity=curve_shaded_area_opacity,
-                    y_upper_cap=y_cap,
-                )
-
-    # ── Add benchmark + optimum to each plot ──
-    for pc in plot_configs:
-        plot_obj = pc["plot"]
-        plot_obj.ax.plot(
-            pc["benchmark_steps"], pc["benchmark_returns"],
-            label=benchmark_name, ls=":", c="gray",
-        )
-        plot_obj.add_hline(optimal_episode_return, label="CartPole optimum")
-
-    plot_filename_tag = "-".join(e.upper() for e in experiments)
-    
-    #### Save all plots with a filename that includes the experiment names and smoothing window info
-    plots_dir = "plots"
-    os.makedirs(plots_dir, exist_ok=True)
-    close_individual_plot_figs = (not show_individual_plots) and (not animation_plot)
-
-    saved_paths_by_window: dict[int, str] = {}
-    new_plot_count = 0
-    for pc in plot_configs:
-        window = int(pc["window"])
-        suffix = f"w{window}-not-smoothed" if window <= 1 else f"w{window}-smoothed"
-        filename = f"{plot_filename_tag}_{suffix}.png"
-        output_path = os.path.join(plots_dir, filename)
-        saved_path = pc["plot"].save(output_path)
-        saved_paths_by_window[window] = saved_path
-        new_plot_count += 1
-        if close_individual_plot_figs and hasattr(pc["plot"], "fig"):
-            plt.close(pc["plot"].fig)
-
-    print(f"Saved {new_plot_count} new plot(s) to plots/")
-
-    # ── Combined display: smoothing windows 101 and 201 (side-by-side) ──
     combined_fig_shown = False
-    desired_windows = [101, 201]
-    available_windows = {int(pc["window"]) for pc in plot_configs}
+    if separate_algorithm_plots:
+        # Per-algo plots were populated, saved, and (optionally) shown live in
+        # _finalize_algo_plot as each algorithm finished. Nothing more to do here.
+        pass
+    else:
+        # Collect all generated filenames for this run (used to skip in extra-curve loading)
+        current_basenames = set(f"{fn}.xlsx" for fn in algo_filenames.values())
 
-    if all(w in available_windows for w in desired_windows):
-        try:
-            combined_fig, axes = plt.subplots(1, 2, figsize=(14, 6))
-            combined_fig.suptitle(f"Twin_{plot_filename_tag} (w=101 and w=201)")
+        # ── Also load all OTHER Excel files from the "data sheets" directory ──
+        # Only files whose algo prefix (first word of filename) matches a selected
+        # algorithm are loaded - this enforces include_<algo>_in_training = False.
+        extra_curves = []
+        if use_existing_disk_data:
+            algo_configs = {k: v for k, v in algo_configs_map.items() if v is not None}
+            all_disk_curves = _load_all_excel_curves(
+                data_sheets_dir,
+                algo_configs,
+                formatted_sheets=formatted_sheets,
+                global_config=gc,
+                original_algo_configs=original_algo_configs_map,
+            )
+            for curve_info in all_disk_curves:
+                if curve_info["source_file"] in current_basenames:
+                    continue  # skip - already handled above
+                source_algo = os.path.splitext(curve_info["source_file"])[0].upper()
+                if source_algo not in algo_jobs:
+                    continue  # include_<algo>_in_training is False - skip
+                extra_curves.append(curve_info)
+            if extra_curves:
+                from collections import Counter
+                counts = Counter(c["source_file"] for c in extra_curves)
+                for fname, n in sorted(counts.items()):
+                    print(f"Loaded {n} additional curve(s) from '{fname}' Excel file in '{data_sheets_dir}'.")
 
-            for ax, w in zip(axes, desired_windows):
-                saved_path = saved_paths_by_window.get(w)
-                if saved_path is not None and os.path.isfile(saved_path):
-                    img = plt.imread(saved_path)
-                    ax.imshow(img)
-                    ax.axis("off")
-                else:
-                    ax.axis("off")
-                ax.set_title(f"window {w}")
+        # Update legend headroom for extra curves
+        if extra_curves:
+            total_entries = len(all_setting_jobs) + len(extra_curves) + 2
+            legend_headroom = max(90, 80 + 20 * total_entries)
+            for pc in plot_configs:
+                pc["plot"].set_ylim(0, y_axis_episode_length_cap + legend_headroom) * 1.4
 
-            plt.tight_layout()
-            combined_fig_shown = True
-        except Exception as exc:
-            print(f"[plot] Failed to create combined subplot preview: {exc}")
-            combined_fig_shown = False
+        # ── 1. Plot current experiment settings across all smoothing windows ──
+        for idx, job in enumerate(all_setting_jobs):
+            lc_raw, lc_std_raw, timesteps = setting_results[idx][:3]
+            curve_label = job["curve_label"]
+            for pc in plot_configs:
+                window = int(pc["window"])
+                lc_w = _apply_optional_smoothing(np.asarray(lc_raw, dtype=np.float32), window)
+                lc_std_w = _apply_optional_smoothing(np.asarray(lc_std_raw, dtype=np.float32), window)
+                y_cap = float(optimal_episode_return)
+                lc_w = np.minimum(lc_w, y_cap)
+                plot_obj = pc["plot"]
+                plot_obj.add_curve(timesteps, lc_w, label=curve_label)
+                if shade_ci:
+                    plot_obj.add_shaded_ci(
+                        timesteps, lc_w, lc_std_w, n=n_repetitions,
+                        alpha=curve_ci_alpha, fill_opacity=curve_shaded_area_opacity,
+                        y_upper_cap=y_cap,
+                    )
+
+        # ── 2. Plot extra curves from other Excel files ──
+        for curve_info in extra_curves:
+            lc_raw = curve_info["learning_curve"]
+            lc_std_raw = curve_info["learning_curve_std"]
+            timesteps = curve_info["timesteps"]
+            curve_label = curve_info["curve_label"]
+            for pc in plot_configs:
+                window = int(pc["window"])
+                lc_w = _apply_optional_smoothing(np.asarray(lc_raw, dtype=np.float32), window)
+                lc_std_w = _apply_optional_smoothing(np.asarray(lc_std_raw, dtype=np.float32), window)
+                y_cap = float(optimal_episode_return)
+                lc_w = np.minimum(lc_w, y_cap)
+                plot_obj = pc["plot"]
+                plot_obj.add_curve(timesteps, lc_w, label=curve_label, ls="solid")
+                if shade_ci and "n_repetitions" in curve_info:
+                    plot_obj.add_shaded_ci(
+                        timesteps, lc_w, lc_std_w,
+                        n=curve_info.get("n_repetitions", n_repetitions),
+                        alpha=curve_ci_alpha, fill_opacity=curve_shaded_area_opacity,
+                        y_upper_cap=y_cap,
+                    )
+
+        # ── Add benchmark + optimum to each plot ──
+        for pc in plot_configs:
+            plot_obj = pc["plot"]
+            plot_obj.ax.plot(
+                pc["benchmark_steps"], pc["benchmark_returns"],
+                label=benchmark_name, ls=":", c="gray",
+            )
+            plot_obj.add_hline(optimal_episode_return, label="CartPole optimum")
+
+        plot_filename_tag = "-".join(e.upper() for e in experiments)
+
+        #### Save all plots with a filename that includes the experiment names and smoothing window info
+        close_individual_plot_figs = (not show_individual_plots) and (not animation_plot)
+
+        new_plot_count = 0
+        for pc in plot_configs:
+            window = int(pc["window"])
+            suffix = f"w{window}-not-smoothed" if window <= 1 else f"w{window}-smoothed"
+            filename = f"{plot_filename_tag}_{suffix}.png"
+            output_path = os.path.join(plots_dir, filename)
+            saved_path = pc["plot"].save(output_path)
+            saved_paths_by_window[window] = saved_path
+            new_plot_count += 1
+            if close_individual_plot_figs and hasattr(pc["plot"], "fig"):
+                plt.close(pc["plot"].fig)
+
+        print(f"Saved {new_plot_count} new plot(s) to plots/")
+
+        # ── Combined display: smoothing windows 101 and 201 (side-by-side) ──
+        desired_windows = [101, 201]
+        available_windows = {int(pc["window"]) for pc in plot_configs}
+
+        if all(w in available_windows for w in desired_windows):
+            try:
+                combined_fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+                combined_fig.suptitle(f"Twin_{plot_filename_tag} (w=101 and w=201)")
+
+                for ax, w in zip(axes, desired_windows):
+                    saved_path = saved_paths_by_window.get(w)
+                    if saved_path is not None and os.path.isfile(saved_path):
+                        img = plt.imread(saved_path)
+                        ax.imshow(img)
+                        ax.axis("off")
+                    else:
+                        ax.axis("off")
+                    ax.set_title(f"window {w}")
+
+                plt.tight_layout()
+                combined_fig_shown = True
+            except Exception as exc:
+                print(f"[plot] Failed to create combined subplot preview: {exc}")
+                combined_fig_shown = False
 
     # ── Optional animation (uses last REINFORCE episode if available) ──
     if animation_plot and "REINFORCE" in [e.upper() for e in experiments]:
@@ -1018,7 +1205,6 @@ def _run_single_repetition(
     clip_eps: float = 0.2,
     n_epochs: int = 10,
     rollout_steps: int = 2048,
-    mini_batch_size: int = 64,
     # SAC-specific
     tau: float = 0.005,
     replay_buffer_size: int = 100000,
@@ -1244,7 +1430,6 @@ def _run_single_repetition(
             gae_lambda=gae_lambda,
             clip_eps=clip_eps,
             n_epochs=n_epochs,
-            mini_batch_size=mini_batch_size,
             actor_hidden_nn=actor_hidden_nn,
             critic_hidden_nn=critic_hidden_nn,
         )

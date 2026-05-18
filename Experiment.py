@@ -16,13 +16,14 @@ def experiment():
     #################[ Global Parameters ]################
     global_config = {
         "n_repetitions": 5,                 # Default: 5
-        "UNUSED_CPU_CORES": 3,              # Number of CPU cores to leave unused when using multiprocessing, for appropriate other applications' performance. Cap degree of parallelism: <#total CPU cores>-UNUSED_CPU_CORES Default: 2.
+        "UNUSED_CPU_CORES": 5,              # Number of CPU cores to leave unused when using multiprocessing, for appropriate other applications' performance. Cap degree of parallelism: <#total CPU cores>-UNUSED_CPU_CORES Default: 2.
         # Plotting parameters
         "benchmark_curve": 1,               # Default: 1, choose one: 1 or 2 for the benchmark CSV (BaselineDataCartPole_run1.csv or BaselineDataCartPole_run2.csv).
         "benchmark_name": "Baseline",       # Benchmark name to show in the legend for the benchmark curve. Default: "Baseline".
         "plot_smoothing_window": [1, 101, 201, 251, 351],  # Use multiple values to plot multiple curves. Default: [1, 51, 101, 201, 251, 301]. Set to [1] to skip smoothing.
         "curve_confidence_interval": 0.6,   # Curve shading confidence interval. Default: 0.95. Set to 0 to skip CI shading.
         "curve_shaded_area_opacity": 0.06,  # Opacity of the shaded area for confidence intervals. Default: 0.05 (5% opacity).
+        "separate_algorithm_plots": True,  # If True, each algorithm gets its own set of plots (one per smoothing window). Each algo's plots are saved to disk and (if show_curve_plots) shown non-blocking as soon as that algo finishes executing, so faster algos surface their plots first. Default: False (one combined plot per smoothing window).
         "show_curve_plots": True,           # Show learning curve plot window at the end.
         "animation_plot": False,            # Show CartPole animation at the end.
         "use_existing_disk_data": True,     # Whether to use existing data (.xlsx files) from disk if exists.
@@ -43,12 +44,12 @@ def experiment():
     # Select which algorithms to include in the training and plotting using included_algorithms.
     # Set value to True to include, False to exclude.
     included_algorithms = {
-        "DQN": True,
+        "DQN": False,
         "REINFORCE": False,
         "AC": False,
         "A2C": True,
         "PPO": True,
-        "SAC": True,
+        "SAC": False,
     }
     # Using DQN implementation from the previous assignment (existing in the assignment2_repo directory)
     # ------------- Algorithm: DQN hyperparameters (optimal) ----
@@ -135,7 +136,7 @@ def experiment():
     A2C_config = {
         "gamma": [0.99],                # list of discount factors to sweep
         "actor_lr": [1e-4],          # policy learning rate(s) to sweep
-        "actor_hidden_nn": [[64, 64]],        # list of NN architectures to sweep for policy network
+        "actor_hidden_nn": [[32, 32],[64, 64],[128, 128]], #[64, 64]        # list of NN architectures to sweep for policy network
         "critic_lr": [0.01],        # value function learning rate(s) to sweep
         "critic_hidden_nn": [[128, 128]],  # list of NN architectures to sweep for value function network
         "FULL_EPISODE_UPDATES": [False],          # If True, update actor and critic at the end of each episode with the full episode's trajectory. If False, update at each step with the trajectory so far (bootstrapped).
@@ -157,25 +158,23 @@ def experiment():
     PPO_config = {
         "gamma": [0.99],                # list of discount factors to sweep
         "actor_lr": [3e-4],           # actor learning rate(s) to sweep
-        "actor_hidden_nn": [[64, 64]],  # actor NN architectures to sweep
+        "actor_hidden_nn": [[32, 32],[64, 64],[128, 128]], #[64, 64]   # actor NN architectures to sweep
         "critic_lr": [1e-3],           # critic learning rate(s) to sweep
         "critic_hidden_nn": [[64, 64]], # critic NN architectures to sweep
-        "gae_lambda": [0.95],           # GAE lambda (Schulman et al., 2015)
+        "gae_lambda": [0.95],           # GAE lambda parameter
         "clip_eps": [0.2],              # PPO clipping epsilon
         "n_epochs": [10],               # # of optimisation epochs per rollout
         "rollout_steps": [2048],        # # of env steps per rollout (PPO buffer size)
-        "mini_batch_size": [64],        # mini-batch size for PPO updates
         "legend_parameters": {          # [plot label, show flag]
             "gamma": [r"$\gamma$: ", False],
             "actor_lr": [r"Actor $\alpha$: ", True],
             "critic_lr": [r"Critic $\beta$: ", False],
-            "actor_hidden_nn": [r"Actor NN: ", False],
+            "actor_hidden_nn": [r"Actor NN: ", True],
             "critic_hidden_nn": [r"Critic NN: ", True],
             "gae_lambda": [r"$\lambda_{GAE}$: ", True],
             "clip_eps": [r"$\epsilon_{clip}$: ", True],
             "n_epochs": [r"Epochs: ", False],
             "rollout_steps": [r"Rollout: ", False],
-            "mini_batch_size": [r"MB: ", False],
         },
     }
     # ------------- End PPO hyperparameters -----------

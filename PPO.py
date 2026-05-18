@@ -6,7 +6,8 @@ Implementation follows Schulman et al., 2017 (https://arxiv.org/abs/1707.06347).
 This file implements the *core* PPO-clipped algorithm with GAE
 (Schulman et al., 2015) as the advantage estimator. No additional engineering
 tricks are applied: no advantage normalisation, no value-function clipping,
-no entropy bonus, no gradient-norm clipping.
+no entropy bonus, no gradient-norm clipping, no mini-batching (each epoch
+runs one full-batch gradient step over the rollout).
 """
 
 from Agent import BaseAgent
@@ -33,7 +34,6 @@ class PPO_Agent(BaseAgent):
         gae_lambda,
         clip_eps,
         n_epochs,
-        mini_batch_size,
         actor_hidden_nn,
         critic_hidden_nn,
     ):
@@ -45,7 +45,6 @@ class PPO_Agent(BaseAgent):
         self.gae_lambda = gae_lambda
         self.clip_eps = clip_eps
         self.n_epochs = n_epochs
-        self.mini_batch_size = mini_batch_size
 
         self.policy = PolicyNetwork(
             n_agent_state_elements,
@@ -93,7 +92,7 @@ class PPO_Agent(BaseAgent):
         return advantages, returns
 
     def update(self, **kwargs):
-        """Run several epochs of PPO-clipped updates on the collected rollout."""
+        """Run several full-batch epochs of PPO-clipped updates on the rollout."""
 
         states = kwargs["states"]
         actions = kwargs["actions"]
@@ -107,36 +106,29 @@ class PPO_Agent(BaseAgent):
         advantages_t = torch.tensor(np.array(advantages), dtype=torch.float32)
         returns_t = torch.tensor(np.array(returns), dtype=torch.float32)
 
-        n_samples = states_t.shape[0]
-        mini_batch = min(int(self.mini_batch_size), n_samples) if n_samples > 0 else 0
-        if mini_batch <= 0:
+        if states_t.shape[0] == 0:
             return
 
         for _ in range(int(self.n_epochs)):
-            perm = torch.randperm(n_samples)
-            for start in range(0, n_samples, mini_batch):
-                idx = perm[start : start + mini_batch]
+            probs = self.policy(states_t)
+            dist = torch.distributions.Categorical(probs)
+            new_log_probs = dist.log_prob(actions_t)
 
-                probs = self.policy(states_t[idx])
-                dist = torch.distributions.Categorical(probs)
-                new_log_probs = dist.log_prob(actions_t[idx])
+            ratio = torch.exp(new_log_probs - old_log_probs_t)
+            surr1 = ratio * advantages_t
+            surr2 = torch.clamp(ratio, 1.0 - self.clip_eps, 1.0 + self.clip_eps) * advantages_t
+            policy_loss = -torch.min(surr1, surr2).mean()
 
-                ratio = torch.exp(new_log_probs - old_log_probs_t[idx])
-                adv_batch = advantages_t[idx]
-                surr1 = ratio * adv_batch
-                surr2 = torch.clamp(ratio, 1.0 - self.clip_eps, 1.0 + self.clip_eps) * adv_batch
-                policy_loss = -torch.min(surr1, surr2).mean()
+            values_pred = self.value_func(states_t)
+            value_loss = 0.5 * (values_pred - returns_t).pow(2).mean()
 
-                values_pred = self.value_func(states_t[idx])
-                value_loss = 0.5 * (values_pred - returns_t[idx]).pow(2).mean()
+            self.opt_actor.zero_grad()
+            policy_loss.backward()
+            self.opt_actor.step()
 
-                self.opt_actor.zero_grad()
-                policy_loss.backward()
-                self.opt_actor.step()
-
-                self.opt_critic.zero_grad()
-                value_loss.backward()
-                self.opt_critic.step()
+            self.opt_critic.zero_grad()
+            value_loss.backward()
+            self.opt_critic.step()
 
     def evaluate(self, n_eval_episodes: int = 30, max_steps: int = 500) -> np.floating:
         """Evaluate the current policy greedily (deterministic)."""
@@ -223,7 +215,7 @@ def run_ppo(
 
     Steps through the environment one transition at a time, filling a
     fixed-length rollout buffer (``rollout_steps``). Once full PPO performs
-    ``n_epochs`` mini-batch updates and the buffer is cleared.
+    ``n_epochs`` full-batch gradient updates and the buffer is cleared.
     """
 
     data_count = math.ceil(n_timesteps / eval_interval)
