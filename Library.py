@@ -361,12 +361,7 @@ def run_selected_experiments(
     curve_confidence_interval = gc.get("curve_confidence_interval", 0.6)
     curve_shaded_area_opacity = gc.get("curve_shaded_area_opacity", 0.05)
     use_existing_disk_data = gc.get("use_existing_disk_data", True)
-    use_existing_network_checkpoints = bool(
-        gc.get(
-            "use_existing_disk_trained_networks",
-            gc.get("use_existing_network_checkpoints", False),
-        )
-    )
+    use_existing_disk_trained_networks = bool(gc.get("use_existing_disk_trained_networks", False))
     format_sheets = bool(gc.get("format_sheets", False))
     formatted_sheets = bool(gc.get("formatted_sheets", False))
     n_timesteps = int(gc.get("n_timesteps", 100000))
@@ -866,7 +861,7 @@ def run_selected_experiments(
         print()
 
         # Report which network checkpoint files will be loaded by the workers.
-        if use_existing_network_checkpoints:
+        if use_existing_disk_trained_networks:
             from Checkpointing import (
                 pg_actor_checkpoint_path,
                 pg_critic_checkpoint_path,
@@ -919,7 +914,7 @@ def run_selected_experiments(
             max_train_episode_length=max_train_episode_length,
             max_eval_episode_length=max_eval_episode_length,
             base_seed=base_seed,
-            use_existing_network_checkpoints=use_existing_network_checkpoints,
+            use_existing_disk_trained_networks=use_existing_disk_trained_networks,
             setting_results=setting_results,
             unused_cpu_cores=unused_cpu_cores,
             on_setting_complete=_on_setting_complete,
@@ -1225,7 +1220,7 @@ def _run_single_repetition(
     n_agent_state_elements=4,
     n_actions=2,
     TN_step=10,
-    use_existing_network_checkpoints: bool = False,
+    use_existing_disk_trained_networks: bool = False,
     eval_with_env_episode_trials: bool = False,
     n_eval_episodes: int = 5,
     # PPO-specific
@@ -1270,7 +1265,7 @@ def _run_single_repetition(
             algo_type="REINFORCE",
             actor_hidden_nn=actor_hidden_nn,
         )
-        if use_existing_network_checkpoints:
+        if use_existing_disk_trained_networks:
             load_state_dict_if_present(
                 model=agent.actor,
                 checkpoint_path=actor_ck.file_path,
@@ -1327,7 +1322,7 @@ def _run_single_repetition(
             critic_hidden_nn=critic_hidden_nn,
         )
 
-        if use_existing_network_checkpoints:
+        if use_existing_disk_trained_networks:
             load_state_dict_if_present(
                 model=agent.actor,
                 checkpoint_path=actor_ck.file_path,
@@ -1395,7 +1390,7 @@ def _run_single_repetition(
             critic_hidden_nn=critic_hidden_nn,
         )
 
-        if use_existing_network_checkpoints:
+        if use_existing_disk_trained_networks:
             load_state_dict_if_present(
                 model=agent.policy,
                 checkpoint_path=actor_ck.file_path,
@@ -1466,7 +1461,7 @@ def _run_single_repetition(
             critic_hidden_nn=critic_hidden_nn,
         )
 
-        if use_existing_network_checkpoints:
+        if use_existing_disk_trained_networks:
             load_state_dict_if_present(
                 model=agent.policy,
                 checkpoint_path=actor_ck.file_path,

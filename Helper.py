@@ -871,7 +871,6 @@ GLOBAL_CONFIG_EXCLUSIONS = frozenset({
     "show_curve_plots",
     "animation_plot",
     "use_existing_disk_data",
-    "use_existing_network_checkpoints",
     "format_sheets",
     "formatted_sheets",
     "Environment",
@@ -1764,7 +1763,7 @@ def _run_dqn_one_rep(trial_common: dict[str, Any], run_seed: int, rep_index: int
 
 def _run_pending_parallel(pending_settings, n_repetitions, n_timesteps, eval_interval,
                           max_train_episode_length, max_eval_episode_length, base_seed,
-                          use_existing_network_checkpoints: bool,
+                          use_existing_disk_trained_networks: bool,
     setting_results: list[
         tuple[np.ndarray, np.ndarray, np.ndarray] | tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]
         | None
@@ -1858,7 +1857,7 @@ def _run_pending_parallel(pending_settings, n_repetitions, n_timesteps, eval_int
                                 shared_step_counter=step_counters[(sp, r)],
                                 eval_with_env_episode_trials=bool(kw.get("eval_with_env_episode_trials", False)),
                                 n_eval_episodes=int(kw.get("n_eval_episodes", 5)),
-                                use_existing_network_checkpoints=use_existing_network_checkpoints,
+                                use_existing_disk_trained_networks=use_existing_disk_trained_networks,
                                 **algo_extra_kwargs,
                             )
                     futures[future] = (sp, r)
@@ -1952,7 +1951,7 @@ def _run_pending_parallel(pending_settings, n_repetitions, n_timesteps, eval_int
                             try:
                                 rep_results[(sp, r)] = f.result()
                             except Exception as exc:
-                                if use_existing_network_checkpoints:
+                                if use_existing_disk_trained_networks:
                                     print(
                                         "\n[Trial failure detected with use_existing_disk_trained_networks=True]\n"
                                         "Suggestion: verify that the model architecture hyperparameters\n"

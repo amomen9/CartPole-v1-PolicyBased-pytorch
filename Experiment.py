@@ -23,8 +23,8 @@ def experiment():
         "plot_smoothing_window": [1, 101, 201, 251, 351],  # Use multiple values to plot multiple curves. Default: [1, 51, 101, 201, 251, 301]. Set to [1] to skip smoothing.
         "curve_confidence_interval": 0.6,   # Curve shading confidence interval. Default: 0.95. Set to 0 to skip CI shading.
         "curve_shaded_area_opacity": 0.06,  # Opacity of the shaded area for confidence intervals. Default: 0.05 (5% opacity).
-        "separate_algorithm_plots": True,  # If True, each algorithm gets its own set of plots (one per smoothing window). Each algo's plots are saved to disk and (if show_curve_plots) shown non-blocking as soon as that algo finishes executing, so faster algos surface their plots first. Default: False (one combined plot per smoothing window).
-        "show_curve_plots": True,           # Show learning curve plot window at the end.
+        "show_curve_plots": True,           # Show learning curve plot at the end of or during the training.
+        "separate_algorithm_plots": True,   # If True, each algorithm gets its own set of plots (one per smoothing window). Each algo's plots are saved to disk and (if show_curve_plots) shown non-blocking as soon as that algo finishes executing, so faster algos surface their plots first. Default: False (one combined plot per smoothing window).
         "animation_plot": False,            # Show CartPole animation at the end.
         "use_existing_disk_data": True,     # Whether to use existing data (.xlsx files) from disk if exists.
         "use_existing_disk_trained_networks": False,

@@ -27,7 +27,7 @@ def experiment():
         "show_curve_plots": True,           # Show learning curve plot window at the end.
         "animation_plot": False,            # Show CartPole animation at the end.
         "use_existing_disk_data": True,     # Whether to use existing data (.xlsx files) from disk if exists.
-        "use_existing_disk_trained_networks": True,
+        "use_existing_disk_trained_networks": False,
         # Environment
         "max_train_episode_length": 500, #500        # Episode truncation step. Default: 500.
         "base_seed": 42,                    # Base seed for CartPole environment and agent initialization. Each repetition will use a different seed derived from this base seed (e.g., base_seed + repetition_index).
