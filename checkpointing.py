@@ -87,13 +87,3 @@ def dqn_q_checkpoint_path(*, nn_hidden_layer_widths: Sequence[int] | np.ndarray)
     return CheckpointPaths(dir_path=dir_path, file_path=file_path)
 
 
-def sac_q_checkpoint_path(
-    *,
-    critic_hidden_nn: Sequence[int] | np.ndarray,
-    q_index: int,
-) -> CheckpointPaths:
-    sig = architecture_signature(critic_hidden_nn)
-    component = f"Q{int(q_index)}"
-    dir_path = _pg_component_dir("SAC", component)
-    file_path = os.path.join(dir_path, f"q{int(q_index)}_{sig}.pt")
-    return CheckpointPaths(dir_path=dir_path, file_path=file_path)

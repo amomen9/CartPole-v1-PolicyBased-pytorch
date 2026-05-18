@@ -871,7 +871,6 @@ GLOBAL_CONFIG_EXCLUSIONS = frozenset({
     "show_curve_plots",
     "animation_plot",
     "use_existing_disk_data",
-    "use_existing_disk_trained_networks",
     "use_existing_network_checkpoints",
     "format_sheets",
     "formatted_sheets",
@@ -1545,113 +1544,6 @@ def _build_ppo_jobs(
     return setting_jobs
 
 
-def _build_sac_jobs(
-    *,
-    algo_config,
-    n_repetitions,
-    n_timesteps,
-    eval_interval,
-    max_train_episode_length,
-    max_eval_episode_length,
-    base_seed,
-    eval_with_env_episode_trials: bool,
-    n_eval_episodes: int,
-):
-    cfg = algo_config
-    gammas, actor_learning_rates, actor_architectures, legend = _parse_pg_config(cfg)
-    critic_learning_rates = np.atleast_1d(np.asarray(cfg.get("critic_lr", np.array([0.0003])), dtype=np.float32))
-    raw_critic_nn = cfg.get("critic_hidden_nn", [[128, 128]])
-    if isinstance(raw_critic_nn, np.ndarray) and raw_critic_nn.ndim == 1:
-        critic_architectures = [raw_critic_nn]
-    elif isinstance(raw_critic_nn, list) and len(raw_critic_nn) > 0 and not isinstance(raw_critic_nn[0], (list, np.ndarray)):
-        critic_architectures = [np.asarray(raw_critic_nn, dtype=np.int32)]
-    else:
-        critic_architectures = [np.asarray(arch, dtype=np.int32) for arch in raw_critic_nn]
-
-    taus = np.atleast_1d(np.asarray(cfg.get("tau", np.array([0.005])), dtype=np.float32))
-    replay_buffer_sizes = np.atleast_1d(np.asarray(cfg.get("replay_buffer_size", np.array([100000])), dtype=np.int64))
-    batch_sizes = np.atleast_1d(np.asarray(cfg.get("batch_size", np.array([64])), dtype=np.int32))
-    alpha_list = np.atleast_1d(np.asarray(cfg.get("alpha", np.array([1.0])), dtype=np.float32))
-
-    setting_jobs = []
-    for gamma_val in gammas:
-        gamma_val = float(gamma_val)
-        for actor_nn in actor_architectures:
-            actor_nn = np.asarray(actor_nn, dtype=np.int32)
-            for actor_lr_val in actor_learning_rates:
-                actor_lr_val = float(actor_lr_val)
-                for critic_nn in critic_architectures:
-                    critic_nn = np.asarray(critic_nn, dtype=np.int32)
-                    for critic_lr_val in critic_learning_rates:
-                        critic_lr_val = float(critic_lr_val)
-                        for tau_val in taus:
-                            tau_val = float(tau_val)
-                            for buf_size in replay_buffer_sizes:
-                                buf_size = int(buf_size)
-                                for batch_val in batch_sizes:
-                                    batch_val = int(batch_val)
-                                    for alpha_val in alpha_list:
-                                        alpha_val = float(alpha_val)
-                                        iter_cfg = {
-                                            **cfg,
-                                            "gamma": gamma_val,
-                                            "actor_lr": actor_lr_val,
-                                            "actor_hidden_nn": actor_nn,
-                                            "critic_lr": critic_lr_val,
-                                            "critic_hidden_nn": critic_nn,
-                                            "tau": tau_val,
-                                            "replay_buffer_size": buf_size,
-                                            "batch_size": batch_val,
-                                            "alpha": alpha_val,
-                                        }
-                                        label_parts = ["SAC"] + _build_legend_parts(legend, iter_cfg)
-                                        curve_label = ", ".join(label_parts)
-                                        setting_jobs.append({
-                                            "curve_label": curve_label,
-                                            "method": "sac",
-                                            "kwargs": dict(
-                                                method="sac",
-                                                n_repetitions=n_repetitions,
-                                                n_timesteps=n_timesteps,
-                                                eval_interval=eval_interval,
-                                                max_train_episode_length=max_train_episode_length,
-                                                max_eval_episode_length=max_eval_episode_length,
-                                                actor_lr=actor_lr_val,
-                                                critic_lr=critic_lr_val,
-                                                gamma=gamma_val,
-                                                actor_hidden_nn=actor_nn,
-                                                critic_hidden_nn=critic_nn,
-                                                tau=tau_val,
-                                                replay_buffer_size=buf_size,
-                                                batch_size=batch_val,
-                                                alpha=alpha_val,
-                                                base_seed=base_seed,
-                                                eval_with_env_episode_trials=eval_with_env_episode_trials,
-                                                n_eval_episodes=n_eval_episodes,
-                                                plot_smoothing_window=1,
-                                            ),
-                                            "hyperparams": {
-                                                "n_repetitions": n_repetitions,
-                                                "n_timesteps": n_timesteps,
-                                                "eval_interval": eval_interval,
-                                                "max_train_episode_length": max_train_episode_length,
-                                                "max_eval_episode_length": max_eval_episode_length,
-                                                "actor_lr": actor_lr_val,
-                                                "critic_lr": critic_lr_val,
-                                                "gamma": gamma_val,
-                                                "actor_hidden_nn": str(actor_nn.tolist()),
-                                                "critic_hidden_nn": str(critic_nn.tolist()),
-                                                "tau": tau_val,
-                                                "replay_buffer_size": buf_size,
-                                                "batch_size": batch_val,
-                                                "alpha": alpha_val,
-                                                "eval_with_env_episode_trials": eval_with_env_episode_trials,
-                                                "n_eval_episodes": n_eval_episodes,
-                                            },
-                                        })
-    return setting_jobs
-
-
 def _build_dqn_jobs(*, dqn_config, n_repetitions, n_timesteps, eval_interval,
                     max_train_episode_length, max_eval_episode_length, base_seed):
     """Build setting_jobs for DQN using assignment2_repo infrastructure."""
@@ -1944,15 +1836,6 @@ def _run_pending_parallel(pending_settings, n_repetitions, n_timesteps, eval_int
                                 "clip_eps",
                                 "n_epochs",
                                 "rollout_steps",
-                            ):
-                                if k in kw:
-                                    algo_extra_kwargs[k] = kw[k]
-                            # SAC-specific
-                            for k in (
-                                "tau",
-                                "replay_buffer_size",
-                                "batch_size",
-                                "alpha",
                             ):
                                 if k in kw:
                                     algo_extra_kwargs[k] = kw[k]

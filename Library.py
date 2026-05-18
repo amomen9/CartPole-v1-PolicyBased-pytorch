@@ -332,14 +332,13 @@ def run_selected_experiments(
     A2C_config=None,
     DQN_config=None,
     PPO_config=None,
-    SAC_config=None,
 ):
     """Orchestrate training, data loading, and plotting for all selected experiments.
 
     Parameters
     ----------
     experiments : list[str]
-        Algorithm names to run. Supported: "REINFORCE", "AC", "A2C", "DQN", "PPO", "SAC".
+        Algorithm names to run. Supported: "REINFORCE", "AC", "A2C", "DQN", "PPO".
     global_config : dict
         Global/shared parameters (benchmark, plotting, environment, seed).
     REINFORCE_config : dict or None
@@ -352,8 +351,6 @@ def run_selected_experiments(
         DQN-specific hyperparameters. Required when "DQN" in experiments.
     PPO_config : dict or None
         PPO-specific hyperparameters. Required when "PPO" in experiments.
-    SAC_config : dict or None
-        SAC-specific hyperparameters. Required when "SAC" in experiments.
     """
     # ── Unpack global config ──
     gc = global_config or {}
@@ -421,7 +418,6 @@ def run_selected_experiments(
         _build_dqn_jobs,
         _build_ppo_jobs,
         _build_reinforce_jobs,
-        _build_sac_jobs,
         _load_all_excel_curves,
         _load_results_from_excel,
         _run_pending_parallel,
@@ -461,7 +457,6 @@ def run_selected_experiments(
         "A2C": A2C_config,
         "DQN": DQN_config,
         "PPO": PPO_config,
-        "SAC": SAC_config,
     }
     # Preserve the original (un-augmented) algo configs for workbook-level
     # meta validation. The augmented copies merge in global keys for per-sheet
@@ -546,20 +541,6 @@ def run_selected_experiments(
                 raise ValueError("PPO_config dict is required when PPO is included.")
             jobs = _build_ppo_jobs(
                 algo_config=PPO_config,
-                n_repetitions=n_repetitions,
-                n_timesteps=n_timesteps,
-                eval_interval=eval_interval,
-                max_train_episode_length=max_train_episode_length,
-                max_eval_episode_length=max_eval_episode_length,
-                base_seed=base_seed,
-                eval_with_env_episode_trials=eval_with_env_episode_trials,
-                n_eval_episodes=n_eval_episodes,
-            )
-        elif algo_upper == "SAC":
-            if SAC_config is None:
-                raise ValueError("SAC_config dict is required when SAC is included.")
-            jobs = _build_sac_jobs(
-                algo_config=SAC_config,
                 n_repetitions=n_repetitions,
                 n_timesteps=n_timesteps,
                 eval_interval=eval_interval,
@@ -883,6 +864,53 @@ def run_selected_experiments(
         for global_idx, job in pending_settings:
             print(f"Setting {global_idx + 1}/{len(all_setting_jobs)}: {job['curve_label']}")
         print()
+
+        # Report which network checkpoint files will be loaded by the workers.
+        if use_existing_network_checkpoints:
+            from Checkpointing import (
+                pg_actor_checkpoint_path,
+                pg_critic_checkpoint_path,
+            )
+            pg_method_to_algo = {
+                "REINFORCE": ("REINFORCE", False),
+                "ac": ("AC", True),
+                "a2c": ("A2C", True),
+                "ppo": ("PPO", True),
+            }
+            reported_paths: set[str] = set()
+            any_reported = False
+            for _global_idx, job in pending_settings:
+                method = job["method"]
+                if method not in pg_method_to_algo:
+                    continue
+                algo_type, has_critic = pg_method_to_algo[method]
+                kw = job["kwargs"]
+                actor_path = pg_actor_checkpoint_path(
+                    algo_type=algo_type,
+                    actor_hidden_nn=kw["actor_hidden_nn"],
+                ).file_path
+                if actor_path not in reported_paths:
+                    reported_paths.add(actor_path)
+                    if os.path.isfile(actor_path):
+                        print(f"[{algo_type}] Loading existing actor checkpoint: {actor_path}")
+                    else:
+                        print(f"[{algo_type}] No existing actor checkpoint at: {actor_path} (training from scratch)")
+                    any_reported = True
+                if has_critic:
+                    critic_path = pg_critic_checkpoint_path(
+                        algo_type=algo_type,
+                        critic_hidden_nn=kw["critic_hidden_nn"],
+                    ).file_path
+                    if critic_path not in reported_paths:
+                        reported_paths.add(critic_path)
+                        if os.path.isfile(critic_path):
+                            print(f"[{algo_type}] Loading existing critic checkpoint: {critic_path}")
+                        else:
+                            print(f"[{algo_type}] No existing critic checkpoint at: {critic_path} (training from scratch)")
+                        any_reported = True
+            if any_reported:
+                print()
+
         _run_pending_parallel(
             pending_settings=pending_settings,
             n_repetitions=n_repetitions,
@@ -1205,11 +1233,6 @@ def _run_single_repetition(
     clip_eps: float = 0.2,
     n_epochs: int = 10,
     rollout_steps: int = 2048,
-    # SAC-specific
-    tau: float = 0.005,
-    replay_buffer_size: int = 100000,
-    batch_size: int = 64,
-    alpha: float = 1.0,
     # Shared: full-episode vs per-step update mode (None = use algorithm default)
     full_episode_updates: bool | None = None,
 ):
@@ -1481,78 +1504,6 @@ def _run_single_repetition(
             save_state_dict_overwrite(
                 model=agent.value_func,
                 checkpoint_path=critic_ck.file_path,
-            )
-
-    elif method == "sac":
-        from SAC import SAC_Agent, run_sac
-        from Checkpointing import (
-            load_state_dict_if_present,
-            pg_actor_checkpoint_path,
-            sac_q_checkpoint_path,
-            save_state_dict_overwrite,
-        )
-
-        agent = SAC_Agent(
-            n_agent_state_elements=n_agent_state_elements,
-            n_actions=n_actions,
-            actor_lr=actor_lr,
-            critic_lr=critic_lr,
-            gamma=gamma,
-            tau=tau,
-            replay_buffer_size=replay_buffer_size,
-            batch_size=batch_size,
-            actor_hidden_nn=actor_hidden_nn,
-            critic_hidden_nn=critic_hidden_nn,
-            alpha=alpha,
-        )
-
-        actor_ck = pg_actor_checkpoint_path(
-            algo_type="SAC",
-            actor_hidden_nn=actor_hidden_nn,
-        )
-        q_ck = sac_q_checkpoint_path(
-            critic_hidden_nn=critic_hidden_nn,
-            q_index=1,
-        )
-
-        if use_existing_network_checkpoints:
-            load_state_dict_if_present(
-                model=agent.policy,
-                checkpoint_path=actor_ck.file_path,
-            )
-            if load_state_dict_if_present(
-                model=agent.q,
-                checkpoint_path=q_ck.file_path,
-            ):
-                agent.q_target.load_state_dict(agent.q.state_dict())
-
-        env = environ.CartPoleEnvironment(
-            max_episode_length=max_train_episode_length,
-            render_mode="rgb_array",
-        )
-        rep_returns, rep_timesteps = run_sac(
-            agent,
-            env,
-            n_timesteps=n_timesteps,
-            eval_interval=eval_interval,
-            truncation_step=max_train_episode_length,
-            enable_progress_bar=enable_progress_bar,
-            progress_bar_desc=f"SAC Rep {rep_index + 1}/{n_repetitions}",
-            progress_bar_position=rep_index if enable_progress_bar else None,
-            shared_step_counter=shared_step_counter,
-            max_eval_episode_length=max_eval_episode_length,
-            eval_with_env_episode_trials=eval_with_env_episode_trials,
-            n_eval_episodes=n_eval_episodes,
-        )
-
-        if rep_index == 0:
-            save_state_dict_overwrite(
-                model=agent.policy,
-                checkpoint_path=actor_ck.file_path,
-            )
-            save_state_dict_overwrite(
-                model=agent.q,
-                checkpoint_path=q_ck.file_path,
             )
 
     return rep_returns, rep_timesteps
