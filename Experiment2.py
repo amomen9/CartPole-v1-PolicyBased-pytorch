@@ -56,7 +56,6 @@ def experiment():
         "gamma": 0.99,
         "learning_rate": [1e-3],
         "nn_hidden_layer_widths": [[128, 128]],
-        "FULL_EPISODE_UPDATES": [False],          # If True, update Q-values at the end of each episode with the full episode's trajectory. If False, update at each step with the trajectory so far (bootstrapped).
         "exploration_method": "egreedy",
         "epsilons": [0.05],
         "epsilon_start": 0.05,
@@ -76,7 +75,6 @@ def experiment():
             "gamma": [r"$\gamma$: ", True],
             "learning_rate": [r"$\alpha$: ", True],
             "nn_hidden_layer_widths": [r"NN Widths: ", True],
-            "FULL_EPISODE_UPDATES": [r"Full-Ep:", False],
             "exploration_method": [r"Exp Method: ", False],
             "epsilons": [r"$\epsilon$: ", True],
             "epsilon_start": [r"$\epsilon$ Start: ", False],
@@ -117,7 +115,6 @@ def experiment():
         "actor_hidden_nn": [[64, 64]],         # 2D list of NN architectures to sweep
         "critic_lr": [1e-3],                  # critic learning rate(s) to sweep
         "critic_hidden_nn": [[128, 128]],      # critic NN architectures to sweep
-        "FULL_EPISODE_UPDATES": [False],          # If True, update actor and critic at the end of each episode with the full episode's trajectory. If False, update at each step with the trajectory so far (bootstrapped).
         "TN_step": [10],                      # list of n-step returns to sweep (Target Network). Default: [10]. Set to [1] to skip n-step return trials.
         "legend_parameters": {                 # [plot label, show flag]
             "gamma": [r"$\gamma$: ", True],
@@ -126,7 +123,6 @@ def experiment():
             "critic_lr": [r"Critic $\beta$: ", True],
             "critic_hidden_nn": [r"Critic NN: ", True],
             "TN_step": [r"TN Step: ", False],
-            "FULL_EPISODE_UPDATES": [r"Full-Ep:", False],
         },
     }
     # ------------- End AC hyperparameters -----------
@@ -138,7 +134,6 @@ def experiment():
         "actor_hidden_nn": [64, 64],        # list of NN architectures to sweep for policy network
         "critic_lr": [0.01],        # value function learning rate(s) to sweep
         "critic_hidden_nn": [[128, 128]],  # list of NN architectures to sweep for value function network
-        "FULL_EPISODE_UPDATES": [False],          # If True, update actor and critic at the end of each episode with the full episode's trajectory. If False, update at each step with the trajectory so far (bootstrapped).
         "TN_step": [10],                 # list of n-step returns to sweep (Target Network). Default: [10]. Set to [1] to skip n-step return trials.
         "legend_parameters": {          # [plot label, show flag]
             "gamma": [r"$\gamma$: ", True],
@@ -147,7 +142,6 @@ def experiment():
             "actor_hidden_nn": [r"Actor NN: ", True],
             "critic_hidden_nn": [r"Critic NN: ", True],
             "TN_step": [r"TN Step: ", False],
-            "FULL_EPISODE_UPDATES": [r"Full-Ep:", False],
         },
     }
     # ------------- End A2C hyperparameters -----------

@@ -1228,8 +1228,6 @@ def _run_single_repetition(
     clip_eps: float = 0.2,
     n_epochs: int = 10,
     rollout_steps: int = 2048,
-    # Shared: full-episode vs per-step update mode (None = use algorithm default)
-    full_episode_updates: bool | None = None,
 ):
     """Run one training repetition (pickle-safe for ProcessPoolExecutor)."""
 
@@ -1287,7 +1285,6 @@ def _run_single_repetition(
             shared_step_counter=shared_step_counter,
             eval_with_env_episode_trials=eval_with_env_episode_trials,
             n_eval_episodes=n_eval_episodes,
-            full_episode_updates=True if full_episode_updates is None else bool(full_episode_updates),
         )
 
         if rep_index == 0:
@@ -1348,7 +1345,6 @@ def _run_single_repetition(
             shared_step_counter=shared_step_counter,
             eval_with_env_episode_trials=eval_with_env_episode_trials,
             n_eval_episodes=n_eval_episodes,
-            full_episode_updates=True if full_episode_updates is None else bool(full_episode_updates),
         )
 
         if rep_index == 0:

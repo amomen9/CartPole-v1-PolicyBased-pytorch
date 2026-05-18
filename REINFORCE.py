@@ -18,14 +18,6 @@ class REINFORCE_Agent(BaseAgent):
         policy_loss.backward()
         self.actor_optimizer.step()
 
-    def update_step(self, log_prob, reward):
-        """Online REINFORCE step update using the 1-step return (no critic to bootstrap)."""
-        policy_loss = -log_prob * float(reward)
-        self.actor_optimizer.zero_grad()
-        policy_loss.backward()
-        self.actor_optimizer.step()
-
-
 def run_reinforce(
     agent: REINFORCE_Agent,
     env,
@@ -39,7 +31,6 @@ def run_reinforce(
     shared_step_counter=None,
     eval_with_env_episode_trials: bool = True,
     n_eval_episodes: int = 5,
-    full_episode_updates: bool = True,
 ):
     """REINFORCE training loop. Steps through the environment one step at a time.
 
@@ -98,9 +89,6 @@ def run_reinforce(
                 global_step += 1
                 obs = next_obs
 
-                if not full_episode_updates:
-                    agent.update_step(log_prob, reward)
-
                 # Update progress bar every 512 steps (reduces terminal spam)
                 if (global_step - last_progress_update) >= 512 or global_step >= n_timesteps:
                     if pbar is not None:
@@ -126,10 +114,9 @@ def run_reinforce(
 
                 if done or truncated or global_step >= n_timesteps:
                     break
-            # Update policy on the completed episode (only in full-episode mode)
+            # Update policy on the completed episode
             last_episode_return = sum(episode_rewards)
-            if full_episode_updates:
-                agent.update(log_probs=log_probs, rewards=episode_rewards)
+            agent.update(log_probs=log_probs, rewards=episode_rewards)
 
             if pbar is not None:
                 pbar.set_postfix_str(f"episode_reward={last_episode_return:.2f}", refresh=False)

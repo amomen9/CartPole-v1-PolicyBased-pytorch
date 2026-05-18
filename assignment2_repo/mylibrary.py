@@ -307,8 +307,9 @@ def train_dqn(model, optimizer, env, n_env_steps, discount_factor,
                 epsilon = max(epsilon_end_value, epsilon * epsilon_decay_value)
 
             # Reduce terminal spam by updating the progress bar every 512 env steps.
-            if pbar is not None and ((global_step - last_progress_update) >= 512 or global_step == n_env_steps):
-                pbar.update(global_step - last_progress_update)
+            if (global_step - last_progress_update) >= 512 or global_step == n_env_steps:
+                if pbar is not None:
+                    pbar.update(global_step - last_progress_update)
                 if shared_step_counter is not None:
                     shared_step_counter.value = global_step
                 last_progress_update = global_step

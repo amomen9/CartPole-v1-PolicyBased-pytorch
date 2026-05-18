@@ -20,7 +20,7 @@ def experiment():
         # Plotting parameters
         "benchmark_curve": 1,               # Default: 1, choose one: 1 or 2 for the benchmark CSV (BaselineDataCartPole_run1.csv or BaselineDataCartPole_run2.csv).
         "benchmark_name": "Baseline",       # Benchmark name to show in the legend for the benchmark curve. Default: "Baseline".
-        "plot_smoothing_window": [1, 101, 201, 251, 351],  # Use multiple values to plot multiple curves. Default: [1, 51, 101, 201, 251, 301]. Set to [1] to skip smoothing.
+        "plot_smoothing_window": [101, 201, 251],  # Use multiple values to plot multiple curves. Default: [1, 51, 101, 201, 251, 301]. Set to [1] to skip smoothing.
         "curve_confidence_interval": 0.6,   # Curve shading confidence interval. Default: 0.95. Set to 0 to skip CI shading.
         "curve_shaded_area_opacity": 0.06,  # Opacity of the shaded area for confidence intervals. Default: 0.05 (5% opacity).
         "show_curve_plots": True,           # Show learning curve plot at the end of or during the training.
@@ -32,7 +32,7 @@ def experiment():
         "max_train_episode_length": 500, #500        # Episode truncation step. Default: 500.
         "base_seed": 42,                    # Base seed for CartPole environment and agent initialization. Each repetition will use a different seed derived from this base seed (e.g., base_seed + repetition_index).
         # Agent
-        "n_timesteps": 3e5, #1e6,              # Total number of training timesteps. Default: 1000000.
+        "n_timesteps": 1e6, #1e6,              # Total number of training timesteps. Default: 1000000.
         "max_eval_episode_length": 500, #500        # Episode truncation step. Default: 500.
         "eval_interval": 250,
         "eval_with_env_episode_trials": True, # Default: True. Set to False to use the fast proxy from training (last_episode_return) for evaluation instead of running separate greedy environment episode trials via agent.evaluate(). Note: setting to False will speed up training and plotting, but will not provide true evaluation curves. Setting to True will provide true evaluation curves but will significantly increase training time due to the need to run separate evaluation episodes at each eval_interval.
@@ -44,11 +44,11 @@ def experiment():
     # Select which algorithms to include in the training and plotting using included_algorithms.
     # Set value to True to include, False to exclude.
     included_algorithms = {
-        "DQN": False,
+        "DQN": True,
         "REINFORCE": False,
         "AC": False,
-        "A2C": True,
-        "PPO": True,
+        "A2C": False,
+        "PPO": False,
     }
     # Using DQN implementation from the previous assignment (existing in the assignment2_repo directory)
     # ------------- Algorithm: DQN hyperparameters (optimal) ----
@@ -56,7 +56,6 @@ def experiment():
         "gamma": 0.99,
         "learning_rate": [1e-3],
         "nn_hidden_layer_widths": [[128, 128]],
-        "FULL_EPISODE_UPDATES": [False],          # If True, update Q-values at the end of each episode with the full episode's trajectory. If False, update at each step with the trajectory so far (bootstrapped).
         "exploration_method": "egreedy",
         "epsilons": [0.05],
         "epsilon_start": 0.05,
@@ -76,7 +75,6 @@ def experiment():
             "gamma": [r"$\gamma$: ", True],
             "learning_rate": [r"$\alpha$: ", True],
             "nn_hidden_layer_widths": [r"NN Widths: ", True],
-            "FULL_EPISODE_UPDATES": [r"Full-Ep:", False],
             "exploration_method": [r"Exp Method: ", False],
             "epsilons": [r"$\epsilon$: ", True],
             "epsilon_start": [r"$\epsilon$ Start: ", False],
@@ -117,7 +115,6 @@ def experiment():
         "actor_hidden_nn": [[64, 64]],         # 2D list of NN architectures to sweep
         "critic_lr": [1e-3],                  # critic learning rate(s) to sweep
         "critic_hidden_nn": [[128, 128]],      # critic NN architectures to sweep
-        "FULL_EPISODE_UPDATES": [False],          # If True, update actor and critic at the end of each episode with the full episode's trajectory. If False, update at each step with the trajectory so far (bootstrapped).
         "TN_step": [10],                      # list of n-step returns to sweep (Target Network). Default: [10]. Set to [1] to skip n-step return trials.
         "legend_parameters": {                 # [plot label, show flag]
             "gamma": [r"$\gamma$: ", True],
@@ -126,7 +123,6 @@ def experiment():
             "critic_lr": [r"Critic $\beta$: ", True],
             "critic_hidden_nn": [r"Critic NN: ", True],
             "TN_step": [r"TN Step: ", False],
-            "FULL_EPISODE_UPDATES": [r"Full-Ep:", False],
         },
     }
     # ------------- End AC hyperparameters -----------

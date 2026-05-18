@@ -1,12 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Practical for course 'Reinforcement Learning',
-Leiden University, The Netherlands
-By Thomas Moerland
-"""
-
-"""
 Facilitation functions for the experiment pipeline.
 Contains file/Excel utility helpers and algorithm job builders.
 """
@@ -14,488 +8,25 @@ Contains file/Excel utility helpers and algorithm job builders.
 import os
 import shutil
 import time
-import ast
 import glob
 from copy import copy
 from datetime import datetime
 from functools import lru_cache
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from typing import Any, Tuple
+
 import numpy as np
+import matplotlib.pyplot as plt
 from openpyxl import Workbook, load_workbook
 from openpyxl.utils import get_column_letter
-import pandas as pd
-from tqdm import tqdm
-from multiprocessing import Manager
-import matplotlib.pyplot as plt
-import matplotlib.pyplot as visplt
-from scipy.signal import savgol_filter
-from scipy.stats import t as t_dist
 
-
-# Timestamp captured at module import time — represents the start of execution
-# for the current run. Used to suffix plot filenames so all plots from one run
-# share the same timestamp (format: YYYY.MM.DD_HH.MM.SS).
-RUN_TIMESTAMP = datetime.now().strftime("%Y.%m.%d_%H.%M.%S")
-
-
-def _create_step_progress_bar(total, desc, position=None, leave=True):
-    """Create a tqdm progress bar with the shared project formatting."""
-
-    tqdm_kwargs = {
-        "total": total,
-        "desc": desc,
-        "unit": "step",
-        "bar_format": "{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]",
-        "dynamic_ncols": True,
-        "leave": leave,
-    }
-    if position is not None:
-        tqdm_kwargs["position"] = int(position)
-    return tqdm(**tqdm_kwargs)
-
-# Begin Class LearningCurvePlot ##############################################################
-class LearningCurvePlot:
-
-    def __init__(self,title=None):
-        self.fig,self.ax = plt.subplots()
-        self.ax.set_xlabel('Timestep')
-        self.ax.set_ylabel('Episode Return')
-        if title is not None:
-            self.ax.set_title(title)
-
-    def add_curve(self, x, y, label=None, ls="solid", color=None):
-        ''' y: vector of average reward results
-        label: string to appear as label in plot legend '''
-        plot_kwargs = {"ls": ls}
-        if color is not None:
-            plot_kwargs["color"] = color
-        if label is not None:
-            self.ax.plot(x, y, label=label, **plot_kwargs)
-        else:
-            self.ax.plot(x, y, **plot_kwargs)
-
-    def add_shaded_ci(self, x, y_mean, y_std, n, alpha=0.2, fill_opacity=0.15, y_lower_cap=None, y_upper_cap=None, color=None):
-        '''Add a shaded confidence band around the mean curve.
-        alpha controls CI significance (e.g., 0.05 for 95% CI),
-        fill_opacity controls the visual transparency of the shaded area.'''
-        t_crit = t_dist.ppf(1 - alpha / 2, df=max(n - 1, 1))
-        margin = t_crit * y_std / np.sqrt(max(n, 1))
-        y_lower = y_mean - margin
-        y_upper = y_mean + margin
-        if y_lower_cap is not None:
-            y_lower = np.maximum(y_lower, y_lower_cap)
-        if y_upper_cap is not None:
-            y_upper = np.minimum(y_upper, y_upper_cap)
-        if color is None:
-            color = self.ax.get_lines()[-1].get_color()  # match the last plotted line
-        self.ax.fill_between(x, y_lower, y_upper,
-                             alpha=fill_opacity, color=color)
-
-    def set_ylim(self,lower,upper):
-        self.ax.set_ylim([lower,upper])
-
-    def add_hline(self,height,label):
-        self.ax.axhline(height,ls='--',c='k',label=label)
-
-    @staticmethod
-    def _resolve_non_overwriting_path(output_path: str) -> str:
-        """Return output_path if it doesn't exist; otherwise add (1), (2), ... before the extension."""
-        if not os.path.exists(output_path):
-            return output_path
-
-        root, ext = os.path.splitext(output_path)
-        i = 1
-        while True:
-            candidate = f"{root} ({i}){ext}"
-            if not os.path.exists(candidate):
-                return candidate
-            i += 1
-
-    def save(self,name='test.png') -> str:
-        ''' name: string for filename of saved figure.
-
-        If the target filename already exists, saves to an enumerated name:
-        file.png -> file (1).png -> file (2).png -> ...
-        '''
-        self.ax.legend(
-            fontsize=8,
-            handlelength=1.2,
-            handletextpad=0.4,
-            borderpad=0.25,
-            labelspacing=0.25,
-            borderaxespad=0.3,
-        )
-        self.fig.tight_layout()
-
-        output_path = name
-        if not os.path.isabs(name):
-            os.makedirs("plots", exist_ok=True)
-            output_path = os.path.join("plots", os.path.basename(name))
-        else:
-            # Ensure parent folder exists for absolute paths
-            out_dir = os.path.dirname(output_path)
-            if out_dir:
-                os.makedirs(out_dir, exist_ok=True)
-
-        root, ext = os.path.splitext(output_path)
-        output_path = f"{root}_{RUN_TIMESTAMP}{ext}"
-
-        output_path = self._resolve_non_overwriting_path(output_path)
-        self.fig.savefig(output_path,dpi=300)
-        return output_path
-# End Class LearningCurvePlot ##############################################################
-
-
-
-def smooth(y, window, poly=2):
-    '''
-    y: vector to be smoothed
-    window: size of the smoothing window '''
-    return savgol_filter(y,window,poly)
-
-
-def _apply_optional_smoothing(learning_curve, plot_smoothing_window):
-    if plot_smoothing_window is None:
-        return learning_curve
-    max_window = len(learning_curve) if len(learning_curve) % 2 == 1 else len(learning_curve) - 1
-    window = min(int(plot_smoothing_window), max_window)
-    if window >= 3:
-        return smooth(learning_curve, window)
-    return learning_curve
-
-
-def _load_benchmark_curve(
-    benchmark_curve,
-    project_eval_interval,
-    project_n_timesteps,
-    benchmark_eval_interval=250,
-    episode_return_column="Episode_Return",
-):
-    benchmark_files = {
-        1: os.path.join("Baseline data", "BaselineDataCartPole_run1.csv"),
-        2: os.path.join("Baseline data", "BaselineDataCartPole_run2.csv"),
-    }
-    if benchmark_curve not in benchmark_files:
-        raise ValueError("benchmark_curve must be 1 or 2.")
-
-    data = np.genfromtxt(benchmark_files[benchmark_curve], delimiter=",", names=True)
-    if data.dtype.names is None or episode_return_column not in data.dtype.names:
-        raise ValueError(
-            f"Selected benchmark file does not contain requested column '{episode_return_column}'."
-        )
-
-    env_steps = np.atleast_1d(np.asarray(data["env_step"], dtype=np.float32))
-    returns = np.atleast_1d(np.asarray(data[episode_return_column], dtype=np.float32))
-
-    if env_steps.size == 0 or returns.size == 0:
-        raise ValueError("Selected benchmark file has no usable data.")
-
-    valid_rows = np.isfinite(env_steps) & np.isfinite(returns)
-    env_steps = env_steps[valid_rows]
-    returns = returns[valid_rows]
-
-    if env_steps.size == 0:
-        raise ValueError("Selected benchmark file contains only invalid rows.")
-
-    sort_idx = np.argsort(env_steps)
-    env_steps = env_steps[sort_idx]
-    returns = returns[sort_idx]
-
-    if project_eval_interval != benchmark_eval_interval and env_steps.size >= 2:
-        normalized_steps = np.arange(
-            env_steps[0],
-            env_steps[-1] + project_eval_interval,
-            project_eval_interval,
-            dtype=np.float32,
-        )
-        normalized_steps = normalized_steps[normalized_steps <= env_steps[-1]]
-        returns = np.interp(normalized_steps, env_steps, returns).astype(np.float32)
-        env_steps = normalized_steps
-
-    in_horizon = env_steps <= float(project_n_timesteps)
-    if not np.any(in_horizon):
-        print(
-            f"[benchmark] No benchmark points fall within project_n_timesteps={project_n_timesteps}; "
-            "using the full benchmark curve instead."
-        )
-        return env_steps.astype(np.int32), returns
-
-    env_steps = env_steps[in_horizon]
-    returns = returns[in_horizon]
-    return env_steps.astype(np.int32), returns
-
-
-def average_over_repetitions(
-    method,
-    n_repetitions,
-    n_timesteps,
-    eval_interval,
-    max_episode_length,
-    actor_lr,
-    gamma,
-    actor_hidden_nn=np.array([16, 16]),
-    critic_hidden_nn=np.array([64, 64]),
-    critic_lr=0.001,
-    base_seed=42,
-    plot_smoothing_window=None,
-    eval_with_env_episode_trials: bool = False,
-    n_eval_episodes: int = 5,
-    return_raw=False,
-    unused_cpu_cores: int = 0,
-):
-    """Run ``n_repetitions`` of the given method and return (mean, std, timesteps)."""
-
-    from concurrent.futures import ProcessPoolExecutor, as_completed  # noqa: F401
-    from multiprocessing import Manager
-    import time as _time
-
-    # Lazy import to avoid circular import on module load.
-    from Library import _run_single_repetition
-
-    returns_over_repetitions = []
-    timesteps = None
-
-    cpu_count = os.cpu_count() or 1
-    if unused_cpu_cores is None:
-        unused_cpu_cores = 0
-    unused_cpu_cores = int(unused_cpu_cores)
-    if unused_cpu_cores < 0:
-        unused_cpu_cores = 0
-
-    available_cpus = max(1, cpu_count - unused_cpu_cores)
-    parallel_workers = max(1, min(n_repetitions, available_cpus))
-    use_parallel = parallel_workers > 1 and n_repetitions > 1
-
-    if use_parallel:
-        manager = Manager()
-        step_counters = [manager.Value("i", 0) for _ in range(n_repetitions)]
-        try:
-            with ProcessPoolExecutor(max_workers=parallel_workers) as executor:
-                future_to_rep = {}
-                for rep in range(n_repetitions):
-                    run_seed = base_seed + rep
-                    future = executor.submit(
-                        _run_single_repetition,
-                        method=method,
-                        actor_hidden_nn=actor_hidden_nn,
-                        critic_hidden_nn=critic_hidden_nn,
-                        actor_lr=actor_lr,
-                        critic_lr=critic_lr,
-                        gamma=gamma,
-                        max_episode_length=max_episode_length,
-                        n_timesteps=n_timesteps,
-                        eval_interval=eval_interval,
-                        run_seed=run_seed,
-                        rep_index=rep,
-                        n_repetitions=n_repetitions,
-                        enable_progress_bar=False,
-                        shared_step_counter=step_counters[rep],
-                        eval_with_env_episode_trials=eval_with_env_episode_trials,
-                        n_eval_episodes=n_eval_episodes,
-                    )
-                    future_to_rep[future] = rep
-
-                max_visible_bars = min(
-                    n_repetitions,
-                    int(os.environ.get("RL_MAX_TQDM_BARS", "10")),
-                )
-                n_groups = max(1, max_visible_bars)
-
-                group_size = (n_repetitions + n_groups - 1) // n_groups
-
-                groups: list[list[int]] = []
-                for gi in range(n_groups):
-                    start = gi * group_size
-                    end = min((gi + 1) * group_size, n_repetitions)
-                    if start >= end:
-                        break
-                    groups.append(list(range(start, end)))
-
-                rep_to_group: dict[int, int] = {}
-                for gi, group in enumerate(groups):
-                    for rep in group:
-                        rep_to_group[rep] = gi
-
-                pbars = {}
-                for gi, group in enumerate(groups):
-                    rep_list_str = ",".join(str(rep + 1) for rep in group)
-                    pbars[gi] = _create_step_progress_bar(
-                        total=int(n_timesteps) * len(group),
-                        desc=f"{method.upper()} Rep {rep_list_str}/{len(groups)}",
-                        position=gi,
-                        leave=True,
-                    )
-
-                rep_last = [0 for _ in range(n_repetitions)]
-
-                done_futures = set()
-                try:
-                    while len(done_futures) < n_repetitions:
-                        # Update merged/grouped bars as the SUM of rep progress.
-                        # Since each group's total is n_timesteps * (num_reps_in_group),
-                        # progress fills more slowly when multiple reps are merged.
-                        for gi, group in enumerate(groups):
-                            sum_delta = 0
-                            for rep in group:
-                                current = step_counters[rep].value
-                                delta = current - rep_last[rep]
-                                if delta > 0:
-                                    sum_delta += delta
-                                    rep_last[rep] = current
-                            if sum_delta > 0:
-                                pbars[gi].update(sum_delta)
-
-                        for future in list(future_to_rep):
-                            if future not in done_futures and future.done():
-                                done_futures.add(future)
-                                rep = future_to_rep[future]
-                                rep_returns, rep_timesteps = future.result()
-                                returns_over_repetitions.append(
-                                    np.asarray(rep_returns, dtype=np.float32)
-                                )
-                                if timesteps is None:
-                                    timesteps = np.asarray(rep_timesteps, dtype=np.int32)
-
-                                gid = rep_to_group.get(rep)
-                                if gid is not None:
-                                    current = step_counters[rep].value
-                                    delta = current - rep_last[rep]
-                                    if delta > 0:
-                                        pbars[gid].update(delta)
-                                        rep_last[rep] = current
-
-                        _time.sleep(0.25)
-                finally:
-                    for pb in pbars.values():
-                        pb.close()
-                    print()
-        finally:
-            manager.shutdown()
-    else:
-        for rep in range(n_repetitions):
-            run_seed = base_seed + rep
-            rep_returns, rep_timesteps = _run_single_repetition(
-                method=method,
-                actor_hidden_nn=actor_hidden_nn,
-                critic_hidden_nn=critic_hidden_nn,
-                actor_lr=actor_lr,
-                critic_lr=critic_lr,
-                gamma=gamma,
-                max_episode_length=max_episode_length,
-                n_timesteps=n_timesteps,
-                eval_interval=eval_interval,
-                run_seed=run_seed,
-                rep_index=rep,
-                n_repetitions=n_repetitions,
-                enable_progress_bar=True,
-                eval_with_env_episode_trials=eval_with_env_episode_trials,
-                n_eval_episodes=n_eval_episodes,
-            )
-            returns_over_repetitions.append(np.asarray(rep_returns, dtype=np.float32))
-            if timesteps is None:
-                timesteps = np.asarray(rep_timesteps, dtype=np.int32)
-
-    min_length = min(len(rep_returns) for rep_returns in returns_over_repetitions)
-    returns_over_repetitions = [
-        np.asarray(rep_returns[:min_length], dtype=np.float32)
-        for rep_returns in returns_over_repetitions
-    ]
-    if timesteps is not None:
-        timesteps = np.asarray(timesteps[:min_length], dtype=np.int32)
-
-    all_returns = np.array(returns_over_repetitions)
-    learning_curve = np.mean(all_returns, axis=0)
-    learning_curve_std = (
-        np.std(all_returns, axis=0, ddof=1)
-        if all_returns.shape[0] > 1
-        else np.zeros_like(learning_curve)
-    )
-    learning_curve = _apply_optional_smoothing(learning_curve, plot_smoothing_window)
-    learning_curve_std = _apply_optional_smoothing(learning_curve_std, plot_smoothing_window)
-
-    if return_raw:
-        raw_returns = np.asarray(returns_over_repetitions, dtype=np.float32)
-        return learning_curve, learning_curve_std, timesteps, raw_returns
-    return learning_curve, learning_curve_std, timesteps
-
-
-### One suggested simplest policy {eps, 1-eps} is below, however, I implement the one that was mentioned in the assignment instead.
-#def egreedy(Qa_s, eps):
-#    ''' Qa_s: vector of action values for state s
-#        epsilon: exploration parameter '''
-#    if np.random.rand() < eps:
-#        return np.random.randint(0,len(Qa_s)) # Explore action space
-#    else:
-#        return argmax(Qa_s) # Exploit learned values
-
-def egreedy(Qa_s, eps):
-    """
-    Sample one action using epsilon-greedy policy
-    Qa_s: 1D array of Q-values for current state's actions
-    eps: epsilon in the closed boundary [0,1]
-    """
-    n_A = len(Qa_s)     # number of actions
-    greedy_a = argmax(Qa_s)  # tie breaking argmax()
-    # Base probability for all actions, fill probs matrix with the same values (will not sum up to 1 yet)
-    probs = np.full(n_A, eps / n_A, dtype=float)
-    # Greedy action gets the remaining probability mass (1 - eps) plus its share of the exploration probability (eps/n_A)
-    probs[greedy_a] = 1.0 - eps * (n_A - 1) / n_A
-    selected_action = np.random.choice(n_A, p=probs)
-    # Sample action from this distribution
-    return selected_action
-
-
-def argmax(x):
-    ''' Own variant of np.argmax with random tie breaking '''
-    try:
-        return np.random.choice(np.where(x == np.max(x))[0])
-    except:
-        return np.argmax(x)
-
-def linear_anneal(t,T,start,final,percentage):
-    ''' Linear annealing scheduler
-    t: current timestep
-    T: total timesteps
-    start: initial value
-    final: value after percentage*T steps
-    percentage: percentage of T after which annealing finishes
-    '''
-    final_from_T = int(percentage*T)
-    if t > final_from_T:
-        return final
-    else:
-        return final + (start - final) * (final_from_T - t)/final_from_T
-
-################[ Policy_NN Class              ]################
-def softmax(x, temp):   # aka Boltzmann policy (Mentioned in Assignment 1 as Boltzmann in the assignment)
-    ''' Computes the softmax of vector x with temperature parameter 'temp' '''
-    x = x / temp # scale by temperature
-    z = x - max(x) # substract max to prevent overflow of softmax
-    probs = np.exp(z)/np.sum(np.exp(z)) # compute softmax
-    selected_action = np.random.choice(len(x), p=probs) # Sample action from
-    return int(selected_action)
-####################################################################
-
-
-
-if __name__ == '__main__':
-    # Test Learning curve plot
-    # x = np.arange(100)
-    # y = 0.01*x + np.random.rand(100) - 0.4 # generate some learning curve y
-    # LCTest = LearningCurvePlot(title="Test Learning Curve")
-    # LCTest.add_curve(x,y,label='method 1')
-    # LCTest.add_curve(x,smooth(y,window=35),label='method 1 smoothed')
-    # LCTest.save(name='learning_curve_test.png')
-    # import Environment
-    # env = Environment.CartPoleEnvironment(max_episode_length=500, render_mode="rgb_array")
-    # CartPole_plot = CartPoleAgentPlot(env, title="Test CartPole Agent Plot", plot=False)
-    # anim = CartPole_plot.test_episode(env, policy="test_policy")
-    # visplt.show()
-    pass
-
-
-
+from functions import (
+    LearningCurvePlot,
+    smooth,
+    _apply_optional_smoothing,
+    _load_benchmark_curve,
+    average_over_repetitions,
+)
 
 
 # ── File / Excel utilities ────────────────────────────────────────────────────
@@ -592,6 +123,7 @@ def _sheet_hp_text(value: Any) -> str:
         text = value.strip()
         if text.startswith("[") and text.endswith("]"):
             try:
+                import ast
                 parsed = ast.literal_eval(text)
                 return _sheet_hp_text(parsed)
             except Exception:
@@ -612,6 +144,7 @@ def _empty_data_sheets_dir(dir_path):
 
 
 def _save_results_to_excel(dir_path, base_filename, setting_jobs, setting_results):
+    import pandas as pd
     filepath = os.path.join(dir_path, f"{base_filename}.xlsx")
     with pd.ExcelWriter(filepath, engine='openpyxl') as writer:
         for idx, (job, result) in enumerate(zip(setting_jobs, setting_results)):
@@ -632,27 +165,14 @@ def _save_results_to_excel(dir_path, base_filename, setting_jobs, setting_result
     print(f"Saved {len(setting_results)} settings to {filepath}")
 
 
-def _load_results_from_excel(
-    filepath,
-    algo_config: dict[str, Any] | None,
-    formatted_sheets: bool = False,
-    *,
-    global_config: dict[str, Any] | None = None,
-    original_algo_config: dict[str, Any] | None = None,
-):
+def _load_results_from_excel(filepath, algo_config: dict[str, Any] | None, formatted_sheets: bool = False):
     """Load results from an Excel file, validating each sheet's hyperparameters
-    against the current algo config and global_config.
+    against the current algo config.
 
     Workbook layout assumption:
     - Row 1 is the title / merged heading row.
     - Row 2 contains the actual column headers.
     - Data starts on row 3.
-
-    Validation is per-sheet: each sheet must agree with every key in the filtered
-    algo_config and filtered global_config (a missing column on the sheet is
-    treated as a match — lenient back-compat for workbooks written before
-    global_config was persisted per sheet). The ``n_timesteps`` key is the
-    exception, validated with ``>=`` rather than equality.
 
     Returns a tuple (results, mismatches):
         results: list of dicts [{"learning_curve", "learning_curve_std", "timesteps", "curve_label"}, ...]
@@ -660,19 +180,9 @@ def _load_results_from_excel(
                     encountered per parameter across all skipped sheets.
     Sheets that don't match are skipped.
     """
-
-    del original_algo_config  # accepted for caller compatibility; no workbook-level check.
+    import pandas as pd
 
     algo_config = algo_config or {}
-    global_filtered = _meta_filtered_items(global_config, GLOBAL_CONFIG_EXCLUSIONS) if global_config else {}
-
-    running_n_timesteps: int | None = None
-    if global_config is not None:
-        try:
-            running_n_timesteps = int(float(global_config.get(GLOBAL_CONFIG_NTIMESTEPS_KEY)))
-        except (TypeError, ValueError):
-            running_n_timesteps = None
-
     header_row = 1 if formatted_sheets else 0
     try:
         sheets = pd.read_excel(filepath, sheet_name=None, engine="openpyxl", header=header_row)
@@ -683,7 +193,7 @@ def _load_results_from_excel(
         basename = os.path.basename(filepath)
         algo_prefix = os.path.splitext(basename)[0].upper()
         legend: dict[str, tuple[str, bool]] = _resolve_legend_flags(algo_config or {}, warn_on_suppression=False)
-        skip_keys = ALGO_CONFIG_EXCLUSIONS
+        skip_keys = {"legend_parameters", "nn_include_hp_in_legend", "nn_include_lr_in_legend"}
 
         extracted_results = []
         extracted_mismatches = {}
@@ -722,28 +232,6 @@ def _load_results_from_excel(
                         if cfg_key not in extracted_mismatches:
                             extracted_mismatches[cfg_key] = (sheet_val_text, cfg_val)
 
-            if sheet_matched and global_filtered:
-                for gc_key, gc_text in global_filtered.items():
-                    if gc_key not in df.columns:
-                        continue  # lenient back-compat: pre-existing sheets without global_config columns are accepted
-                    sheet_val_text = _sheet_hp_text(_parse_sheet_value(df[gc_key].iloc[0]))
-                    if gc_key == GLOBAL_CONFIG_NTIMESTEPS_KEY:
-                        try:
-                            if int(float(sheet_val_text)) >= int(float(gc_text)):
-                                continue
-                        except (TypeError, ValueError):
-                            pass
-                        sheet_matched = False
-                        tagged = f"global:{gc_key}"
-                        if tagged not in extracted_mismatches:
-                            extracted_mismatches[tagged] = (sheet_val_text, f"{gc_text} (need disk >= running)")
-                        continue
-                    if sheet_val_text != gc_text:
-                        sheet_matched = False
-                        tagged = f"global:{gc_key}"
-                        if tagged not in extracted_mismatches:
-                            extracted_mismatches[tagged] = (sheet_val_text, gc_text)
-
             if not sheet_matched:
                 continue
 
@@ -753,12 +241,6 @@ def _load_results_from_excel(
                 learning_curve_std = df["learning_curve_std"].values.astype(np.float32)
             except Exception:
                 continue
-
-            if running_n_timesteps is not None:
-                mask = timesteps <= running_n_timesteps
-                timesteps = timesteps[mask]
-                learning_curve = learning_curve[mask]
-                learning_curve_std = learning_curve_std[mask]
 
             label_parts = [algo_prefix]
             for legend_key, (legend_label, show) in legend.items():
@@ -772,7 +254,6 @@ def _load_results_from_excel(
                     continue
 
                 legend_label = _format_legend_label(legend_label)
-
                 if isinstance(val, bool):
                     label_parts.append(f"{legend_label}{val}")
                 else:
@@ -827,22 +308,14 @@ def _values_equal(a, b):
     return str(a) == str(b)
 
 
-def _load_all_excel_curves(
-    data_sheets_dir,
-    algo_configs=None,
-    formatted_sheets: bool = False,
-    *,
-    global_config: dict[str, Any] | None = None,
-    original_algo_configs: dict[str, dict[str, Any]] | None = None,
-):
+def _load_all_excel_curves(data_sheets_dir, algo_configs=None, formatted_sheets: bool = False):
     """Load all .xlsx files from data_sheets_dir (non-recursive).
 
     algo_configs: dict mapping algo name (e.g. "REINFORCE", "DQN") to its config dict.
     Each file's algo is inferred from the filename stem, so only files named
     like ``REINFORCE.xlsx`` or ``DQN.xlsx`` are matched.
     Sheets are filtered by HP value matching and labels are built using legend_parameters,
-    both delegated to _load_results_from_excel. When ``global_config`` is supplied
-    each sheet is also validated against the filtered global_config keys.
+    both delegated to _load_results_from_excel.
 
     Returns a list of dicts: [{curve_label, learning_curve, learning_curve_std, timesteps, source_file}, ...]
     """
@@ -852,79 +325,14 @@ def _load_all_excel_curves(
         basename = os.path.basename(filepath)
         algo_prefix = os.path.splitext(basename)[0].upper()
         algo_config = (algo_configs or {}).get(algo_prefix)
-        original_algo_config = (original_algo_configs or {}).get(algo_prefix)
         try:
-            results, _ = _load_results_from_excel(
-                filepath,
-                algo_config,
-                formatted_sheets=formatted_sheets,
-                global_config=global_config,
-                original_algo_config=original_algo_config,
-            )
+            results, _ = _load_results_from_excel(filepath, algo_config, formatted_sheets=formatted_sheets)
         except Exception:
             continue
         for entry in results:
             entry["source_file"] = basename
             all_curves.append(entry)
     return all_curves
-
-
-# ── Per-sheet config validation ───────────────────────────────────────────────
-
-# Keys that must NOT participate in per-sheet matching. Mirrors the
-# user-supplied exclusion list (see Experiment.py global_config / algo_config).
-GLOBAL_CONFIG_EXCLUSIONS = frozenset({
-    "UNUSED_CPU_CORES",
-    "benchmark_curve",
-    "benchmark_name",
-    "plot_smoothing_window",
-    "curve_confidence_interval",
-    "curve_shaded_area_opacity",
-    "curve_plot",
-    "show_curve_plots",
-    "animation_plot",
-    "use_existing_disk_data",
-    "use_existing_disk_trained_networks",
-    "format_sheets",
-    "formatted_sheets",
-    "separate_algorithm_plots",
-    "Environment",
-    "baseline_model",
-    "n_use_trained_model",
-    "action_selection_method",
-    "trained_model_reseed_seed",
-})
-
-ALGO_CONFIG_EXCLUSIONS = frozenset({
-    "legend_parameters",
-    "nn_include_hp_in_legend",
-    "nn_include_lr_in_legend",
-})
-
-# n_timesteps is matched with >= rather than equality (workbook may contain
-# longer training curves than the running project requires).
-GLOBAL_CONFIG_NTIMESTEPS_KEY = "n_timesteps"
-
-
-def _meta_value_text(value: Any) -> str:
-    """Stable string form for a config value persisted to a sheet column."""
-    return _value_to_text(value)
-
-
-def _meta_filtered_items(config: dict[str, Any] | None, exclusions: frozenset) -> dict[str, str]:
-    """Return the ``{key: text}`` mapping for ``config`` after dropping excluded keys.
-
-    Values are normalized to a stable string so writing and reading produce
-    identical comparable representations.
-    """
-    if not config:
-        return {}
-    items: dict[str, str] = {}
-    for key, value in config.items():
-        if str(key) in exclusions:
-            continue
-        items[str(key)] = _meta_value_text(value)
-    return items
 
 
 # ── Per-algorithm filename builder ────────────────────────────────────────────
@@ -1015,21 +423,9 @@ def _resolve_legend_flags(cfg: dict[str, Any], *, warn_on_suppression: bool = Tr
 
 
 def _fmt_legend(v: Any) -> str:
-    """Format numbers for legend display.
-
-    Uses scientific notation when |v| < 0.001 or |v| >= 1000.
-    """
-    if isinstance(v, bool):
-        return str(v)
-    if isinstance(v, (int, float, np.integer, np.floating)):
-        f = float(v)
-        if f != 0.0 and (abs(f) < 1e-3 or abs(f) >= 1e3):
-            mantissa, exp = f"{f:.3e}".split("e")
-            mantissa = mantissa.rstrip("0").rstrip(".")
-            return f"{mantissa}e{int(exp)}"
-        if isinstance(v, (float, np.floating)):
-            return f"{f:.3g}"
-        return str(v)
+    """Format numbers for legend display (keeps decimal point)."""
+    if isinstance(v, float):
+        return f"{v:.3g}"
     return str(v)
 
 
@@ -1042,26 +438,15 @@ def _build_legend_parts(legend: dict[str, LegendEntry], cfg: dict[str, Any]) -> 
         val = cfg.get(key)
         if val is None:
             continue
-
         label = _format_legend_label(label)
-
-        if isinstance(val, (bool, np.bool_)):
-            parts.append(f"{label}{bool(val)}")
+        if isinstance(val, bool):
+            parts.append(f"{label}{val}")
         else:
             parts.append(f"{label}{_format_legend_value(val)}")
     return parts
 
 
 # ── Build setting jobs per algorithm ──────────────────────────────────────────
-
-def _as_list(value):
-    """Wrap a scalar in a single-element list; pass through lists/tuples/arrays."""
-    if isinstance(value, (list, tuple)):
-        return list(value)
-    if isinstance(value, np.ndarray):
-        return value.tolist()
-    return [value]
-
 
 def _parse_pg_config(cfg):
     """Parse policy-gradient config into sweepable arrays (with backward compat)."""
@@ -1092,7 +477,6 @@ def _build_reinforce_jobs(
     eval_with_env_episode_trials: bool,
     n_eval_episodes: int,
 ):
-    """Build REINFORCE training jobs."""
     cfg = algo_config
     gammas, learning_rates, nn_architectures, legend = _parse_pg_config(cfg)
 
@@ -1103,16 +487,9 @@ def _build_reinforce_jobs(
             nn_arch = np.asarray(nn_arch, dtype=np.int32)
             for lr_val in learning_rates:
                 lr_val = float(lr_val)
-
-                legend_cfg = {
-                    **cfg,
-                    "gamma": gamma_val,
-                    "actor_lr": lr_val,
-                    "actor_hidden_nn": nn_arch,
-                }
-                label_parts = ["REINFORCE"] + _build_legend_parts(legend, legend_cfg)
+                iter_cfg = {**cfg, "gamma": gamma_val, "actor_lr": lr_val, "actor_hidden_nn": nn_arch}
+                label_parts = ["REINFORCE"] + _build_legend_parts(legend, iter_cfg)
                 curve_label = ", ".join(label_parts)
-
                 setting_jobs.append({
                     "curve_label": curve_label,
                     "method": "REINFORCE",
@@ -1317,113 +694,6 @@ def _build_a2c_jobs(
     return setting_jobs
 
 
-def _build_ppo_jobs(
-    *,
-    algo_config,
-    n_repetitions,
-    n_timesteps,
-    eval_interval,
-    max_train_episode_length,
-    max_eval_episode_length,
-    base_seed,
-    eval_with_env_episode_trials: bool,
-    n_eval_episodes: int,
-):
-    cfg = algo_config
-    gammas, actor_learning_rates, actor_architectures, legend = _parse_pg_config(cfg)
-    critic_learning_rates = np.atleast_1d(np.asarray(cfg.get("critic_lr", np.array([0.001])), dtype=np.float32))
-    raw_critic_nn = cfg.get("critic_hidden_nn", [[64, 64]])
-    if isinstance(raw_critic_nn, np.ndarray) and raw_critic_nn.ndim == 1:
-        critic_architectures = [raw_critic_nn]
-    elif isinstance(raw_critic_nn, list) and len(raw_critic_nn) > 0 and not isinstance(raw_critic_nn[0], (list, np.ndarray)):
-        critic_architectures = [np.asarray(raw_critic_nn, dtype=np.int32)]
-    else:
-        critic_architectures = [np.asarray(arch, dtype=np.int32) for arch in raw_critic_nn]
-
-    gae_lambdas = np.atleast_1d(np.asarray(cfg.get("gae_lambda", np.array([0.95])), dtype=np.float32))
-    clip_eps_list = np.atleast_1d(np.asarray(cfg.get("clip_eps", np.array([0.2])), dtype=np.float32))
-    n_epochs_list = np.atleast_1d(np.asarray(cfg.get("n_epochs", np.array([10])), dtype=np.int32))
-    rollout_steps_list = np.atleast_1d(np.asarray(cfg.get("rollout_steps", np.array([2048])), dtype=np.int32))
-
-    setting_jobs = []
-    for gamma_val in gammas:
-        gamma_val = float(gamma_val)
-        for actor_nn in actor_architectures:
-            actor_nn = np.asarray(actor_nn, dtype=np.int32)
-            for actor_lr_val in actor_learning_rates:
-                actor_lr_val = float(actor_lr_val)
-                for critic_nn in critic_architectures:
-                    critic_nn = np.asarray(critic_nn, dtype=np.int32)
-                    for critic_lr_val in critic_learning_rates:
-                        critic_lr_val = float(critic_lr_val)
-                        for gae_lambda_val in gae_lambdas:
-                            gae_lambda_val = float(gae_lambda_val)
-                            for clip_eps_val in clip_eps_list:
-                                clip_eps_val = float(clip_eps_val)
-                                for n_epochs_val in n_epochs_list:
-                                    n_epochs_val = int(n_epochs_val)
-                                    for rollout_steps_val in rollout_steps_list:
-                                        rollout_steps_val = int(rollout_steps_val)
-                                        iter_cfg = {
-                                            **cfg,
-                                            "gamma": gamma_val,
-                                            "actor_lr": actor_lr_val,
-                                            "actor_hidden_nn": actor_nn,
-                                            "critic_lr": critic_lr_val,
-                                            "critic_hidden_nn": critic_nn,
-                                            "gae_lambda": gae_lambda_val,
-                                            "clip_eps": clip_eps_val,
-                                            "n_epochs": n_epochs_val,
-                                            "rollout_steps": rollout_steps_val,
-                                        }
-                                        label_parts = ["PPO"] + _build_legend_parts(legend, iter_cfg)
-                                        curve_label = ", ".join(label_parts)
-                                        setting_jobs.append({
-                                            "curve_label": curve_label,
-                                            "method": "ppo",
-                                            "kwargs": dict(
-                                                method="ppo",
-                                                n_repetitions=n_repetitions,
-                                                n_timesteps=n_timesteps,
-                                                eval_interval=eval_interval,
-                                                max_train_episode_length=max_train_episode_length,
-                                                max_eval_episode_length=max_eval_episode_length,
-                                                actor_lr=actor_lr_val,
-                                                critic_lr=critic_lr_val,
-                                                gamma=gamma_val,
-                                                actor_hidden_nn=actor_nn,
-                                                critic_hidden_nn=critic_nn,
-                                                gae_lambda=gae_lambda_val,
-                                                clip_eps=clip_eps_val,
-                                                n_epochs=n_epochs_val,
-                                                rollout_steps=rollout_steps_val,
-                                                base_seed=base_seed,
-                                                eval_with_env_episode_trials=eval_with_env_episode_trials,
-                                                n_eval_episodes=n_eval_episodes,
-                                                plot_smoothing_window=1,
-                                            ),
-                                            "hyperparams": {
-                                                "n_repetitions": n_repetitions,
-                                                "n_timesteps": n_timesteps,
-                                                "eval_interval": eval_interval,
-                                                "max_train_episode_length": max_train_episode_length,
-                                                "max_eval_episode_length": max_eval_episode_length,
-                                                "actor_lr": actor_lr_val,
-                                                "critic_lr": critic_lr_val,
-                                                "gamma": gamma_val,
-                                                "actor_hidden_nn": str(actor_nn.tolist()),
-                                                "critic_hidden_nn": str(critic_nn.tolist()),
-                                                "gae_lambda": gae_lambda_val,
-                                                "clip_eps": clip_eps_val,
-                                                "n_epochs": n_epochs_val,
-                                                "rollout_steps": rollout_steps_val,
-                                                "eval_with_env_episode_trials": eval_with_env_episode_trials,
-                                                "n_eval_episodes": n_eval_episodes,
-                                            },
-                                        })
-    return setting_jobs
-
-
 def _build_dqn_jobs(*, dqn_config, n_repetitions, n_timesteps, eval_interval,
                     max_train_episode_length, max_eval_episode_length, base_seed):
     """Build setting_jobs for DQN using assignment2_repo infrastructure."""
@@ -1623,8 +893,7 @@ def _dqn_job_kwargs_to_trial_common(job_kwargs: dict[str, Any], eval_interval: i
     return trial_common
 
 
-def _run_dqn_one_rep(trial_common: dict[str, Any], run_seed: int, rep_index: int, n_repetitions: int,
-                     shared_step_counter=None):
+def _run_dqn_one_rep(trial_common: dict[str, Any], run_seed: int, rep_index: int, n_repetitions: int):
     """Run one DQN repetition. Pickle-safe for ProcessPoolExecutor."""
     from assignment2_repo.DQN import run_dqn_trial_returns
     return run_dqn_trial_returns(
@@ -1632,36 +901,25 @@ def _run_dqn_one_rep(trial_common: dict[str, Any], run_seed: int, rep_index: int
         trial_run_index=rep_index + 1,
         total_trial_runs=n_repetitions,
         enable_progress_bar=False,
-        shared_step_counter=shared_step_counter,
         **trial_common,
     )
 
 
 def _run_pending_parallel(pending_settings, n_repetitions, n_timesteps, eval_interval,
                           max_train_episode_length, max_eval_episode_length, base_seed,
-                          use_existing_disk_trained_networks: bool,
-    setting_results: list[
-        tuple[np.ndarray, np.ndarray, np.ndarray] | tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]
-        | None
-    ],
-                          unused_cpu_cores: int = 0,
-                          on_setting_complete=None,
-                          poll_callback=None):
+                          setting_results: list[tuple[np.ndarray, np.ndarray, np.ndarray] | None]):
     """Run all pending (setting × rep) tasks in a single flat ProcessPoolExecutor.
 
     pending_settings: list of (global_idx, job)
     Fills setting_results[global_idx] = (lc_mean, lc_std, timesteps) for each entry.
     Progress bars mirror the current per-rep format; a (S{n}) suffix is added when
     more than one setting is running simultaneously.
-
-    on_setting_complete: optional callable(global_idx) invoked from the main
-        process as soon as every repetition of a single setting has finished and
-        its aggregated entry has been written to setting_results.
-    poll_callback: optional callable invoked once per polling tick (after sleep).
-        Used by the caller to pump the matplotlib GUI event loop while
-        per-algo plot windows are being shown non-blocking.
     """
-    from Library import _run_single_repetition
+    from multiprocessing import Manager
+    from concurrent.futures import ProcessPoolExecutor
+    from tqdm import tqdm
+    from functions import _run_single_repetition
+    import time as _time
 
     total_tasks = len(pending_settings) * n_repetitions
     multi = len(pending_settings) > 1
@@ -1669,17 +927,11 @@ def _run_pending_parallel(pending_settings, n_repetitions, n_timesteps, eval_int
     with Manager() as mgr:
         step_counters = {}
         for sp, (_, job) in enumerate(pending_settings):
-            for r in range(n_repetitions):
-                step_counters[(sp, r)] = mgr.Value('i', 0)
+            if job["method"] != "dqn":
+                for r in range(n_repetitions):
+                    step_counters[(sp, r)] = mgr.Value('i', 0)
 
-        cpu_count = os.cpu_count() or 1
-        if unused_cpu_cores is None:
-            unused_cpu_cores = 0
-        unused_cpu_cores = int(unused_cpu_cores)
-        if unused_cpu_cores < 0:
-            unused_cpu_cores = 0
-        available_cpus = max(1, cpu_count - unused_cpu_cores)
-        max_workers = min(total_tasks, available_cpus)
+        max_workers = min(total_tasks, os.cpu_count() or 1)
         with ProcessPoolExecutor(max_workers=max_workers) as executor:
             futures = {}
             for sp, (_, job) in enumerate(pending_settings):
@@ -1695,105 +947,40 @@ def _run_pending_parallel(pending_settings, n_repetitions, n_timesteps, eval_int
                             run_seed=run_seed,
                             rep_index=r,
                             n_repetitions=n_repetitions,
-                            shared_step_counter=step_counters[(sp, r)],
                         )
                     else:
-                            algo_extra_kwargs: dict[str, Any] = {}
-                            # A2C-specific
-                            if "TN_step" in kw:
-                                algo_extra_kwargs["TN_step"] = int(kw["TN_step"])
-                            # PPO-specific
-                            for k in (
-                                "gae_lambda",
-                                "clip_eps",
-                                "n_epochs",
-                                "rollout_steps",
-                            ):
-                                if k in kw:
-                                    algo_extra_kwargs[k] = kw[k]
-                            future = executor.submit(
-                                _run_single_repetition,
-                                method=method,
-                                actor_hidden_nn=kw["actor_hidden_nn"],
-                                critic_hidden_nn=kw.get("critic_hidden_nn", np.array([64, 64])),
-                                actor_lr=kw["actor_lr"],
-                                critic_lr=kw.get("critic_lr", 0.001),
-                                gamma=kw["gamma"],
-                                max_train_episode_length=max_train_episode_length,
-                                max_eval_episode_length=max_eval_episode_length,
-                                n_timesteps=n_timesteps,
-                                eval_interval=eval_interval,
-                                run_seed=run_seed,
-                                rep_index=r,
-                                n_repetitions=n_repetitions,
-                                enable_progress_bar=False,
-                                shared_step_counter=step_counters[(sp, r)],
-                                eval_with_env_episode_trials=bool(kw.get("eval_with_env_episode_trials", False)),
-                                n_eval_episodes=int(kw.get("n_eval_episodes", 5)),
-                                use_existing_disk_trained_networks=use_existing_disk_trained_networks,
-                                **algo_extra_kwargs,
-                            )
+                        future = executor.submit(
+                            _run_single_repetition,
+                            method=method,
+                            actor_hidden_nn=kw["actor_hidden_nn"],
+                            critic_hidden_nn=kw.get("critic_hidden_nn", np.array([64, 64])),
+                            actor_lr=kw["actor_lr"],
+                            critic_lr=kw.get("critic_lr", 0.001),
+                            gamma=kw["gamma"],
+                            max_train_episode_length=max_train_episode_length,
+                            max_eval_episode_length=max_eval_episode_length,
+                            n_timesteps=n_timesteps,
+                            eval_interval=eval_interval,
+                            run_seed=run_seed,
+                            rep_index=r,
+                            n_repetitions=n_repetitions,
+                            enable_progress_bar=False,
+                            shared_step_counter=step_counters[(sp, r)],
+                            eval_with_env_episode_trials=bool(kw.get("eval_with_env_episode_trials", False)),
+                            n_eval_episodes=int(kw.get("n_eval_episodes", 5)),
+                        )
                     futures[future] = (sp, r)
 
-            max_visible_bars = int(os.environ.get("RL_MAX_TQDM_BARS", "10"))
-
-            # Build a stable task list based on which step_counters exist.
-            task_keys: list[tuple[int, int]] = list(step_counters.keys())
-
-            # Create merged/grouped bars so we never exceed max_visible_bars.
-            # When a bar merges k reps, its tqdm total is multiplied by k and we
-            # update by the sum of the merged reps' progress -> it fills slower.
-            total_rep_tasks = len(task_keys)
-            if total_rep_tasks == 0:
-                pbars = {}
-                rep_last: dict[tuple[int, int], int] = {}
-                rep_to_group: dict[tuple[int, int], int] = {}
-                groups: list[list[tuple[int, int]]] = []
-            else:
-                n_groups = max(1, min(max_visible_bars, total_rep_tasks))
-                group_size = (total_rep_tasks + n_groups - 1) // n_groups
-
-                groups = [
-                    task_keys[i * group_size : min((i + 1) * group_size, total_rep_tasks)]
-                    for i in range(n_groups)
-                ]
-                # Drop potential empty trailing groups
-                groups = [g for g in groups if g]
-
-                rep_to_group = {}
-                for gi, group in enumerate(groups):
-                    for key in group:
-                        rep_to_group[key] = gi
-
-                rep_last = {key: 0 for key in task_keys}
-
-                pbars = {}
-                for gi, group in enumerate(groups):
-                    (sp0, _r0) = group[0]
-                    m = pending_settings[sp0][1]["method"].upper()
-
-                    same_sp_and_method = True
-                    sp0_val = group[0][0]
-                    for (sp, _r) in group:
-                        if sp != sp0_val or pending_settings[sp][1]["method"] != pending_settings[sp0_val][1]["method"]:
-                            same_sp_and_method = False
-                            break
-
-                    if same_sp_and_method:
-                        rep_ids = sorted(r + 1 for (_sp, r) in group)
-                        rep_list_str = ",".join(str(x) for x in rep_ids)
-                        suffix = f" (S{sp0_val + 1})" if multi else ""
-                        desc = f"{m} Rep {rep_list_str}/{n_repetitions}{suffix}"
-                    else:
-                        # Fallback: show which (S,Rep) are merged.
-                        entries = ",".join(f"S{sp + 1}R{r + 1}" for (sp, r) in group)
-                        desc = f"{m} Rep {entries} (merged)/{n_repetitions}"
-
-                    pbars[gi] = tqdm(
-                        total=n_timesteps * len(group),
-                        desc=desc,
+            pbars = {}
+            for sp, (_, job) in enumerate(pending_settings):
+                m = job["method"].upper()
+                for r in range(n_repetitions):
+                    suffix = f" (S{sp + 1})" if multi else ""
+                    pbars[(sp, r)] = tqdm(
+                        total=n_timesteps,
+                        desc=f"{m} Rep {r + 1}/{n_repetitions}{suffix}",
                         unit="step",
-                        position=gi,
+                        position=sp * n_repetitions + r,
                         leave=True,
                         dynamic_ncols=True,
                         bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]",
@@ -1801,91 +988,37 @@ def _run_pending_parallel(pending_settings, n_repetitions, n_timesteps, eval_int
 
             rep_results = {}
             done = set()
-            aggregated_settings: set[int] = set()
             try:
                 while len(done) < total_tasks:
-                    # Update merged bars from shared step_counters.
                     for (sp, r), sc in step_counters.items():
-                        pb_gi = rep_to_group.get((sp, r))
-                        if pb_gi is None:
-                            continue
                         cur = sc.value
-                        last = rep_last[(sp, r)]
-                        delta = cur - last
+                        pb = pbars[(sp, r)]
+                        delta = cur - pb.n
                         if delta > 0:
-                            pbars[pb_gi].update(delta)
-                            rep_last[(sp, r)] = cur
-
+                            pb.update(delta)
                     for f in list(futures):
                         if f not in done and f.done():
                             done.add(f)
                             sp, r = futures[f]
-                            try:
-                                rep_results[(sp, r)] = f.result()
-                            except Exception as exc:
-                                if use_existing_disk_trained_networks:
-                                    print(
-                                        "\n[Trial failure detected with use_existing_disk_trained_networks=True]\n"
-                                        "Suggestion: verify that the model architecture hyperparameters\n"
-                                        "(actor_hidden_nn / critic_hidden_nn / TN_step, etc.) match the\n"
-                                        "saved checkpoint signature in Checkpoints/. If they differ,\n"
-                                        "set use_existing_disk_trained_networks=False to resume training.\n"
-                                        f"Error: {exc}\n"
-                                    )
-                                    try:
-                                        input("Press Enter to re-raise the error (no fallback will be applied) ...")
-                                    except Exception:
-                                        pass
-                                raise
-                            # Ensure the merged bar catches up immediately on completion.
-                            pb_gi = rep_to_group.get((sp, r))
-                            if pb_gi is not None:
-                                sc = step_counters.get((sp, r))
-                                if sc is not None:
-                                    cur = sc.value
-                                    last = rep_last[(sp, r)]
-                                    delta = cur - last
-                                    if delta > 0:
-                                        pbars[pb_gi].update(delta)
-                                        rep_last[(sp, r)] = cur
-
-                    # Aggregate any settings whose reps have all finished, and
-                    # notify the caller as soon as each setting's entry is ready.
-                    for sp in range(len(pending_settings)):
-                        if sp in aggregated_settings:
-                            continue
-                        if not all((sp, r) in rep_results for r in range(n_repetitions)):
-                            continue
-                        global_idx_done = pending_settings[sp][0]
-                        returns_list = [
-                            np.asarray(rep_results[(sp, r)][0], dtype=np.float32)
-                            for r in range(n_repetitions)
-                        ]
-                        ts = np.asarray(rep_results[(sp, 0)][1], dtype=np.int32)
-                        all_ret = np.array(returns_list)
-                        lc_mean = np.mean(all_ret, axis=0)
-                        lc_std = (
-                            np.std(all_ret, axis=0, ddof=1)
-                            if len(returns_list) > 1 else np.zeros_like(lc_mean)
-                        )
-                        setting_results[global_idx_done] = (lc_mean, lc_std, ts, all_ret)
-                        aggregated_settings.add(sp)
-                        if on_setting_complete is not None:
-                            try:
-                                on_setting_complete(global_idx_done)
-                            except Exception as cb_exc:
-                                print(f"[on_setting_complete] callback raised: {cb_exc}")
-
-                    time.sleep(0.25)
-                    if poll_callback is not None:
-                        try:
-                            poll_callback()
-                        except Exception as cb_exc:
-                            print(f"[poll_callback] raised: {cb_exc}")
+                            rep_results[(sp, r)] = f.result()
+                            rem = n_timesteps - pbars[(sp, r)].n
+                            if rem > 0:
+                                pbars[(sp, r)].update(rem)
+                    _time.sleep(0.25)
             finally:
                 for pb in pbars.values():
                     pb.close()
                 print()
+
+    for sp, (global_idx, _) in enumerate(pending_settings):
+        returns_list = [np.asarray(rep_results[(sp, r)][0], dtype=np.float32)
+                        for r in range(n_repetitions)]
+        ts = np.asarray(rep_results[(sp, 0)][1], dtype=np.int32)
+        all_ret = np.array(returns_list)
+        lc_mean = np.mean(all_ret, axis=0)
+        lc_std = (np.std(all_ret, axis=0, ddof=1) if len(returns_list) > 1
+                  else np.zeros_like(lc_mean))
+        setting_results[global_idx] = (lc_mean, lc_std, ts)
 
 
 # ── DQN repetitions via assignment2_repo ──────────────────────────────────────────────
@@ -2039,19 +1172,6 @@ def _sheet_signature(sheet_hyperparams: dict[str, Any]) -> tuple[tuple[str, Any]
     return tuple(sorted((str(key), _normalize_for_signature(value)) for key, value in sheet_hyperparams.items()))
 
 
-def _entry_matches_job(entry_hyperparams: dict[str, Any], job_hyperparams: dict[str, Any]) -> bool:
-    """Lenient de-dup: an existing entry matches a job if every key the entry
-    has agrees with the job's corresponding value. Allows entries written before
-    per-sheet global_config storage (a strict subset of today's keys) to still
-    de-dup against jobs that now carry extra global_config keys."""
-    for key, entry_val in entry_hyperparams.items():
-        if key not in job_hyperparams:
-            return False
-        if _normalize_for_signature(entry_val) != _normalize_for_signature(job_hyperparams[key]):
-            return False
-    return True
-
-
 @lru_cache(maxsize=1)
 def _load_template_sheet():
     """Load the sample formatting sheet once and reuse it for all exports."""
@@ -2173,130 +1293,33 @@ def _next_setting_sheet_name(workbook) -> str:
     return f"{SETTING_SHEET_PREFIX}{highest_index + 1:03d}"
 
 
-def _rows_from_result(
-    result: tuple[np.ndarray, np.ndarray, np.ndarray]
-    | tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]
-) -> list[list[Any]]:
-    """Convert a (mean,std,timesteps[,raw_returns]) tuple into row-wise Excel rows.
-
-    If ``raw_returns`` is provided it is expected to have shape:
-        (n_repetitions, n_points)
-
-    Then each row becomes:
-        [timestep, mean, std, rep_1, ..., rep_n]
-    """
-    learning_curve, learning_curve_std, timesteps = result[:3]
-    raw_returns = result[3] if len(result) == 4 else None
-
-    timesteps_arr = np.asarray(timesteps)
-    learning_curve_arr = np.asarray(learning_curve)
-    learning_curve_std_arr = np.asarray(learning_curve_std)
-
-    if raw_returns is None:
-        rows = []
-        for timestep, mean_value, std_value in zip(
-            timesteps_arr, learning_curve_arr, learning_curve_std_arr
-        ):
-            rows.append([timestep, mean_value, std_value])
-        return rows
-
-    raw_returns_arr = np.asarray(raw_returns, dtype=np.float32)
-
-    n_points = min(
-        len(timesteps_arr),
-        len(learning_curve_arr),
-        len(learning_curve_std_arr),
-        raw_returns_arr.shape[1],
-    )
-
+def _rows_from_result(result: tuple[np.ndarray, np.ndarray, np.ndarray]) -> list[list[Any]]:
+    """Convert a result tuple into a row-wise table for Excel writing."""
+    learning_curve, learning_curve_std, timesteps = result
     rows = []
-    for idx in range(n_points):
-        rep_values = raw_returns_arr[:, idx].tolist()
-        rows.append([
-            timesteps_arr[idx],
-            learning_curve_arr[idx],
-            learning_curve_std_arr[idx],
-            *rep_values,
-        ])
+    for timestep, mean_value, std_value in zip(timesteps, learning_curve, learning_curve_std):
+        rows.append([timestep, mean_value, std_value])
     return rows
 
 
 def _build_headers(job_hyperparams: dict[str, Any]) -> list[str]:
     """Build the Excel column headers for a saved setting."""
-    try:
-        n_repetitions = int(job_hyperparams.get("n_repetitions", 0))
-    except (TypeError, ValueError):
-        n_repetitions = 0
-
-    rep_headers = [f"rep_{i + 1}" for i in range(max(0, n_repetitions))]
-
     return [
         "timestep",
         "learning_curve_mean",
         "learning_curve_std",
-        *rep_headers,
         *[str(key) for key in job_hyperparams.keys()],
         "curve_label",
     ]
 
 
-def _build_rows(
-    job_hyperparams: dict[str, Any],
-    curve_label: str,
-    result: tuple[np.ndarray, np.ndarray, np.ndarray]
-    | tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
-) -> list[list[Any]]:
-    """Build the Excel rows for a single setting sheet.
-
-    Writes:
-    - timestep / mean / std for every row
-    - rep_1..rep_n for every row (when ``raw_returns`` is available)
-    - hyperparameters + curve_label ONLY on the first timestep row
-    """
+def _build_rows(job_hyperparams: dict[str, Any], curve_label: str, result: tuple[np.ndarray, np.ndarray, np.ndarray]) -> list[list[Any]]:
+    """Build the Excel rows for a single setting sheet."""
     base_rows = _rows_from_result(result)
-
-    try:
-        n_repetitions = int(job_hyperparams.get("n_repetitions", 0))
-    except (TypeError, ValueError):
-        n_repetitions = 0
-    n_repetitions = max(0, n_repetitions)
-
-    hyperparam_headers = [str(k) for k in job_hyperparams.keys()]
-    hyperparam_values = [_value_to_text(job_hyperparams[h]) for h in hyperparam_headers]
-
+    hyperparam_values = [_value_to_text(value) for value in job_hyperparams.values()]
     rows: list[list[Any]] = []
-    hyperparam_count = len(hyperparam_values)
-
-    for row_index, base_row in enumerate(base_rows):
-        # base_row is either:
-        #  - [timestep, mean, std]
-        #  - [timestep, mean, std, rep_1, ..., rep_n]
-        timestep = base_row[0]
-        mean_value = base_row[1]
-        std_value = base_row[2]
-        rep_values = base_row[3:] if len(base_row) > 3 else []
-
-        if n_repetitions > 0:
-            if len(rep_values) < n_repetitions:
-                rep_values = [None] * (n_repetitions - len(rep_values)) + rep_values
-                rep_values = rep_values[-n_repetitions:]
-            elif len(rep_values) > n_repetitions:
-                rep_values = rep_values[:n_repetitions]
-        else:
-            rep_values = []
-
-        if row_index == 0:
-            rows.append([timestep, mean_value, std_value, *rep_values, *hyperparam_values, curve_label])
-        else:
-            rows.append([
-                timestep,
-                mean_value,
-                std_value,
-                *rep_values,
-                *([None] * hyperparam_count),
-                "",
-            ])
-
+    for timestep, mean_value, std_value in base_rows:
+        rows.append([timestep, mean_value, std_value, *hyperparam_values, curve_label])
     return rows
 
 
@@ -2341,26 +1364,8 @@ def _parse_sheet_entry(worksheet, *, formatted_sheets: bool = False) -> dict[str
     except Exception:
         return None
 
-    rep_headers = [h for h in headers if h.startswith("rep_")]
-    rep_headers_sorted = sorted(
-        rep_headers,
-        key=lambda s: int(s.split("_", 1)[1]) if s.split("_", 1)[1].isdigit() else 10**9,
-    )
-
-    raw_returns = None
-    if rep_headers_sorted:
-        # raw_returns shape: (n_repetitions, n_points)
-        rep_cols = []
-        for h in rep_headers_sorted:
-            col = column_data[h]
-            rep_cols.append([np.nan if v is None else v for v in col])
-        raw_returns = np.asarray(rep_cols, dtype=np.float32)
-
     hyperparams: dict[str, Any] = {}
     for header in headers:
-        # rep_* must never be part of the hyperparameter signature
-        if header.startswith("rep_"):
-            continue
         if header in required or header == "curve_label":
             continue
         values = column_data[header]
@@ -2375,7 +1380,6 @@ def _parse_sheet_entry(worksheet, *, formatted_sheets: bool = False) -> dict[str
         "learning_curve": learning_curve,
         "learning_curve_std": learning_curve_std,
         "timesteps": timesteps,
-        "raw_returns": raw_returns,
         "curve_label": curve_label,
         "hyperparams": hyperparams,
     }
@@ -2426,24 +1430,10 @@ def save_algorithm_workbook(
     setting_jobs: list[dict[str, Any]],
     setting_results: list[tuple[np.ndarray, np.ndarray, np.ndarray] | None],
     format_sheets: bool = False,
-    verbose: bool = True,
-    *,
-    global_config: dict[str, Any] | None = None,
-    algo_config: dict[str, Any] | None = None,
 ) -> str:
-    """Save or append settings into an algorithm workbook.
-
-    Each setting sheet records both the swept algo hyperparameters and the
-    filtered global_config values that were active when the curve was produced,
-    so that future runs can validate each sheet independently of the others in
-    the same workbook.
-    """
-    del algo_config  # accepted for caller compatibility; not used at save time.
-
+    """Save or append settings into an algorithm workbook."""
     os.makedirs(dir_path, exist_ok=True)
     filepath = os.path.join(dir_path, f"{base_filename}.xlsx")
-
-    global_filtered = _meta_filtered_items(global_config, GLOBAL_CONFIG_EXCLUSIONS) if global_config else {}
 
     existing_entries: list[dict[str, Any]] = []
     if os.path.isfile(filepath):
@@ -2452,13 +1442,9 @@ def save_algorithm_workbook(
         except Exception:
             existing_entries = []
 
-    # Back-compat: existing sheets predating per-sheet global_config storage are
-    # migrated by assuming the current global_config values applied to them.
+    existing_signatures: set[tuple[tuple[str, Any], ...]] = set()
     for entry in existing_entries:
-        entry_hp = entry["hyperparams"]
-        for gc_key, gc_text in global_filtered.items():
-            if gc_key not in entry_hp:
-                entry_hp[gc_key] = gc_text
+        existing_signatures.add(_sheet_signature(entry["hyperparams"]))
 
     all_entries = list(existing_entries)
     added_count = 0
@@ -2466,23 +1452,19 @@ def save_algorithm_workbook(
         if result is None:
             continue
 
-        job_hp = dict(job["hyperparams"])
-        for gc_key, gc_text in global_filtered.items():
-            job_hp.setdefault(gc_key, gc_text)
-
-        if any(_entry_matches_job(entry["hyperparams"], job_hp) for entry in all_entries):
+        job_signature = _job_signature(job["hyperparams"])
+        if job_signature in existing_signatures:
             continue
 
-        learning_curve, learning_curve_std, timesteps = result[:3]
-        raw_returns = result[3] if len(result) == 4 else None
+        learning_curve, learning_curve_std, timesteps = result
         all_entries.append({
             "learning_curve": learning_curve,
             "learning_curve_std": learning_curve_std,
             "timesteps": timesteps,
-            "raw_returns": raw_returns,
             "curve_label": job["curve_label"],
-            "hyperparams": job_hp,
+            "hyperparams": job["hyperparams"],
         })
+        existing_signatures.add(job_signature)
         added_count += 1
 
     workbook = Workbook()
@@ -2510,22 +1492,11 @@ def save_algorithm_workbook(
         for index, entry in enumerate(all_entries, start=1):
             worksheet = workbook.create_sheet(title=f"Setting_{index:03d}")
             headers = _build_headers(entry["hyperparams"])
-            raw_returns = entry.get("raw_returns")
-            if raw_returns is None:
-                result_tuple = (
-                    entry["learning_curve"],
-                    entry["learning_curve_std"],
-                    entry["timesteps"],
-                )
-            else:
-                result_tuple = (
-                    entry["learning_curve"],
-                    entry["learning_curve_std"],
-                    entry["timesteps"],
-                    raw_returns,
-                )
-
-            rows = _build_rows(entry["hyperparams"], entry["curve_label"], result_tuple)
+            rows = _build_rows(entry["hyperparams"], entry["curve_label"], (
+                entry["learning_curve"],
+                entry["learning_curve_std"],
+                entry["timesteps"],
+            ))
             if format_sheets:
                 _format_excel(
                     worksheet,
@@ -2538,6 +1509,5 @@ def save_algorithm_workbook(
                 _write_raw_excel_sheet(worksheet, headers, rows)
 
     workbook.save(filepath)
-    if verbose:
-        print(f"Saved {added_count} new setting(s) to {filepath}")
-    return filepath, added_count
+    print(f"Saved {added_count} new setting(s) to {filepath}")
+    return filepath

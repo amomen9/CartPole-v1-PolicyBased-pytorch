@@ -80,33 +80,6 @@ class AC_Agent(BaseAgent):
         critic_loss.backward()
         self.critic_optimizer.step()
 
-    def update_td_step(self, state, log_prob, reward, next_state, done):
-        """One-step bootstrapped (TD(0)) actor-critic update for a single transition."""
-
-        assert self.critic is not None
-        assert self.critic_optimizer is not None
-
-        state_t = torch.as_tensor(state, dtype=torch.float32)
-        next_state_t = torch.as_tensor(next_state, dtype=torch.float32)
-
-        v_s = self.critic(state_t).squeeze()
-        with torch.no_grad():
-            v_s_next = self.critic(next_state_t).squeeze() * (0.0 if done else 1.0)
-            td_target = float(reward) + self.gamma * v_s_next
-
-        td_error = td_target - v_s
-
-        critic_loss = td_error.pow(2)
-        self.critic_optimizer.zero_grad()
-        critic_loss.backward()
-        self.critic_optimizer.step()
-
-        advantage = td_error.detach()
-        actor_loss = -log_prob * advantage
-        self.actor_optimizer.zero_grad()
-        actor_loss.backward()
-        self.actor_optimizer.step()
-
     def update_vectorised(self, states, actions, rewards):
         """
 
@@ -163,7 +136,6 @@ def run_ac(
     max_eval_episode_length=None,
     eval_with_env_episode_trials: bool = True,
     n_eval_episodes: int = 5,
-    full_episode_updates: bool = True,
 ):
     """
     Run one AC training repetition.
@@ -229,10 +201,6 @@ def run_ac(
             log_probs.append(log_prob)
             episode_return += reward
 
-            if not full_episode_updates:
-                "Per-step bootstrapped TD(0) actor-critic update"
-                agent.update_td_step(state, log_prob, reward, next_state, episode_done)
-
             "Update the state"
             state = next_state
 
@@ -269,9 +237,8 @@ def run_ac(
                 last_episode_return = episode_return
                 episode_return = 0
 
-                if full_episode_updates:
-                    "Update the actor and critic networks on the completed episode"
-                    agent.update(states=np.array(states), rewards=np.array(rewards), log_probs=log_probs)
+                "Update the actor and critic networks on the completed episode"
+                agent.update(states=np.array(states), rewards=np.array(rewards), log_probs=log_probs)
 
                 "Reset the rewards and log probs array"
                 rewards = []
