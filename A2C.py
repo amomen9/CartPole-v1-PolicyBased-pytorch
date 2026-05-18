@@ -87,29 +87,6 @@ class A2C_Agent(BaseAgent):
 
         return q_hat
 
-    def update_td_step(self, state, action, log_prob, reward, next_state, done):
-        """One-step bootstrapped (TD(0)) actor-critic update for a single transition."""
-
-        state_t = torch.as_tensor(np.asarray(state), dtype=torch.float32)
-        next_state_t = torch.as_tensor(np.asarray(next_state), dtype=torch.float32)
-
-        v_s = self.value_func(state_t)
-        with torch.no_grad():
-            v_s_next = self.value_func(next_state_t) * (0.0 if done else 1.0)
-            td_target = float(reward) + self.gamma * v_s_next
-
-        advantage = td_target - v_s
-
-        critic_loss = advantage.pow(2)
-        self.opt_critic.zero_grad()
-        critic_loss.backward()
-        self.opt_critic.step()
-
-        actor_loss = -log_prob * advantage.detach()
-        self.opt_actor.zero_grad()
-        actor_loss.backward()
-        self.opt_actor.step()
-
     def update(self, **kwargs):
         """Update policy and value networks from one trajectory."""
 
@@ -222,9 +199,8 @@ def run_a2c(
     progress_bar_position=None,
     shared_step_counter=None,
     max_eval_episode_length=None,
-    eval_with_env_episode_trials: bool = True,
+    eval_with_env_episode_trials: bool = False,
     n_eval_episodes: int = 5,
-    full_episode_updates: bool = True,
 ):
     """A2C training loop with eval-interval return recording.
 
@@ -266,7 +242,7 @@ def run_a2c(
             episode_done = False
 
             for _ in range(truncation_step):
-                action, log_prob = agent.select_action(state)
+                action, _ = agent.select_action(state)
                 next_state, reward, terminated, truncated, _ = env.step(action)
                 episode_done = terminated or truncated
 
@@ -275,9 +251,6 @@ def run_a2c(
                 rewards.append(reward)
                 next_states.append(next_state)
                 dones.append(episode_done)
-
-                if not full_episode_updates:
-                    agent.update_td_step(state, action, log_prob, reward, next_state, episode_done)
 
                 state = next_state
                 global_step += 1
@@ -305,14 +278,13 @@ def run_a2c(
                     break
 
             if states:
-                if full_episode_updates:
-                    agent.update(
-                        states=states,
-                        actions=actions,
-                        rewards=rewards,
-                        next_states=next_states,
-                        dones=dones,
-                    )
+                agent.update(
+                    states=states,
+                    actions=actions,
+                    rewards=rewards,
+                    next_states=next_states,
+                    dones=dones,
+                )
                 last_episode_return = sum(rewards)
                 if pbar is not None:
                     pbar.set_postfix_str(f"episode_reward={last_episode_return:.2f}", refresh=False)

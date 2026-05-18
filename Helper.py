@@ -641,16 +641,18 @@ def _load_results_from_excel(
     original_algo_config: dict[str, Any] | None = None,
 ):
     """Load results from an Excel file, validating each sheet's hyperparameters
-    against the current algo config.
+    against the current algo config and global_config.
 
     Workbook layout assumption:
     - Row 1 is the title / merged heading row.
     - Row 2 contains the actual column headers.
     - Data starts on row 3.
 
-    When ``global_config`` is provided, the workbook-level ``_run_meta`` sheet is
-    also validated against the running global and algo configs (n_timesteps is
-    checked with >= rather than ==). A mismatch invalidates the entire workbook.
+    Validation is per-sheet: each sheet must agree with every key in the filtered
+    algo_config and filtered global_config (a missing column on the sheet is
+    treated as a match — lenient back-compat for workbooks written before
+    global_config was persisted per sheet). The ``n_timesteps`` key is the
+    exception, validated with ``>=`` rather than equality.
 
     Returns a tuple (results, mismatches):
         results: list of dicts [{"learning_curve", "learning_curve_std", "timesteps", "curve_label"}, ...]
@@ -659,27 +661,29 @@ def _load_results_from_excel(
     Sheets that don't match are skipped.
     """
 
-    algo_config = algo_config or {}
+    del original_algo_config  # accepted for caller compatibility; no workbook-level check.
 
+    algo_config = algo_config or {}
+    global_filtered = _meta_filtered_items(global_config, GLOBAL_CONFIG_EXCLUSIONS) if global_config else {}
+
+    running_n_timesteps: int | None = None
     if global_config is not None:
-        stored_meta = _read_run_meta_sheet(filepath)
-        meta_algo_config = original_algo_config if original_algo_config is not None else algo_config
-        meta_ok, meta_mismatches = _validate_run_meta(stored_meta, global_config, meta_algo_config)
-        if not meta_ok:
-            return [], meta_mismatches
+        try:
+            running_n_timesteps = int(float(global_config.get(GLOBAL_CONFIG_NTIMESTEPS_KEY)))
+        except (TypeError, ValueError):
+            running_n_timesteps = None
 
     header_row = 1 if formatted_sheets else 0
     try:
         sheets = pd.read_excel(filepath, sheet_name=None, engine="openpyxl", header=header_row)
     except Exception as exc:
         raise ValueError(f"Failed to read Excel file '{filepath}': {exc}") from exc
-    sheets = {name: df for name, df in sheets.items() if name != RUN_META_SHEET_NAME}
 
     def _extract_matching_results(sheet_map):
         basename = os.path.basename(filepath)
         algo_prefix = os.path.splitext(basename)[0].upper()
         legend: dict[str, tuple[str, bool]] = _resolve_legend_flags(algo_config or {}, warn_on_suppression=False)
-        skip_keys = {"legend_parameters", "nn_include_hp_in_legend", "nn_include_lr_in_legend"}
+        skip_keys = ALGO_CONFIG_EXCLUSIONS
 
         extracted_results = []
         extracted_mismatches = {}
@@ -718,6 +722,28 @@ def _load_results_from_excel(
                         if cfg_key not in extracted_mismatches:
                             extracted_mismatches[cfg_key] = (sheet_val_text, cfg_val)
 
+            if sheet_matched and global_filtered:
+                for gc_key, gc_text in global_filtered.items():
+                    if gc_key not in df.columns:
+                        continue  # lenient back-compat: pre-existing sheets without global_config columns are accepted
+                    sheet_val_text = _sheet_hp_text(_parse_sheet_value(df[gc_key].iloc[0]))
+                    if gc_key == GLOBAL_CONFIG_NTIMESTEPS_KEY:
+                        try:
+                            if int(float(sheet_val_text)) >= int(float(gc_text)):
+                                continue
+                        except (TypeError, ValueError):
+                            pass
+                        sheet_matched = False
+                        tagged = f"global:{gc_key}"
+                        if tagged not in extracted_mismatches:
+                            extracted_mismatches[tagged] = (sheet_val_text, f"{gc_text} (need disk >= running)")
+                        continue
+                    if sheet_val_text != gc_text:
+                        sheet_matched = False
+                        tagged = f"global:{gc_key}"
+                        if tagged not in extracted_mismatches:
+                            extracted_mismatches[tagged] = (sheet_val_text, gc_text)
+
             if not sheet_matched:
                 continue
 
@@ -727,6 +753,12 @@ def _load_results_from_excel(
                 learning_curve_std = df["learning_curve_std"].values.astype(np.float32)
             except Exception:
                 continue
+
+            if running_n_timesteps is not None:
+                mask = timesteps <= running_n_timesteps
+                timesteps = timesteps[mask]
+                learning_curve = learning_curve[mask]
+                learning_curve_std = learning_curve_std[mask]
 
             label_parts = [algo_prefix]
             for legend_key, (legend_label, show) in legend.items():
@@ -780,7 +812,6 @@ def _load_results_from_excel(
             fallback_sheets = pd.read_excel(filepath, sheet_name=None, engine="openpyxl", header=fallback_header)
         except Exception:
             return results, mismatches
-        fallback_sheets = {name: df for name, df in fallback_sheets.items() if name != RUN_META_SHEET_NAME}
         fallback_results, fallback_mismatches = _extract_matching_results(fallback_sheets)
         if fallback_results:
             return fallback_results, fallback_mismatches
@@ -827,7 +858,7 @@ def _load_all_excel_curves(
     like ``REINFORCE.xlsx`` or ``DQN.xlsx`` are matched.
     Sheets are filtered by HP value matching and labels are built using legend_parameters,
     both delegated to _load_results_from_excel. When ``global_config`` is supplied
-    the workbook-level ``_run_meta`` validation is also enforced.
+    each sheet is also validated against the filtered global_config keys.
 
     Returns a list of dicts: [{curve_label, learning_curve, learning_curve_std, timesteps, source_file}, ...]
     """
@@ -854,11 +885,9 @@ def _load_all_excel_curves(
     return all_curves
 
 
-# ── Run-config meta sheet (workbook-level validation) ─────────────────────────
+# ── Per-sheet config validation ───────────────────────────────────────────────
 
-RUN_META_SHEET_NAME = "_run_meta"
-
-# Keys that must NOT participate in workbook-level matching. Mirrors the
+# Keys that must NOT participate in per-sheet matching. Mirrors the
 # user-supplied exclusion list (see Experiment.py global_config / algo_config).
 GLOBAL_CONFIG_EXCLUSIONS = frozenset({
     "UNUSED_CPU_CORES",
@@ -871,8 +900,10 @@ GLOBAL_CONFIG_EXCLUSIONS = frozenset({
     "show_curve_plots",
     "animation_plot",
     "use_existing_disk_data",
+    "use_existing_disk_trained_networks",
     "format_sheets",
     "formatted_sheets",
+    "separate_algorithm_plots",
     "Environment",
     "baseline_model",
     "n_use_trained_model",
@@ -892,15 +923,15 @@ GLOBAL_CONFIG_NTIMESTEPS_KEY = "n_timesteps"
 
 
 def _meta_value_text(value: Any) -> str:
-    """Stable string form for a config value written to / read from the meta sheet."""
+    """Stable string form for a config value persisted to a sheet column."""
     return _value_to_text(value)
 
 
 def _meta_filtered_items(config: dict[str, Any] | None, exclusions: frozenset) -> dict[str, str]:
-    """Return the {key: text} mapping that should appear in the meta sheet for ``config``.
+    """Return the ``{key: text}`` mapping for ``config`` after dropping excluded keys.
 
-    Filters out keys listed in ``exclusions`` and normalizes every value to a stable
-    string so writing and reading produce identical comparable representations.
+    Values are normalized to a stable string so writing and reading produce
+    identical comparable representations.
     """
     if not config:
         return {}
@@ -910,113 +941,6 @@ def _meta_filtered_items(config: dict[str, Any] | None, exclusions: frozenset) -
             continue
         items[str(key)] = _meta_value_text(value)
     return items
-
-
-def _write_run_meta_sheet(
-    workbook,
-    global_config: dict[str, Any] | None,
-    algo_config: dict[str, Any] | None,
-) -> None:
-    """Write (or overwrite) the workbook-level run-config meta sheet."""
-    if RUN_META_SHEET_NAME in workbook.sheetnames:
-        del workbook[RUN_META_SHEET_NAME]
-    worksheet = workbook.create_sheet(title=RUN_META_SHEET_NAME)
-    worksheet.cell(1, 1, "section")
-    worksheet.cell(1, 2, "key")
-    worksheet.cell(1, 3, "value")
-
-    row_index = 2
-    for key, text in sorted(_meta_filtered_items(global_config, GLOBAL_CONFIG_EXCLUSIONS).items()):
-        worksheet.cell(row_index, 1, "global")
-        worksheet.cell(row_index, 2, key)
-        worksheet.cell(row_index, 3, text)
-        row_index += 1
-    for key, text in sorted(_meta_filtered_items(algo_config, ALGO_CONFIG_EXCLUSIONS).items()):
-        worksheet.cell(row_index, 1, "algo")
-        worksheet.cell(row_index, 2, key)
-        worksheet.cell(row_index, 3, text)
-        row_index += 1
-
-    for column_index, header in enumerate(["section", "key", "value"], start=1):
-        worksheet.column_dimensions[get_column_letter(column_index)].width = max(
-            _excel_cell_display_width(header) + 2, 12
-        )
-
-
-def _read_run_meta_sheet(filepath: str) -> dict[str, dict[str, str]] | None:
-    """Read the run-config meta sheet from ``filepath``.
-
-    Returns ``{"global": {...}, "algo": {...}}`` of stored text values, or ``None``
-    if the workbook has no meta sheet.
-    """
-    try:
-        workbook = load_workbook(filepath, read_only=True, data_only=True)
-    except Exception:
-        return None
-    try:
-        if RUN_META_SHEET_NAME not in workbook.sheetnames:
-            return None
-        worksheet = workbook[RUN_META_SHEET_NAME]
-        stored: dict[str, dict[str, str]] = {"global": {}, "algo": {}}
-        for row in worksheet.iter_rows(min_row=2, values_only=True):
-            if not row or len(row) < 3:
-                continue
-            section, key, value = row[0], row[1], row[2]
-            if section is None or key is None:
-                continue
-            section_text = str(section).strip().lower()
-            if section_text not in stored:
-                continue
-            stored[section_text][str(key)] = "" if value is None else str(value)
-        return stored
-    finally:
-        try:
-            workbook.close()
-        except Exception:
-            pass
-
-
-def _validate_run_meta(
-    stored_meta: dict[str, dict[str, str]] | None,
-    current_global_config: dict[str, Any] | None,
-    current_algo_config: dict[str, Any] | None,
-) -> tuple[bool, dict[str, tuple[Any, Any]]]:
-    """Validate ``stored_meta`` against the running global and algo configs.
-
-    Returns ``(ok, mismatches)``. ``mismatches`` maps a tagged key (e.g.
-    ``"global:n_timesteps"``) to ``(sheet_value, config_value)`` for reporting.
-    Returns failure if no meta sheet exists at all.
-    """
-    if stored_meta is None:
-        return False, {"_run_meta": ("<missing>", "<required>")}
-
-    mismatches: dict[str, tuple[Any, Any]] = {}
-
-    current_global_filtered = _meta_filtered_items(current_global_config, GLOBAL_CONFIG_EXCLUSIONS)
-    current_algo_filtered = _meta_filtered_items(current_algo_config, ALGO_CONFIG_EXCLUSIONS)
-
-    stored_global = stored_meta.get("global", {})
-    stored_algo = stored_meta.get("algo", {})
-
-    for key, cfg_text in current_global_filtered.items():
-        sheet_text = stored_global.get(key, "<missing>")
-        if key == GLOBAL_CONFIG_NTIMESTEPS_KEY:
-            try:
-                if int(float(sheet_text)) >= int(float(cfg_text)):
-                    continue
-            except (TypeError, ValueError):
-                pass
-            mismatches[f"global:{key}"] = (sheet_text, f"{cfg_text} (need disk >= running)")
-            continue
-        if sheet_text != cfg_text:
-            mismatches[f"global:{key}"] = (sheet_text, cfg_text)
-
-    for key, cfg_text in current_algo_filtered.items():
-        sheet_text = stored_algo.get(key, "<missing>")
-        if sheet_text != cfg_text:
-            mismatches[f"algo:{key}"] = (sheet_text, cfg_text)
-
-    return len(mismatches) == 0, mismatches
 
 
 # ── Per-algorithm filename builder ────────────────────────────────────────────
@@ -1366,7 +1290,6 @@ def _build_a2c_jobs(
     else:
         critic_architectures = [np.asarray(arch, dtype=np.int32) for arch in raw_critic_nn]
     TN_steps = np.atleast_1d(np.asarray(cfg.get("TN_step", np.array([10])), dtype=np.int32))
-    full_episode_updates_list = [bool(v) for v in _as_list(cfg.get("FULL_EPISODE_UPDATES", [True]))]
 
     setting_jobs = []
     for gamma_val in gammas:
@@ -1381,58 +1304,54 @@ def _build_a2c_jobs(
                         critic_lr_val = float(critic_lr_val)
                         for tn_step in TN_steps:
                             tn_step = int(tn_step)
-                            for feu_val in full_episode_updates_list:
-                                iter_cfg = {
-                                    **cfg,
-                                    "gamma": gamma_val,
+                            iter_cfg = {
+                                **cfg,
+                                "gamma": gamma_val,
+                                "actor_lr": actor_lr_val,
+                                "actor_hidden_nn": actor_nn,
+                                "critic_lr": critic_lr_val,
+                                "critic_hidden_nn": critic_nn,
+                                "TN_step": tn_step,
+                            }
+                            label_parts = ["A2C"] + _build_legend_parts(legend, iter_cfg)
+                            curve_label = ", ".join(label_parts)
+                            setting_jobs.append({
+                                "curve_label": curve_label,
+                                "method": "a2c",
+                                "kwargs": dict(
+                                    method="a2c",
+                                    n_repetitions=n_repetitions,
+                                    n_timesteps=n_timesteps,
+                                    eval_interval=eval_interval,
+                                    max_train_episode_length=max_train_episode_length,
+                                    max_eval_episode_length=max_eval_episode_length,
+                                    actor_lr=actor_lr_val,
+                                    critic_lr=critic_lr_val,
+                                    gamma=gamma_val,
+                                    actor_hidden_nn=actor_nn,
+                                    critic_hidden_nn=critic_nn,
+                                    TN_step=tn_step,
+                                    base_seed=base_seed,
+                                    eval_with_env_episode_trials=eval_with_env_episode_trials,
+                                    n_eval_episodes=n_eval_episodes,
+                                    plot_smoothing_window=1,
+                                ),
+                                "hyperparams": {
+                                    "n_repetitions": n_repetitions,
+                                    "n_timesteps": n_timesteps,
+                                    "eval_interval": eval_interval,
+                                    "max_train_episode_length": max_train_episode_length,
+                                    "max_eval_episode_length": max_eval_episode_length,
                                     "actor_lr": actor_lr_val,
-                                    "actor_hidden_nn": actor_nn,
                                     "critic_lr": critic_lr_val,
-                                    "critic_hidden_nn": critic_nn,
+                                    "gamma": gamma_val,
+                                    "actor_hidden_nn": str(actor_nn.tolist()),
+                                    "critic_hidden_nn": str(critic_nn.tolist()),
                                     "TN_step": tn_step,
-                                    "FULL_EPISODE_UPDATES": feu_val,
-                                }
-                                label_parts = ["A2C"] + _build_legend_parts(legend, iter_cfg)
-                                curve_label = ", ".join(label_parts)
-                                setting_jobs.append({
-                                    "curve_label": curve_label,
-                                    "method": "a2c",
-                                    "kwargs": dict(
-                                        method="a2c",
-                                        n_repetitions=n_repetitions,
-                                        n_timesteps=n_timesteps,
-                                        eval_interval=eval_interval,
-                                        max_train_episode_length=max_train_episode_length,
-                                        max_eval_episode_length=max_eval_episode_length,
-                                        actor_lr=actor_lr_val,
-                                        critic_lr=critic_lr_val,
-                                        gamma=gamma_val,
-                                        actor_hidden_nn=actor_nn,
-                                        critic_hidden_nn=critic_nn,
-                                        TN_step=tn_step,
-                                        base_seed=base_seed,
-                                        eval_with_env_episode_trials=eval_with_env_episode_trials,
-                                        n_eval_episodes=n_eval_episodes,
-                                        full_episode_updates=feu_val,
-                                        plot_smoothing_window=1,
-                                    ),
-                                    "hyperparams": {
-                                        "n_repetitions": n_repetitions,
-                                        "n_timesteps": n_timesteps,
-                                        "eval_interval": eval_interval,
-                                        "max_train_episode_length": max_train_episode_length,
-                                        "max_eval_episode_length": max_eval_episode_length,
-                                        "actor_lr": actor_lr_val,
-                                        "critic_lr": critic_lr_val,
-                                        "gamma": gamma_val,
-                                        "actor_hidden_nn": str(actor_nn.tolist()),
-                                        "critic_hidden_nn": str(critic_nn.tolist()),
-                                        "TN_step": tn_step,
-                                        "eval_with_env_episode_trials": eval_with_env_episode_trials,
-                                        "n_eval_episodes": n_eval_episodes,
-                                        "FULL_EPISODE_UPDATES": feu_val,
-                                    },
-                                })
+                                    "eval_with_env_episode_trials": eval_with_env_episode_trials,
+                                    "n_eval_episodes": n_eval_episodes,
+                                },
+                            })
     return setting_jobs
 
 
@@ -2168,6 +2087,19 @@ def _sheet_signature(sheet_hyperparams: dict[str, Any]) -> tuple[tuple[str, Any]
     return tuple(sorted((str(key), _normalize_for_signature(value)) for key, value in sheet_hyperparams.items()))
 
 
+def _entry_matches_job(entry_hyperparams: dict[str, Any], job_hyperparams: dict[str, Any]) -> bool:
+    """Lenient de-dup: an existing entry matches a job if every key the entry
+    has agrees with the job's corresponding value. Allows entries written before
+    per-sheet global_config storage (a strict subset of today's keys) to still
+    de-dup against jobs that now carry extra global_config keys."""
+    for key, entry_val in entry_hyperparams.items():
+        if key not in job_hyperparams:
+            return False
+        if _normalize_for_signature(entry_val) != _normalize_for_signature(job_hyperparams[key]):
+            return False
+    return True
+
+
 @lru_cache(maxsize=1)
 def _load_template_sheet():
     """Load the sample formatting sheet once and reuse it for all exports."""
@@ -2549,12 +2481,17 @@ def save_algorithm_workbook(
 ) -> str:
     """Save or append settings into an algorithm workbook.
 
-    When ``global_config`` and/or ``algo_config`` are provided the workbook also
-    contains a hidden ``_run_meta`` sheet capturing the values that must match
-    those of any future run that loads this file.
+    Each setting sheet records both the swept algo hyperparameters and the
+    filtered global_config values that were active when the curve was produced,
+    so that future runs can validate each sheet independently of the others in
+    the same workbook.
     """
+    del algo_config  # accepted for caller compatibility; not used at save time.
+
     os.makedirs(dir_path, exist_ok=True)
     filepath = os.path.join(dir_path, f"{base_filename}.xlsx")
+
+    global_filtered = _meta_filtered_items(global_config, GLOBAL_CONFIG_EXCLUSIONS) if global_config else {}
 
     existing_entries: list[dict[str, Any]] = []
     if os.path.isfile(filepath):
@@ -2563,9 +2500,13 @@ def save_algorithm_workbook(
         except Exception:
             existing_entries = []
 
-    existing_signatures: set[tuple[tuple[str, Any], ...]] = set()
+    # Back-compat: existing sheets predating per-sheet global_config storage are
+    # migrated by assuming the current global_config values applied to them.
     for entry in existing_entries:
-        existing_signatures.add(_sheet_signature(entry["hyperparams"]))
+        entry_hp = entry["hyperparams"]
+        for gc_key, gc_text in global_filtered.items():
+            if gc_key not in entry_hp:
+                entry_hp[gc_key] = gc_text
 
     all_entries = list(existing_entries)
     added_count = 0
@@ -2573,8 +2514,11 @@ def save_algorithm_workbook(
         if result is None:
             continue
 
-        job_signature = _job_signature(job["hyperparams"])
-        if job_signature in existing_signatures:
+        job_hp = dict(job["hyperparams"])
+        for gc_key, gc_text in global_filtered.items():
+            job_hp.setdefault(gc_key, gc_text)
+
+        if any(_entry_matches_job(entry["hyperparams"], job_hp) for entry in all_entries):
             continue
 
         learning_curve, learning_curve_std, timesteps = result[:3]
@@ -2585,9 +2529,8 @@ def save_algorithm_workbook(
             "timesteps": timesteps,
             "raw_returns": raw_returns,
             "curve_label": job["curve_label"],
-            "hyperparams": job["hyperparams"],
+            "hyperparams": job_hp,
         })
-        existing_signatures.add(job_signature)
         added_count += 1
 
     workbook = Workbook()
@@ -2641,8 +2584,6 @@ def save_algorithm_workbook(
                 )
             else:
                 _write_raw_excel_sheet(worksheet, headers, rows)
-
-    _write_run_meta_sheet(workbook, global_config, algo_config)
 
     workbook.save(filepath)
     if verbose:

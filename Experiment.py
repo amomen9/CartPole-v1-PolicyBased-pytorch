@@ -32,7 +32,7 @@ def experiment():
         "max_train_episode_length": 500, #500        # Episode truncation step. Default: 500.
         "base_seed": 42,                    # Base seed for CartPole environment and agent initialization. Each repetition will use a different seed derived from this base seed (e.g., base_seed + repetition_index).
         # Agent
-        "n_timesteps": 1e6,              # Total number of training timesteps. Default: 1000000.
+        "n_timesteps": 3e5, #1e6,              # Total number of training timesteps. Default: 1000000.
         "max_eval_episode_length": 500, #500        # Episode truncation step. Default: 500.
         "eval_interval": 250,
         "eval_with_env_episode_trials": True, # Default: True. Set to False to use the fast proxy from training (last_episode_return) for evaluation instead of running separate greedy environment episode trials via agent.evaluate(). Note: setting to False will speed up training and plotting, but will not provide true evaluation curves. Setting to True will provide true evaluation curves but will significantly increase training time due to the need to run separate evaluation episodes at each eval_interval.
@@ -138,7 +138,6 @@ def experiment():
         "actor_hidden_nn": [64, 64],        # list of NN architectures to sweep for policy network
         "critic_lr": [0.01],        # value function learning rate(s) to sweep
         "critic_hidden_nn": [[128, 128]],  # list of NN architectures to sweep for value function network
-        "FULL_EPISODE_UPDATES": [False],          # If True, update actor and critic at the end of each episode with the full episode's trajectory. If False, update at each step with the trajectory so far (bootstrapped).
         "TN_step": [10],                 # list of n-step returns to sweep (Target Network). Default: [10]. Set to [1] to skip n-step return trials.
         "legend_parameters": {          # [plot label, show flag]
             "gamma": [r"$\gamma$: ", True],
@@ -147,7 +146,6 @@ def experiment():
             "actor_hidden_nn": [r"Actor NN: ", True],
             "critic_hidden_nn": [r"Critic NN: ", True],
             "TN_step": [r"TN Step: ", False],
-            "FULL_EPISODE_UPDATES": [r"Full-Ep:", False],
         },
     }
     # ------------- End A2C hyperparameters -----------

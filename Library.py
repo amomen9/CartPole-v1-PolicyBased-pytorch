@@ -1417,7 +1417,6 @@ def _run_single_repetition(
             max_eval_episode_length=max_eval_episode_length,
             eval_with_env_episode_trials=eval_with_env_episode_trials,
             n_eval_episodes=n_eval_episodes,
-            full_episode_updates=True if full_episode_updates is None else bool(full_episode_updates),
         )
 
         if rep_index == 0:
