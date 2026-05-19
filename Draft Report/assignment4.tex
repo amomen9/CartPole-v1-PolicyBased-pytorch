@@ -24,6 +24,7 @@
 
 % If accepted, instead use the following line for the camera-ready submission:
 \usepackage[accepted]{icml2025}
+\setcitestyle{numbers,square}
 
 % For theorems and such
 \usepackage{amsmath}
@@ -51,33 +52,20 @@
 
 % Todonotes is useful during development; simply uncomment the next line
 %    and comment out the line below the next line to turn off comments
-%\usepackage[disable,textsize=tiny]{todonotes}
-\usepackage[textsize=tiny]{todonotes}
+\usepackage[disable,textsize=tiny]{todonotes}
+%\usepackage[textsize=tiny]{todonotes}
 
 
 % The \icmltitle you define below is probably too long as a header.
 % Therefore, a short form for the running title is supplied here:
-\icmltitlerunning{REINFORCE, AC and A2C applied to CartPole}
+\icmltitlerunning{PPO with GAE applied to CartPole}
 
 \begin{document}
 
 \twocolumn[
-\icmltitle{Policy-based Reinforcement Learning methods with critic applied to CartPole}
+\icmltitle{Proximal Policy Optimisation with Generalised Advantage Estimation applied to CartPole}
 
-% It is OKAY to include author information, even for blind
-% submissions: the style file will automatically remove it for you
-% unless you've provided the [accepted] option to the icml2025
-% package.
-
-% List of affiliations: The first argument should be a (short)
-% identifier you will use later to specify author affiliations
-% Academic affiliations should list Department, University, City, Region, Country
-% Industry affiliations should list Company, City, Region, Country
-
-% You can specify symbols, otherwise they are numbered in order.
-% Ideally, you should not use this facility. Affiliations will be numbered
-% in order of appearance and this is the preferred way.
-
+\icmlsetsymbol{equal}{*}
 
 \begin{icmlauthorlist}
 \icmlauthor{Ali Momen (s4993128)}{*}
@@ -87,364 +75,308 @@
 
 \icmlcorrespondingauthor{Ali Momen}{amomen@gmail.com}
 
-% You may provide any keywords that you
-% find helpful for describing your paper; these are used to populate
-% the "keywords" metadata in the PDF but will not be shown in the document
-\icmlkeywords{Machine Learning, ICML}
+
+\icmlkeywords{Reinforcement Learning, PPO, GAE, CartPole, ICML}
 \vskip 0.3in
 ]
 
-% this must go after the closing bracket ] following \twocolumn[ ...
-
-% This command actually creates the footnote in the first column
-% listing the affiliations and the copyright notice.
-% The command takes one argument, which is text to display at the start of the footnote.
-% The \icmlEqualContribution command is standard text for equal contribution.
-% Remove it (just {}) if you do not need this facility.
-
-%\printAffiliationsAndNotice{}  % leave blank if no need to mention equal contribution
-\printAffiliationsAndNotice{} % otherwise use the standard text.
+\printAffiliationsAndNotice{}
 
 \begin{abstract}
-This article focuses on the implementation of state-of-the-art deep policy-based algorithms PPO and SAC which add additional adjustments to the Loss function of  
-policy-based methods of Reinforcement Learning for the CartPole problem. The different methods' performance are compared to each other and to a benchmark solution (baseline) and DQN solution, as well. The implemented methods include first \textbf{REINFORCE}, then attempting to improve its solution by adding some critic to the learning process using \textbf{Actor-Critic} methods \textbf{AC} and \textbf{A2C}.
+This report studies Proximal Policy Optimisation (PPO), a state-of-the-art on-policy actor-critic algorithm, applied to the CartPole environment. We motivate and derive the \textbf{clipped surrogate policy} loss and the value loss, and we relate them to the vanilla policy gradient used in \textbf{REINFORCE}, \textbf{AC} and \textbf{A2C}. We implement the \textbf{PPO-clipped algorithm} strengthened with \textbf{Generalised Advantage Estimation (GAE)}, as well, as our advantage estimator. Then the resulting learning curves are compared against the baseline given in Assignment 2, DQN, AC and A2C and we observe how PPO with GAE performs trying to attain the CartPole optimum  across repetitions of the studied methods.
 \end{abstract}
 
 \section{Introduction}\label{sec:introduction}
 
-For problems that practically cannot be addressed by tabular methods—such as CartPole with continuous observations and discrete actions or robotic movement control—algorithms using function approximation is the only viable option. Function approximations can be used to train $Q$-value approximators and/or policy function approximators. If only $Q$-values are approximated, the action space it discrete or discretized, and the policy estimation is performed through $Q$-values, the algorithm is called Deep Q-learning (DQN). If the policy is estimated directly by training a network estimator, the algorithm is a \textbf{policy-based} algorithm. However, the $Q$-values can also be trained as a means and \textbf{critic} to better adjust and improve the policy training. The \textbf{REINFORCE} algorithm purely trains the policy directly, but \textbf{AC} and \textbf{A2C} algorithms blend in value adjustments. This study is dedicated to the implementation and analysis report of these algorithms, in order to quantify how they compare to each other and how they improve on DQN.
-
-In \autoref{sec:theory} the theory necessary for understanding the methods used in this report will be introduced. In \autoref{sec:experiments} the environment, agent and setup of the experiments is explained. The resulting figures are shown in \autoref{sec:results} and discussed in \autoref{sec:discussion}. We conclude our findings in \autoref{sec:conclusion}.
+In previous assignments we covered the main building blocks of deep reinforcement learning: a \textbf{pure value-based method} (\textbf{DQN}), a \textbf{pure policy-gradient method} (\textbf{REINFORCE}) and two \textbf{hybrid actor-critic methods} (\textbf{AC} and \textbf{A2C}). While these algorithms cleanly illustrate the trade-off between bias and variance in policy-gradient estimation, none of them is state-of-the-art. In particular, vanilla policy-gradient updates suffer from two practical issues: 
+\begin{enumerate}
+    \item each interaction with the environment is used for exactly one gradient step, which is \textbf{sample-inefficient}, 
+    \item Unbounded importance weights produced by larger step sizes destabilise training. 
+\end{enumerate}
+\textbf{Proximal Policy Optimisation} (PPO) addresses both issues by reusing each batch of on-policy data for several gradient epochs (by Sutton \& Barto's definition of off-policy, running off-policy for K batches, but according to the common definition it is on-policy, because it reuses still fresh samples and is not similar to \textbf{Experience Replay} we had before which uses arbitrarily old samples) and by \textbf{clipping} the \textbf{importance sampling ratio} so that the new policy never strays too far from the policy that collected the data.
+In addition to the base PPO algorithm, we also have used \textbf{Generalised Advantage Estimation (GAE)} \cite{schulman2016gae} extension for the \textbf{advantage estimator}. There are other extensions such as adding entropy but are not studied in this report. \autoref{sec:theory} introduces the relevant equations, derives the clipped objective from the policy-gradient objective used in A2C, and presents the algorithm pseudocode. \autoref{sec:experiments} describes the environment and experimental design. The learning curves are reported in \autoref{sec:results} and analysed in \autoref{sec:discussion}. We conclude in \autoref{sec:conclusion}.
 
 \section{Theory}\label{sec:theory}
-\subsection{REINFORCE} %just as a reference, can be removed later
-\vspace{-0.2cm}
-\subsubsection{Vanilla loss}
-\vspace{-0.1cm}
-The term ‘vanilla loss’ is more commonly attributed to the REINFORCE algorithm. When we consider the loss function to be in the simplest form:
-$$L = -\mathbb{E}[\log \pi_{\theta}(a \mid s) \cdot R]$$
-where 
-$$R=G_t=\sum_{k=0}^{\infty} \gamma^k r_{t+k}$$
 
-is the raw Monte-Carlo return. It is the basic version without extra stabilizers or modifications, such as clipping as in PPO, trust-region constraints as in TRPO or penalties, entropy bonuses,
-and sophisticated off-policy corrections. 
-It was introduced to optimize a policy \textbf{directly}, handle \textbf{continuous action spaces} naturally, and avoid needing to differentiate through the environment.
-\vspace{-0.2cm}
-\subsubsection{Algorithm}
-\vspace{-0.1cm}
-The algorithm for the plain REINFORCE approach is shown in \autoref{alg:REINFORCE}. We have multiple full-episodes (in Monte-Carlo manner) that we use to train our estimation function with. For CartPole, we have to sample episodes that end with falling of the pole (trespassing maximum deviation from a vertical position), and we feed the system with an episode, one at a loop iteration to adjust the training via gradient ascend/descend method. The learning rate $\alpha$ is used to regulate the policy update. To find the best policy the parameters $\theta$ must be updated such that the return is maximised. 
-% \todo{Include derivation of vanilla loss}
+\subsection{From policy gradient to PPO}\label{sec:theory:pg}
 
+A stochastic policy $\pi_\theta(a|s)$ assigns a probability to each action $a$ in state $s$ given parameters $\theta\in\mathbb{R}^{d}$. The objective is the expected discounted return $J(\theta)=\mathbb{E}_{\tau\sim\pi_\theta}\!\left[\sum_{t=0}^{H-1}\gamma^t r_t\right]$ where $\gamma\in[0,1]$ is the discount factor and $\tau=\{s_0,a_0,r_0,\dots,s_N\}$ is a trajectory of $N$ sampled from $\pi_\theta$. The policy-gradient theorem expresses its gradient as
+\begin{equation}
+    \nabla_\theta J(\theta) = \mathbb{E}_{\tau\sim\pi_\theta}\!\left[\sum_{t=0}^{N-1} \hat A_t \nabla_\theta \log\pi_\theta(a_t|s_t)\right],
+    \label{eq:pg}
+\end{equation}
+where $\hat A_t$ is an advantage estimator of action $a_t$ in state $s_t$. REINFORCE uses the Monte-Carlo return $\hat A_t=\hat Q(s_t,a_t)$; AC additionally subtracts a baseline; A2C uses the $n$-step advantage $\hat A_n(s_t,a_t)=\hat Q_n(s_t,a_t)-V_\varphi(s_t)$ where $V_\varphi$ is the critic estimated by parameters $\varphi$.
+
+PPO retains \cref{eq:pg} but does \emph{not} apply the resulting update in a single gradient step. Instead, a batch of on-policy transitions is reused for $K$ epochs (rewarding us with more sampling efficiency). Because the policy changes between epochs, the data are off-policy with respect to $\pi_\theta$. PPO compensates with an importance \textbf{ratio}
+\begin{equation}
+    r_t(\theta) = \frac{\pi_\theta(a_t|s_t)}{\pi_{\theta_{\mathrm{old}}}(a_t|s_t)},
+    \label{eq:ratio}
+\end{equation}
+where $\theta_{\mathrm{old}}$ are the parameters at the start of the update. Replacing $\nabla_\theta\log\pi_\theta(a_t|s_t)$ by $\nabla_\theta r_t(\theta)$ gives the linearised surrogate (importance sampling correction)
+\begin{equation}
+    L^{\mathrm{CPI}}(\theta) = \mathbb{E}_t\!\left[r_t(\theta)\hat A_t\right].
+    \label{eq:cpi}
+\end{equation}
+A large $r_t(\theta)$ together with a positive $\hat A_t$ can cause arbitrarily large policy updates and thus instability. PPO replaces $L^{\mathrm{CPI}}$ by the pessimistic clipped surrogate
+\begin{equation}
+    \!L^{\mathrm{CLIP}}\!(\theta)\! =\! \mathbb{E}_t\!\left[\min\!\big(r_t(\theta)\hat A_t,\,\mathrm{clip}(r_t(\theta),1\!-\!\epsilon,1\!+\!\epsilon)\hat A_t\big)\right]\!\!,
+    \label{eq:clip}
+\end{equation}
+where $\epsilon\in(0,1)$ is the clipping range. The $\min$ ensures that the gradient vanishes (is clipped) once the ratio leaves $[1-\epsilon,1+\epsilon]$ in the direction that would otherwise improve the surrogate, so the new policy is bound to stay within a small neighbourhood of $\pi_{\theta_{\mathrm{old}}}$. The actor parameters are updated by gradient ascent (or descent) on \cref{eq:clip}.
+
+The expectations in \cref{eq:cpi}--\cref{eq:clip} are estimated from a fixed-length \emph{rollout buffer} of $T$ on-policy transitions $\{(s_t,a_t,r_t)\}_{t=0}^{T-1}$ collected by $\pi_{\theta_{\mathrm{old}}}$ before each update; the buffer may span several episodes when an episode is shorter than $T$, or be \textbf{truncated} mid-episode when it is longer. The rollout length $T$ (written in the code as rollout\_steps) is a hyperparameter and trades two opposing effects: larger $T$ lowers the variance of the empirical advantages and of the ratio statistics (bias favor), but it also lets the policy drift further from $\pi_{\theta_{\mathrm{old}}}$ over the $K$ epochs of updates, increasing the importance-sampling bias that the clipping in \cref{eq:clip} must absorb.
+
+The number of epochs $K$ is what makes the clipping in \cref{eq:clip} effective: At $K=1$ a single gradient step keeps $r_t(\theta)$ inside $[1-\epsilon,1+\epsilon]$, leaving the $\min$ and $\mathrm{clip}$ in \cref{eq:clip} as ineffective, so the surrogate is in expectation \cref{eq:cpi} and PPO degenerates to A2C-with-GAE on a fixed rollout. Choosing $K>1$ therefore trades sample efficiency against the divergence between $\pi_\theta$ and $\pi_{\theta_{\mathrm{old}}}$: each additional epoch extracts more gradient signal from the same $T$ transitions, but it also pushes more samples to the clip boundary where their gradient vanishes, so for sufficiently large $K$ the policy stops improving even though gradient steps are still being taken.
+
+The critic $V_\varphi$ is trained to predict the bootstrapped return $\hat R_t = \hat A_t + V_\varphi(s_t)$ used inside the advantage. The value loss is
+\begin{equation}
+    L^{V}(\varphi) = \mathbb{E}_t\!\left[\big(V_\varphi(s_t) - \hat R_t\big)^{2}\right].
+    \label{eq:vloss}
+\end{equation}
+Actor and critic are optimised independently with learning rates $\alpha$ and $\beta$ (actor\_lr critic\_lr in the code).
+
+\subsection{Generalised Advantage Estimation}\label{sec:theory:gae}
+
+A2C estimates the advantage at depth $n$ as $\hat A_n(s_t,a_t)=\hat Q_n(s_t,a_t)-V_\varphi(s_t)$. The choice of $n$ trades \textbf{bias} against \textbf{variance}: small $n$ is low-variance (like \textbf{TD(0)} that we had) but \textbf{high-bias}, large $n$ is the \textbf{converse}. GAE \cite{schulman2016gae} interpolates between all depths with a single hyperparameter $\lambda\in[0,1]$. With the TD-residual $\delta_t = r_t + \gamma V_\varphi(s_{t+1}) - V_\varphi(s_t)$, the GAE advantage is the exponentially-weighted sum (geometric sum)
+{\setlength{\abovedisplayskip}{6pt}%
+\setlength{\belowdisplayskip}{15pt}%
+\setlength{\abovedisplayshortskip}{6pt}%
+\setlength{\belowdisplayshortskip}{15pt}%
+\begin{equation}
+\hat A_t^{\mathrm{GAE}(\gamma,\lambda)} = \sum_{l=0}^{\infty} (\gamma\lambda)^{l}\,\delta_{t+l}.
+\label{eq:gae}
+\end{equation}}
+$\lambda=0$ reduces to the one-step TD(0) advantage; $\lambda=1$ reduces to the Monte-Carlo advantage as used in AC. We use this estimator as $\hat A_t$ in \cref{eq:clip} and the corresponding return $\hat R_t$ in \cref{eq:vloss}.
+
+\subsection{Algorithm and relation to AC/A2C}\label{sec:theory:alg}
+
+\autoref{alg:PPO} collects the components above. Compared to A2C (\autoref{alg:A2C-ref}), the structural differences are (i) PPO collects a fixed rollout of $T$ steps that may span several episodes before updating, whereas A2C updates per episode (or per $n$-step) \textbf{once}; (ii) PPO uses GAE (in my report) \cref{eq:gae} rather than an $n$-step advantage; (iii) PPO performs $K$ full-batch gradient passes over the same rollout, replacing the unbounded log-probability gradient by the clipped ratio surrogate \cref{eq:clip}. These three changes turn the on-policy actor-critic update into a sample-efficient, stable update at modest implementation cost.
+
+\begingroup
+\setlength{\intextsep}{30pt}
+\setlength{\textfloatsep}{0pt}
 \begin{algorithm}[H]
-    \caption{REINFORCE (Monte Carlo Policy Gradient)}
+    \caption{PPO-clipped with GAE}
     \begin{algorithmic}
-        \STATE \textbf{Input:} policy network $\pi_\theta(a \mid s)$, number of episodes $M$,
-        learning rate $\alpha$, discount $\gamma$
-        \STATE \textbf{Initialise:} Randomly initialise $\theta$
-        \FOR{$i \in 1, \ldots, M$}
-        \STATE Sample trace $\tau = \{s_0, a_0, r_0, s_1, \ldots, s_T\}$
-        \FOR{$t \in 0, \ldots, T - 1$}
-        \STATE $\hat{Q}(s_t,a_t)= \sum_{k=0}^{T-t-1} \gamma^k r_{t+k}$
-        \ENDFOR
-        \STATE $\theta \leftarrow \theta + \alpha \cdot \sum_t \hat{Q}(s_t,a_t) \cdot \nabla_\theta \log[\pi_\theta(a_t \mid s_t)]$
-        \ENDFOR
-    \end{algorithmic}
-    \label{alg:REINFORCE}
-\end{algorithm}
-
-\subsection{AC} %just as a reference, can be removed later
-\vspace{-0.1cm}
-The REINFORCE algorithm can be expanded by introducing a neural network for the value function $V_\varphi(s)$ that needs to be estimated using the same Monte-Carlo estimation. The reason for using a value function network $V_\varphi(s)$ instead of a state-action value network $Q_\varphi(s)$ is mostly simplicity and this helps the code be similar to the code for the A2C algorithm (which will be explained later). The policy and value networks are referred to as the actor and the critic respectively. Using this actor-critic (AC) approach utilises the low-bias aspect from REINFORCE due to the random action selection and reduces REINFORCE's high-variance by introducing the critic \cite{RL_book}.
-
-Before, the DQN algorithm was applied to the CartPole environment. This off-policy algorithm used the $\max_{a'}Q(s',a')$ operation to help determine Bellman target that is used in the loss that needed to be minimised. This same loss cannot be used for the AC algorithm however. For this algorithm actions are chosen based on the probability assigned to them by the current policy $\pi_\theta$. The AC algorithm aims to approximate the value function under the current stochastic policy, not under the optimal policy, which is what the DQN algorithm does. The loss function that is now used to update the actor network weights is
-
-\vspace{-0.4cm}
-\begin{equation*}
-    L(\theta) = -\sum_t \hat{Q}(s_t,a_t) \log[\pi_\theta(a_t|s_t)]
-    \vspace{-0.4cm}
-\end{equation*}
-
-Where $\hat{Q}(s_t,a_t)$ is the Monte-Carlo estimate for $Q^{\pi_\theta}(s_t,a_t)$. The loss function that is used to update the critic network weights is
-\vspace{-0.1cm}
-\begin{equation*}
-    L(\varphi) = \sum_t (\hat{Q}(s_t,a_t) - V_\varphi(s_t))^2
-    \vspace{-0.2cm}
-\end{equation*}
-Using $V_\varphi(s)$ instead of $Q_\varphi(s,a)$ might seem unintuitive. However, since the two are related via
-\vspace{-0.1cm}
-\begin{equation*}
-V^{\pi_\theta}(s)=\mathds{E}_{a\sim\pi_\theta}[Q^{\pi_\theta}(s,a)]
-\vspace{-0.1cm}
-\end{equation*}
-using $Q_\varphi(s,a)$ instead would result in approximately the same quantity being minimised. This is only the case since the loss is calculated over many episodes. The pseudocode for this algorithm is shown in \autoref{alg:AC}.
-\vspace{-0.2cm}
-\begin{algorithm}[H]
-    \caption{Actor Critic (AC) algorithm}
-    \begin{algorithmic}
-        \STATE \textbf{Input:} policy network $\pi_\theta(a|s)$ (actor), value network $V_\varphi(s)$ (critic), number of episodes $M$, actor learning rate $\alpha$, critic learning rate $\beta$ and discount factor $\gamma$
-        \STATE \textbf{Initialise:} Randomly initialise $\theta$ and $\varphi$
-        \FOR{$i\in 1,...,M$}
-        \STATE Sample trace $\tau=\{s_0,a_0,r_0,s_1,...,s_T\}$
-        \FOR{$t \in 0,...,T-1$}
-        \STATE $\hat{Q}(s_t,a_t)=\sum_{k=0}^{T-t-1} \gamma^k\cdot r_{t+k}$
-        \ENDFOR
-        \STATE $\theta\leftarrow\theta+\alpha\cdot\sum_t \hat{Q}(s_t,a_t) \cdot \nabla_\theta \log[\pi_\theta(a_t|s_t)]$
-        \STATE $\varphi \leftarrow \varphi - \beta \cdot \sum_t (\hat{Q}(s_t,a_t) - V_\varphi(s_t))^2$
-        \ENDFOR
-    \end{algorithmic}
-    \label{alg:AC}
-\end{algorithm}
-
-\subsection{A2C} %just as a reference, can be removed later
-
-The Actor-Critic (AC) approach described above uses a full Monte-Carlo return, taking all the rewards into account until the end of an episode. In contrast to AC, Advantage Actor-Critic (A2C) computes the $n$-step target. It sums over $n$ rewards and then bootstraps using the critic. This is also the reason why the AC algorithm doesn't include the estimation depth term used in determining $\hat{Q}(s_t,a_t)$. By calculating the Monte-Carlo target, instead of an $n$-step target, the value of $V_\varphi(s_{t+n})$ equals zero, since $s_{t+n}$ is the terminal state.
-
-Furthermore, while AC updates the actor directly with the target $\hat{Q}$, A2C subtracts the baseline (the value function) to compute the advantage. The advantage represents the value of taking a specific action in a certain state relative to the value of that state, thereby isolating the contribution of the action from the overall quality of the state. This advantage is then used to update the actor, which reduces the variance of the policy gradient updates. The full algorithm for A2C is showed in \autoref{alg:A2C}
-
-
-\begin{algorithm}[H]
-    \caption{Advantage Actor Critic (A2C) algorithm}
-    \begin{algorithmic}
-        \STATE \textbf{Input:} policy network $\pi_\theta(a|s)$ (actor), value network $V_\varphi(s)$ (critic), number of episodes $M$, estimation depth $\tilde{n}$, actor learning rate $\alpha$ and critic learning rate $\beta$
-        \STATE \textbf{Initialise:} Randomly initialise $\theta$ and $\varphi$
+        \STATE \textbf{Input:} policy $\pi_\theta$ (actor), value $V_\varphi$ (critic), rollout length $T$, clip $\epsilon$, epochs $K$, GAE $\lambda$, discount $\gamma$, learning rates $\alpha,\beta$
+        \STATE \textbf{Initialise:} $\theta,\varphi$ at random
         \WHILE{not converged}
-        \FOR{$i\in 1,...,M$}
-        \STATE Sample trace $\tau=\{s_0,a_0,r_0,s_1,...,s_T\}$
-        \FOR{$t \in 0,...,T-1$}
-        \STATE $\hat{Q}_n(s_t,a_t)=\sum_{k=0}^{n-1} \gamma^k\cdot r_{t+k}+\gamma^{\tilde{n}}\cdot V_\varphi(s_{t+n})$
-        \STATE $\hat{A}_n(s_t,a_t)=\hat{Q}_n(s_t,a_t)-V_\varphi(s_t))$
-        \ENDFOR
-        \STATE $\theta\leftarrow\theta+\alpha\cdot\sum_t \hat{A}_n(s_t,a_t) \cdot \nabla_\theta \log[\pi_\theta(a_t|s_t)]$
-        \STATE $\varphi \leftarrow \varphi - \beta \cdot \sum_t (\hat{A}_n(s_t,a_t))^2$
-        \ENDFOR
+            \STATE Collect rollout $\{(s_t,a_t,r_t,\log\pi_{\theta_{\mathrm{old}}}(a_t|s_t),V_\varphi(s_t))\}_{t=0}^{T-1}$ with $\pi_{\theta_{\mathrm{old}}}=\pi_\theta$
+            \STATE Compute $\hat A_t^{\mathrm{GAE}}$ via \cref{eq:gae} and $\hat R_t=\hat A_t+V_\varphi(s_t)$
+            \FOR{$k=1,\ldots,K$ epochs}
+                \STATE $\theta\!\leftarrow\!\theta\!+\!\alpha\nabla_\theta L^{\mathrm{CLIP}}$, $\varphi\!\leftarrow\!\varphi\!-\!\beta\nabla_\varphi L^{V}$
+            \ENDFOR
         \ENDWHILE
     \end{algorithmic}
-    \label{alg:A2C}
+    \label{alg:PPO}
 \end{algorithm}
+\endgroup
+
+For comparison, the A2C update we used in Assignment 3 is reproduced below.
+\begingroup
+\setlength{\intextsep}{15pt}
+\setlength{\textfloatsep}{0pt}
+\begin{algorithm}[H]
+    \caption{Advantage Actor Critic (A2C); reproduced from Assignment 3}
+    \begin{algorithmic}
+        \STATE \textbf{Input:} actor $\pi_\theta$, critic $V_\varphi$, episodes $M$, depth $n$, learning rates $\alpha,\beta$
+        \STATE \textbf{Initialise:} $\theta,\varphi$ at random
+        \FOR{$i=1,\ldots,M$}
+            \STATE Sample trace $\tau=\{s_0,a_0,r_0,\ldots,s_T\}$
+            \FOR{$t=0,\ldots,T-1$}
+                \STATE $\hat Q_n(s_t,a_t)=\sum_{k=0}^{n-1}\gamma^k r_{t+k}+\gamma^{n}V_\varphi(s_{t+n})$
+                \STATE $\hat A_n(s_t,a_t)=\hat Q_n(s_t,a_t)-V_\varphi(s_t)$
+            \ENDFOR
+            \STATE $\theta\!\leftarrow\!\theta+\alpha\sum_t \hat A_n(s_t,a_t)\nabla_\theta\log\pi_\theta(a_t|s_t)$
+            \STATE $\varphi\!\leftarrow\!\varphi-\beta\sum_t (\hat A_n(s_t,a_t))^{2}$
+        \ENDFOR
+    \end{algorithmic}
+    \label{alg:A2C-ref}
+\end{algorithm}
+\endgroup
 
 \section{Experiments}\label{sec:experiments}
 
-In order to test different algorithms, the CartPole environment from the open-source Python library Gymnasium \cite{Towers2024} is used. Gymnasium provides a standardized Application Programming Interface (API) for developing and testing different RL algorithms and includes several physics simulation environments. The CartPole environment is two-dimensional and consists of a pole placed vertically on a cart with a passive joint. The cart has the ability to move sideways along a frictionless track. The pole acts like a pendulum, with the goal of balancing it for as long as possible by applying forces in the left and right direction onto the cart. 
+\subsection{Environment:}\label{sec:experiments:env}
 
-The application of the left and right forces are the two actions that can be taken in the environment and together form the action space. The observation space consists of four observables: The cart position, the cart velocity, the pole angle and the pole angular velocity. An episode is terminated if the angle of the pole is more than $12^{\circ}$ or if the position of the cart leaves the $(-2.4, 2.4)$ range. A reward of 1 is given for every timestep that the pole remains upright, with a threshold of 500, due to a maximum of 500 timesteps per episode.
+We use the CartPole-v1 environment again.
 
-Each algorithm is run for one million timesteps. To get a reliable estimate of the performance, each of the learning curves are averaged over five repetitions. Furthermore, their Gaussian standard deviation is calculated to account for the uncertainty margin.
+\subsection{Implementation and engineering tricks}\label{sec:experiments:impl}
 
-\vspace{-0.2cm}
-\subsection{REINFORCE} %just as a reference, can be removed later
-\vspace{-0.1cm}
+We implement PPO-clipped following \autoref{alg:PPO}. The actor and critic are independent fully-connected networks. The implementation contains exactly one addition beyond the basic PPO policy-gradient method, and it is part of the algorithm \autoref{alg:PPO}:
 
-The returns for the REINFORCE algorithm are collected by evaluating its performance every 250 timesteps. Then the curve has been produced. For every hyperparameter, multiple values have been tested to obtain near optimal values that will be further discussed later in the discussion and appendix sections. The optimal values obtained include the following: 
-$\alpha=0.001$, $\gamma=0.99$, actor network with hidden layers dimension of [32,32] (where the length of the list indicates the number of hidden layers and the number indicates the size of each layer), input size 4, and output size 1.
+\begin{itemize}
+    \item \textbf{Generalised Advantage Estimation} (\cref{eq:gae}) is used to compute $\hat A_t$ from the rollout. Our implementation iterates backwards through the buffer with the standard recurrence $\hat A_t = \delta_t + \gamma\lambda\,(1-d_t)\,\hat A_{t+1}$, where $d_t$ is the\textbf{ terminal flag}, so that the bootstrap from $V_\varphi$ is \textbf{zeroed} at the end of an episode.
+\end{itemize}
 
-% \begin{figure}
-%     \centering
-%     \includegraphics[width=0.99\linewidth]{Figures/reinforce-dqn_w251-smoothed.png}
-%     \vspace{-0.4cm}
-%     \caption{REINFORCE curve + the Baseline + DQN. REINFORCE Hyper parameters are in the legend. DQN hyper parameters are optimal of their own}
-%     \label{fig:placeholder}
-%     \vspace{-0.6cm}
-% \end{figure}
+Each of the $K$ inner epochs is a single full-batch gradient step on the entire rollout.
 
-\vspace{-0.2cm}
-\subsection{AC} %just as a reference, can be removed later
-\vspace{-0.1cm}
+\subsection{Experimental setup}\label{sec:experiments:setup}
 
-The returns for the AC algorithm are collected by evaluating its performance every 2500 timesteps. To determine which hyperparameters to use, some values for $\alpha$, $\beta$, actor neural network architecture and critic network architecture were tested. This is shown in the appendix (\autoref{app:ac_hyper}). Based on these tests $\alpha$ is set to 0.001, as is $\beta$. The hidden layer of the policy network (the actor) is chosen to be [64,64]. The hidden layer of the value network (the critic) is set to [128,128] and $\gamma$ is set to 0.99. The resulting performance is shown in \autoref{fig:main_result}.
+Each configuration is trained for \textbf{$10^{6}$ environment steps} (n\_timesteps). \textbf{Returns} are recorded every \textbf{$250$ steps} (eval\_interval). Each learning curve is averaged over \textbf{5 (n\_repetitions)} independent seeds; we report the mean and a Student-$t$ confidence band around it for the curves. We have reduced the confidence interval for the curves to \textbf{80\% for a better and distinguishable visual demonstration} and for confidence intervals of the multiple curves to \textbf{less overlap}. Curves shown in the main text are smoothed with a suitable smoothing window. As in Assignments 2 and 3, \textbf{learning rate} and network widths were tuned first; the other HP were then varied around reasonable defaults. The optimal setting used in \autoref{fig:main_result} is:
+\textbf{ $\alpha=3\!\times\!10^{-4}$, $\beta=10^{-2}$, $\gamma=0.99$, $\lambda=0.95$, $\epsilon=0.1$, rollout $T=512$, $K=30$} \textbf{epochs}, two hidden layers of \textbf{$128$ units} in the actor network and two \textbf{512-unit} hidden layers in the critic network. 
+We choose $T$ as a power of 2 by convention and compliance, inherited from the original PPO implementation (by Schulman): my algorithm does not require it, but powers of \textbf{2} align rollout and mini-batch (that is not implemented in this report) tensors with the multiples of $32$ used by GPU tensor cores, which is the standard deep-learning batching convention.
 
-\vspace{-0.2cm}
-\subsection{A2C} %just as a reference, can be removed later
-\vspace{-0.1cm}
+\section{Results}\label{sec:results}
 
-The hyperparameters that are considered to have the greatest effect on the learning process are tuned to result in an optimal learning curve. The first one is the estimation depth $\tilde{n}$, which dictates the number future rewards that are considered in the $n$-step target, before bootstrapping. Since the policy (actor) and the value function (critic) are each estimated by a separate neural network (NN). They each have there own learning rate and network architecture, which is the number and size of hidden layers. So the policy learning rate, the value function learning rate, the hidden layers of the policy NN, and the hidden layers of the value function NN are also hyperparameters that need to be optimized.
+\autoref{fig:main_result} compares \textbf{PPO} against the \textbf{baseline} provided with assignment 2, \textbf{DQN}, and \textbf{A2C} from Assignment 3.
 
-These five hyperparameters were optimized using a systematic approach, where one hyperparameter is changed to different values while the others are kept at a constant value. The performance of the different values for the variable hyperparameters after a million timesteps are then compared to each other to determine which one results in the most optimal and stable learning curve. These comparisons result in the optimal version of the A2C (see \autoref{fig:main_result}), which has $\tilde{n}=10$, $\alpha=0.0001$, $\beta=0.01$, a policy architecture of two hidden layers with 64 neurons each, and a value function architecture of two hidden layers with 128 neurons each.
-
-\section{Results} \label{sec:results}
-\vspace{-0.2cm}
-
-\autoref{fig:main_result} shows the learning curves for the three algorithms discussed above compared to DQN, all with optimized hyperparameters.
-
+\begingroup
+\setlength{\intextsep}{15pt}
+\setlength{\textfloatsep}{0pt}
 \begin{figure}[H]
-    \vspace{-0.3cm}
+    
     \centering
-    \includegraphics[width=0.99\linewidth]{REINFORCE-AC-A2C-DQN_w351-smoothed.png}
+    \includegraphics[width=0.99\linewidth]{DQN-A2C-PPO_w101-smoothed_2026.05.19_21.44.53.png}
     \vspace{-0.3cm}
-    \caption{Comparison between the REINFORCE, AC, A2C and DQN algorithms, with optimized hyperparameters. The provided baseline data is also shown. The black dashed line indicates the optimal performance.}
+    \caption{Learning curves on CartPole-v1. \textbf{PPO with GAE (this work)} compared to \textbf{A2C}, \textbf{DQN} and the \textbf{baseline}. PPO \textbf{tuned} HP in \autoref{sec:experiments:setup}; DQN and A2C \textbf{tuned} HP in the appendix \autoref{sec:appendix:hpo2and3} for brevity.}
     \label{fig:main_result}
 \end{figure}
+\endgroup
 
-\vspace{-0.6cm}
+
+\begingroup
+\setlength{\intextsep}{15pt}
+\setlength{\textfloatsep}{0pt}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.99\linewidth]{PPO_w201-smoothed_alpha_2026.05.18_10.07.20.png}
+    \vspace{-0.3cm}
+    \caption{Effect of the "\textbf{actor learning rate $\alpha$}" on \textbf{PPO with GAE} in CartPole-v1. Too-large learning rates cause the clipped surrogate to saturate at $\pm\epsilon$ and the policy stops improving}
+    \label{fig:hp_lr}
+\end{figure}
+\endgroup
+\begingroup
+\setlength{\intextsep}{15pt}
+\setlength{\textfloatsep}{0pt}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.99\linewidth]{PPO_w351-smoothed_Lambda_2026.05.19_15.42.25.png}
+    \vspace{-0.3cm}
+    \caption{Effect of the "\textbf{GAE parameter $\lambda$}" on \textbf{PPO with GAE} in CartPole-v1. $\lambda=1$ recovers the \textbf{Monte-Carlo} advantage as in AC; $\lambda=0$ recovers the one-step \textbf{TD(0)} advantage. Tested values are \{0 ,0.8 ,0.95 ,1\}. Other HP in \autoref{sec:experiments:setup}.}
+    \label{fig:hp_lambda}
+\end{figure}
+\endgroup
+\autoref{fig:hp_lr} and \autoref{fig:hp_lambda} report the most important hyperparameter sweeps; further sweeps are deferred to the appendix.
 \section{Discussion}\label{sec:discussion}
 
+\paragraph{Comparison with AC, A2C and DQN.}
+\autoref{fig:main_result} shows that \textbf{PPO with GAE} reaches the optimum return of $500$ in fewer environment interactions and with a substantially narrower confidence band than \textbf{A2C} and \textbf{DQN} both. Two factors plausibly drive the variance improvement over A2C: \textbf{rollout reuse reduces gradient variance per environment step}, and the \textbf{clipped surrogate prevents the destructive large updates} that we observed as mild dips in the A2C curve in Assignment 3 before it converges. The behavior over DQN is consistent with what we already observed for the policy-gradient family in Assignment 3 - the on-policy character \textbf{better matches} the structure of CartPole's bounded, low-dimensional state space.
 
+\paragraph{Hyperparameter sensitivity.}
+The optimal hyperparameter configurations of all of the algorithms are on \textbf{Experiment.py} of the assignment.
+During every hyperparameter sweeping trial, only the hyperparameter that is mentioned on the plot's legend has been sweeped for an optimal value and other hyperparameters have been kept \textbf{static} for better recognition.
+The \textbf{learning rate} is by far the most important hyperparameter (\autoref{fig:hp_lr}). Consequently, although the sweep values are relatively close, the curve deviations are considerable. This is in line with the general intuition that learning rates dominate in RL. The GAE parameter $\lambda$ (\autoref{fig:hp_lambda}) shows the expected bias-variance pattern: $\lambda=1$ inherits the high variance of the Monte-Carlo advantage which has the highest curve instability, while $\lambda=0$ inherits the high bias of the one-step TD(0) advantage; values around $0.96$ are a good compromise on CartPole. The clipping range $\epsilon$ is far less sensitive, which mirrors the original PPO ablation.
 
-\vspace{-0.2cm}
-\subsection{Improvements from DQN}
-\vspace{-0.1cm}
-The DQN algorithm had a network be a part of both the predicted value and the target value used to determine the loss. In order to increase stability and break temporal correlations between states two improvements were made using a target network and replay buffer respectively. These improvements cannot be applied to REINFORCE, AC or A2C however. The training stability that the target network provides for DQN is not necessary in the algorithms covered here since the target and prediction used in the loss do not both depend on the same $Q$-network. This \textit{is} the case for DQN. 
+\paragraph{Weaknesses and challenges.}
+Our setup has several limitations. 
+\begin{enumerate}
+    \item Five seeds are sufficient to detect large effects but are too few to \textbf{resolve overlapping confidence intervals}, e.g.\ when comparing $\lambda=0.9$ and $\lambda=0.95$. \item with respect to the generalization of PPO algorithm's applications, another limitation is the one that CartPole environment inherently imposes itself. \textbf{CartPole is generally solved by very small networks}, just like our experiments in this course; conclusions about $\epsilon$ or $\lambda$ may not be transferable to higher-dimensional and \textbf{more sophisticated environments}. Other environments also might require different tuned hyperparameters.
+    \item  By not having additional common \textbf{engineering tricks}, we cannot claim that our numbers represent the best achievable PPO performance on this domain.
 
-The replay buffer used actions taken from previous versions of the policy, which worked when the optimal policy needed to be approximated. In the algorithms covered in this work however the current policy $\pi_\theta$ needed to be approximated. The replay buffer works for off-policy algorithms, like DQN, but not for on-policy algorithms.
-
-\vspace{-0.2cm}
-\subsection{REINFORCE} %just as a reference, can be removed later
-\vspace{-0.1cm}
-
-Compared to baseline and DQN, this algorithm performs better at earlier timesteps. As it reaches higher timesteps, the performance becomes similar to the baseline but excels that of the DQN, and unlike DQN, it does not have a adverse training misbehaviour as the training continues, but it appears that training can be enough with roughly 300,000 time steps. This algorithm performs above expectations, given its simplicity.
-
-
-\vspace{-0.2cm}
-\subsection{AC} %just as a reference, can be removed later
-\vspace{-0.1cm}
-
-Compared to the baseline data, the AC algorithm performs well at earlier timesteps. As it reaches towards higher timesteps, the performance is similar to that of the baseline data. At these earlier timesteps, the episodes are relatively short which leads to noisy estimates of the gradient. This explains the larger variance seen at these smaller timesteps. The stability of the performance seems to improve as the algorithm is kept running. This is recognised by the reducing frequency of sudden drops in the episode return (which are still seen in the baseline data). For the AC algorithm the evaluation interval is ten times as large as the one used in REINFORCE and A2C. This was an optimisation used to help reduce the runtime in order to reach the one million timesteps. However, this has come at the cost of loss of information.
-
-Compared to DQN, the AC algorithm performs better, since its return keeps increasing after 400,000 timesteps, whilst the DQN's episode return starts to trend downwards. The AC algorithm performs similar to REINFORCE, but starts at a higher episode return in its earlier timesteps. However it does not have the stability that REINFORCE or A2C has, as some dips in the episode return are observed. This can also be an artifact due to the higher evaluation interval and using the same smoothing window. To better compare the algorithms, ideally the same evaluation interval is used.
-
-
-\vspace{-0.2cm}
-\subsection{A2C} %just as a reference, can be removed later
-\vspace{-0.1cm}
-
-% The best hyperparameters for A2C mentioned in \autoref{sec:results} were determined by comparing the learning curves for different values of the concerning hyperparameter to each other. For the estimation depth, the policy learning rate, and the value function architecture the chosen values are were clearly the best performing values after one million timesteps. For the value function learning rate and the policy architecture the distinction between the tested values was less clear. In the case of the value function learning rate, the values of 0.01 and 0.001 both perform roughly equally well, while a learning rate of 0.0001 performs significantly worse. However, 0.01 seemed to have a somewhat lower error margin, suggesting a more stable learning process, even though the difference is small. For the policy architecture, two hidden layers with 128 neurons each results in a very unstable learning curve over many timesteps, with an episode return that spikes and dips without converging. From the two remaining architectures, the one with two hidden layers of 64 neurons each seems to perform consistently better that the one with 1 hidden layer of 32 neurons. The figures of all the learning curves can be found in \autoref{app:a2c_hyper} for further inspection.
-
-The resulting learning curve of an optimally tuned A2C agent performs consistently better than DQN and the baseline (that is generally considered to solve the CartPole problem in a reasonable amount of timesteps), as can be seen in \autoref{fig:main_result}. The A2C learning curve quickly rises well above DQN and the baseline and reaches the optimum return of 500 after about 400,000 timesteps within the uncertainty margin. Then it maintains this optimum with relatively low standard deviation, outperforming the other algorithms. However, before it converges to the optimum, this error margin is significantly larger. This could be improved by averaging over more repetitions that five, but this would come at the cost of an increased computation time.
-
-Follow-up studies could improve A2C further by introducing multiple parallel agents (A3C), constraining the policy change in a single update (PPO) or adding an entropy term to the reward (SAC). 
+\end{enumerate}
 
 \section{Conclusion}\label{sec:conclusion}
-With the algorithms covered in this work a comparison can be made between value-based DQN and policy-based REINFORCE, AC and A2C. All three policy-based algorithms out-perform DQN. Whilst REINFORCE and AC both have dips in their return, A2C's performance is almost constantly increasing and stable. Using these algorithms has shown how relatively simple algorithms can outperform the more complicated DQN algorithm, even with the added tricks to improve its episode return.
 
-
+We implemented\textbf{ PPO-clipped with GAE} and compared it on CartPole against the \textbf{baseline}, \textbf{DQN}, and \textbf{A2C}. The clipped surrogate and rollout reuse together explain the \textbf{empirical advantage} of PPO over A2C, while GAE controls the \textbf{bias-variance} trade-off without introducing additional hyperparameters. \textbf{Reflecting on the assignments}, we observed a \textbf{consistent progression}: value-only DQN, policy-only REINFORCE, advantage-based A2C, and finally PPO with GAE, each step trading additional algorithmic complexity for measurable empirical gains. 
+\subsection{Future work}
+\begin{itemize}
+    \item Re-introducing the \textbf{engineering tricks} we have not employed (entropy bonus, value clipping, normalisation, gradient clipping) one at a time to quantify their individual contributions,
+    \item Moving to a continuous-control and more complex benchmark where PPO's advantage over A2C is expected to be larger.
+    \item Solving other form of problems with the algorithms that we have learned, as a means for real-world problem solutions.
+\end{itemize}
+\clearpage
 \nocite{*}
-%Include the bibliography
 \bibliography{bibliography}
-
-% Put this where you want the bibliography to appear
-% icml2025 in \bibliographystyle{} uses icml styling. unsrt uses ordered list styling
-\bibliographystyle{unsrt}   % order entries by first citation
-\nocite{plaat2022}         % force Plaat to be "cited" first
-\nocite{*}
-
-% *: mnih2013playing,mnih2015human,williams1992simple,haarnoja2018sac,haarnoja2019sacapps,schulman2017ppo,towers2024gymnasium,sutton2018reinforcement
-
-
-% \bibliographystyle{icml2025}
+\bibliographystyle{unsrtnat}
 
 \clearpage
 \section*{Appendix}
 \appendix{}
 
+\section{Shared (global) hyperparameters}
+\\
+Repetitions per config $= 5$, total timesteps $= 10^{6}$, max train/eval episode length $= 500$, evaluation interval $= 250$ steps, evaluation episodes per checkpoint $= 5$.
 
-Similar to before, we tried to realize how and with what pattern does every hyperparameter change behaves, this could help us have a better notion of how we should have approached the optimal value (approach is exclusive for every hyperparameter) instead of blind random guesses. Also, multiple values were tested for each hyperparameter type. Here the plots used to find the optimal hyperparameters are shown. 
 
-\section{Hyperparameter optimisation REINFORCE} \label{app:reinforce_hyper}
-% \todo{What were the values of the hyperparameters that were not varied?}
-The values for the learning rate that were tested are 0.0005, 0.001 and 0.005. 0.0005 slowed down the training, 0.005 caused the curve to fluctuate and show volatile behaviour which also slowed down the training. For $\gamma$ the values 0.9, 0.95, 0.99 and 0.999 were tested. Lower values deprived the training from using future rewards which our survival model depends on, whereas overly considering the future rewards. For the neural network hidden layer architecture, the width 32 and the depth 2 as can be seen in the plots perform best.
-\vspace{-0.3cm}
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.99\columnwidth]{REINFORCE_w201-smoothed.png}
-    \vspace{-0.4cm}
-    \caption{Learning rate ($\alpha$) in REINFORCE}
-    \label{fig:placeholder}
-    \vspace{-0.4cm}
-\end{figure}
-\vspace{-0.2cm}
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.99\columnwidth]{REINFORCE_w251-smoothed (4).png}
-    \vspace{-0.4cm}
-    \caption{Different $\gamma$ values for REINFORCE}
-    \label{fig:placeholder}
-    \vspace{-0.4cm}
-\end{figure}
+\section{Other hyperparameter sweeps}\label{app:ppo_hyper}
+
+We provide the remaining hyperparameter sweeps. Each curve is averaged over five repetitions, shaded regions are $80\%$ Student-$t$ confidence intervals of the mean, and smoothed unless stated otherwise.
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.99\columnwidth]{reinforce_w251-smoothed.png}
+    \includegraphics[width=0.99\columnwidth]{PPO_w201-smoothed_Beta_2026.05.18_22.18.53.png}
     \vspace{-0.3cm}
-    \caption{Different Neural Network widths for the Actor network of REINFORCE}
-    \label{fig:placeholder}
+    \caption{Effect of the "\textbf{parameter $\beta$}" the \textbf{learning rate} of \textbf{critic} on PPO with GAE in CartPole-v1. All other hyperparameters fixed to the values in \autoref{sec:experiments:setup}. Mean of 5 repetitions. Shaded $80\%$ confidence intervals, smoothed.}
+    \label{fig:hp_beta}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.99\columnwidth]{PPO_w351-smoothed_Eps_2026.05.19_19.59.31.png}
     \vspace{-0.3cm}
-\end{figure}
-
-\section{Hyperparameter optimisation AC}\label{app:ac_hyper}
-To find the hyperparameters that produce the best performance of the AC algorithm, each hyperparameter of the algorithm is varied. The parameters that are not varied are set to the following baseline values: $\alpha=0.001$, $\beta=0.001$, hidden layers of the policy network have the shape [16,16] and the hidden layers of the value network have the shape [64,64].
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.99\columnwidth]{Figures/AC_HP_actor_lr.pdf}
-    \caption{Learning curves of AC algorithm with different values of the actor learning rate $\alpha$. Each graph is produced using five repetitions. The other hyperparameters are set to baseline values. $\alpha=0.001$ is chosen as the best performing value.}
-    \label{fig:ac_actor_lr}
+    \caption{Effect of the "\textbf{clipping parameter $\epsilon$}" on PPO with GAE in CartPole-v1. All other hyperparameters fixed to the values in \autoref{sec:experiments:setup}. Mean of 5 repetitions. Shaded $80\%$ confidence intervals, smoothed.}
+    \label{fig:hp_eps}
 \end{figure}
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.99\columnwidth]{Figures/AC_HP_critic_lr.pdf}
-    \caption{Learning curves of AC algorithm with different values of the critic learning rate $\beta$. Each graph is produced using five repetitions. The other hyperparameters are set to baseline values. All learning rates appear to perform similarly, so $\beta=0.001$ is arbitrarily chosen as the best performing value.}
-    \label{fig:ac_critic_lr}
-\end{figure}
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.99\columnwidth]{Figures/AC_HP_actor_nn.pdf}
-    \caption{Learning curves of AC algorithm with different shapes of the actor hidden layer. Each graph is produced using five repetitions. The other hyperparameters are set to baseline values. The shape [64,64] is chosen as the best performing one. For this value the return is the most stable towards the end of the runs.}
-    \label{fig:ac_actor_nn}
-\end{figure}
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.99\columnwidth]{Figures/AC_HP_critic_nn.pdf}
+    \includegraphics[width=0.99\columnwidth]{PPO_w251-smoothed_T_2026.05.18_21.52.29.png}
     \vspace{-0.3cm}
-    \caption{Learning curves of AC algorithm with different shapes of the critic hidden layer. Each graph is produced using five repetitions. The other hyperparameters are set to baseline values. The shape [128,128] is chosen as the best performing one. Likewise this produces the most stable return towards the end of the runs (for the shapes tested).}
-    \label{fig:ac_critic_nn}
+    \caption{Effect of the "\textbf{rollout length $T$}" on PPO with GAE in CartPole-v1. All other hyperparameters fixed to the values in \autoref{sec:experiments:setup}. Mean of 5 repetitions. Shaded $80\%$ confidence intervals, smoothed.}
+    \label{fig:hp_rollout}
 \end{figure}
 
-\section{Hyperparameter Optimization A2C}\label{app:a2c_hyper}
-The estimation depth $\tilde{n}$ was tested for the values 1, 5, and 10, the policy learning rate $\alpha$ was tested for the values 0.001, 0.0001 and 0.00001 and the value function learning rate $\beta$ was tested for the values 0.01, 0.001 and 0.0001. The hidden layer architectures used for optimization were [32], [64, 64] and [128, 128] for both neural networks.\\
-The hyperparameters that remained unvaried during these experiments were an estimation depth $\tilde{n}$ of 5, a learning rate ($\alpha$ and $\beta$) of 0.0001 and a hidden layers architecture of [64, 64] for both the policy and the value function neural networks
-
-For the estimation depth, the policy learning rate (see \autoref{fig:a2c_lr_policy}), and the value function architecture (see \autoref{fig:a2c_hl_value_function}) the chosen values are clearly the best performing values after one million timesteps. For the value function learning (see \autoref{fig:a2c_lr_value_function}) rate and the policy architecture (see \autoref{fig:a2c_hl_policy}) the distinction between the tested values was less clear. In the case of the value function learning rate, the values of 0.01 and 0.001 both perform roughly equally well, while a learning rate of 0.0001 performs significantly worse. However, 0.01 seemed to have a somewhat lower error margin, suggesting a more stable learning process, even though the difference is small. For the policy architecture, two hidden layers with 128 neurons each results in a very unstable learning curve over many timesteps, with an episode return that spikes and dips without converging. From the two remaining architectures, the one with two hidden layers of 64 neurons each seems to perform consistently better that the one with one hidden layer of 32 neurons.
-
-\begin{figure}[ht]
-\centerline{\includegraphics[width=0.99\columnwidth]{Figures/a2c_n_step.pdf}}
-\vspace{-0.3cm}
-\caption{Learning curves of A2C, experimenting with estimation depths, while the remaining hyperparameters are set to their baseline value. The learning curves are averaged over 5 repetitions, with the shaded areas indicating the standard deviation and the red dotted line showing the baseline solution for CartPole.}
-\label{fig:a2c_n_step}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.99\columnwidth]{PPO_w251-smoothed_Epochs_2026.05.18_21.50.27.png}
+    \vspace{-0.3cm}
+    \caption{Effect of the number of optimisation "\textbf{epochs $K$}" per rollout on PPO with GAE in CartPole-v1. All other hyperparameters fixed to the values in \autoref{sec:experiments:setup}. Mean of five repetitions, shaded $80\%$ confidence intervals, smoothed.}
+    \label{fig:hp_epochs}
 \end{figure}
-\vspace{-0.3cm}
 
-\begin{figure}[ht]
-\centerline{\includegraphics[width=0.99\columnwidth]{Figures/a2c_lr_policy.pdf}}
-\vspace{-0.3cm}
-\caption{Learning curves of A2C, experimenting with different policy learning rates, while the remaining hyperparameters are set to their baseline value. The learning curves are averaged over 5 repetitions, with the shaded areas indicating the standard deviation and the red dotted line showing the baseline solution for CartPole.}
-\label{fig:a2c_lr_policy}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.99\columnwidth]{PPO_w201-smoothed_ActorNN_2026.05.18_19.45.31.png}
+    \vspace{-0.3cm}
+    \caption{Effect of the "\textbf{actor hidden-layer}" architecture on PPO with GAE in CartPole-v1. All other hyperparameters fixed to the values in \autoref{sec:experiments:setup}. Mean of five repetitions, shaded $80\%$ confidence intervals, smoothed.}
+    \label{fig:hp_arch}
 \end{figure}
-\vspace{-0.3cm}
 
-\begin{figure}[ht]
-\centerline{\includegraphics[width=0.99\columnwidth]{Figures/a2c_lr_value_func.pdf}}
-\vspace{-0.3cm}
-\caption{Learning curves of A2C, experimenting with different value function learning rates, while the remaining hyperparameters are set to their baseline value. The learning curves are averaged over 5 repetitions, with the shaded areas indicating the standard deviation and the red dotted line showing the baseline solution for CartPole.}
-\label{fig:a2c_lr_value_function}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.99\columnwidth]{PPO_w251-smoothed_CriticNN_2026.05.19_18.59.19.png}
+    \vspace{-0.3cm}
+    \caption{Effect of the "\textbf{critic hidden-layer}" architecture on PPO with GAE in CartPole-v1. All other hyperparameters fixed to the values in \autoref{sec:experiments:setup}. Mean of five repetitions, shaded $80\%$ confidence intervals, smoothed.}
+    \label{fig:hp_critic_nn}
 \end{figure}
-\vspace{-0.3cm}
 
-\begin{figure}[ht]
-\centerline{\includegraphics[width=0.99\columnwidth]{Figures/a2c_hl_policy.pdf}}
-\vspace{-0.3cm}
-\caption{Learning curves of A2C, experimenting with different policy architectures, while the remaining hyperparameters are set to their baseline value. The learning curves are averaged over 5 repetitions, with the shaded areas indicating the standard deviation and the red dotted line showing the baseline solution for CartPole.}
-\label{fig:a2c_hl_policy}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.99\columnwidth]{PPO_w251-smoothed_Gamma_2026.05.18_22.14.17.png}
+    \vspace{-0.3cm}
+    \caption{Effect of the "\textbf{\gamma}" parameter on PPO with GAE in CartPole-v1. All other hyperparameters fixed to the values in \autoref{sec:experiments:setup}. Mean of five repetitions, shaded $80\%$ confidence intervals, smoothed.}
+    \label{fig:hp_gamma}
 \end{figure}
-\vspace{-0.3cm}
 
-\begin{figure}[ht]
-\centerline{\includegraphics[width=0.99\columnwidth]{Figures/a2c_hl_value_func.pdf}}
-\vspace{-0.3cm}
-\caption{Learning curves of A2C, experimenting with different value function architectures, while the remaining hyperparameters are set to their baseline value. The learning curves are averaged over 5 repetitions, with the shaded areas indicating the standard deviation and the red dotted line showing the baseline solution for CartPole.}
-\label{fig:a2c_hl_value_function}
-\end{figure}
-\vspace{-0.3cm}
+
+\section{Tuned hyperparamenters from Assignment 2 and 3}\label{sec:appendix:hpo2and3}
+
+Here are the hyperparameters that were used and reported in assingments 2 and 3:
+\textbf{DQN} \\
+$\gamma = 0.99$, $\alpha = 10^{-3}$, NN widths $= [128, 128]$, exploration $=$ $\epsilon$-greedy, $\epsilon = 0.05$, target network active (step $= 100$), experience replay active (buffer size $= 80{,}000$, batch size $= 64$, min replay size $= 2{,}000$, train frequency $= 1$, replay ratio $= 1.0$).
+
+\textbf{REINFORCE} \\
+$\gamma = 0.99$, actor $\alpha = 10^{-3}$, actor hidden layers $= [128, 128]$.
+
+\textbf{AC (Actor-Critic, $n$-step bootstrapped)} \\
+$\gamma = 0.99$, actor $\alpha = 10^{-3}$, actor hidden layers $= [64, 64]$, critic $\beta = 10^{-3}$, critic hidden layers $= [128, 128]$, bootstrap step $n = 10$.
+
+\textbf{A2C} \\
+$\gamma = 0.99$, actor $\alpha = 10^{-4}$, actor hidden layers $= [64, 64]$, critic $\beta = 10^{-2}$, critic hidden layers $= [128, 128]$, bootstrap step $n = 10$.
+
+\subsection{Extra work}
+
+After the $10^6$ training was complete, I save the checkpoints and ran $10^6$ timesteps through the experiments again using those checkpoint at the start point to see how \textbf{stable} the training ended up to be. Stability cannot be checked with the first training, because at the beginning it obviously starts at very low returns, and this skews the mean and standard deviation (This check is for being \textbf{stable}\textbf{/convergent}, not necessarily the quality of the training or global optimality)  
 
 \end{document}

@@ -1,177 +1,16 @@
-# CartPole-v1 REINFORCE, Actor-Critic, A2C, and DQN — Comparative Study
+# CartPole-v1 PPO — Implementation and Comparative Study
 
-Repository for the Reinforcement Learning course assignment (Leiden University) — **policy-gradient and actor-critic methods on CartPole-v1**.
+Repository for the Reinforcement Learning course assignment 4 (Leiden University) — **Proximal Policy Optimisation on CartPole-v1**.
 
 ## Overview
 
-This project implements and compares multiple reinforcement learning agents for the [Gymnasium CartPole-v1](https://gymnasium.farama.org/environments/classic_control/cart_pole/) environment:
+This project implements PPO and compares it with multiple other reinforcement learning agents which were implemented before for the [Gymnasium CartPole-v1](https://gymnasium.farama.org/environments/classic_control/cart_pole/) environment:
 
 - **REINFORCE**
-- **Actor-Critic (AC)**
 - **Advantage Actor-Critic (A2C)**
-- **DQN** reuse from the previous assignment
+- **DQN**
 
-The experiment pipeline is driven by `Experiment.py`, which defines the global run settings and algorithm-specific hyperparameters. By default, the script runs **REINFORCE only**; the other algorithms can be enabled by toggling the corresponding `include_*_in_training` flags.
-
-## Environment
-
-- **Task:** CartPole-v1
-- **Framework:** Gymnasium
-- **Primary libraries:** NumPy, SciPy, Matplotlib, Pandas, OpenPyXL, tqdm, PyTorch
-- **Output style:** plots, spreadsheets, and optional animations
-- **Default benchmark source:** `benchmark_curve = 1` with benchmark name `Baseline`
-
-The project is configured to reuse existing disk data when available, which keeps repeated experiment runs fast and reproducible.
-
-## Project Structure
-
-- `Experiment.py` — main experiment entrypoint and hyperparameter configuration
-- `functions.py` — core experiment execution utilities
-- `facilitation_functions.py` — result extraction, Excel helpers, and job-building utilities
-- `Helper.py` — shared helper functions
-- `Agent.py` — agent logic shared across algorithms
-- `Environment.py` — environment wrapper / interaction logic
-- `REINFORCE.py` — REINFORCE implementation
-- `AC.py` — actor-critic implementation
-- `A2C.py` — advantage actor-critic implementation
-- `assignment2_repo/` — previous assignment code reused for DQN
-- `Assignment_3.pdf` — assignment statement
-- `requirements.txt` — Python dependencies
-- `A2C algorithm from book.png`, `AC algorithm from book.png`, `REINFORCE algorithm from book.png` — reference figures
-- `test_anim.gif` — example animation artifact
-
-## Architecture & Implementation Details
-
-### Neural Network Modules
-
-The policy and value function approximators are defined per algorithm and use compact multilayer perceptrons tuned for CartPole-v1:
-
-- **REINFORCE:** actor network with hidden layers `[32, 32]`
-- **AC:** actor network `[64, 64]`, critic network `[128, 128]`
-- **A2C:** actor network `[64, 64]`, critic network `[128, 128]`
-- **DQN:** Q-network `[128, 128]`
-
-### Training Loop
-
-Each algorithm module handles its own learning updates, while the shared experiment pipeline coordinates repeated runs, logging, smoothing, and benchmarking. The training loop is parameterized through the dictionaries in `Experiment.py`, so experiments can be reproduced or swept with minimal code changes.
-
-### Target Network
-
-Target network updates are used where applicable:
-
-- **AC:** `TN_step = 10`
-- **A2C:** `TN_step = 10`
-- **DQN:** `TN_active = True`, `TN_step = 100`
-
-### Experience Replay
-
-Experience replay is enabled for DQN:
-
-- `ER_active = True`
-- `ER_replay_buffer_size = 80000`
-- `ER_batch_size = 64`
-- `ER_min_replay_size = 2000`
-- `ER_sample_train_frequency = 1`
-- `ER_replay_ratio = 1.0`
-
-### Exploration Strategies
-
-DQN uses epsilon-greedy exploration by default:
-
-- `exploration_method = "egreedy"`
-- `epsilons = [0.05]`
-- `epsilon_start = 0.05`
-- `epsilon_end = 0.05`
-- `epsilon_decay = 1`
-- `epsilon_decay_interval = 0`
-
-A softmax exploration sweep is also defined:
-
-- `softmax_temps = [1.0, 0.5, 0.1]`
-
-### Experiment Orchestrator
-
-`Experiment.py` is the single source of truth for:
-
-- global run settings
-- which algorithms are included in the run
-- per-algorithm hyperparameter sweeps
-- plotting / smoothing configuration
-- benchmark selection
-- reproducibility seeds
-
-## Hyperparameters (Optimal Configuration)
-
-### Global Parameters
-
-| Parameter | Value |
-|---|---:|
-| `benchmark_curve` | `1` |
-| `benchmark_name` | `Baseline` |
-| `n_repetitions` | `5` |
-| `plot_smoothing_window` | `[1, 101, 201, 251, 351]` |
-| `curve_confidence_interval` | `0.6` |
-| `curve_shaded_area_opacity` | `0.05` |
-| `use_existing_disk_data` | `True` |
-| `curve_plot` | `False` |
-| `animation_plot` | `False` |
-| `n_timesteps` | `1000000` |
-| `eval_interval` | `250` |
-| `max_episode_length` | `500` |
-| `base_seed` | `42` |
-
-### REINFORCE
-
-| Parameter | Value |
-|---|---:|
-| `gamma` | `[0.99]` |
-| `actor_lr` | `[0.001, 0.0005, 0.0001]` |
-| `actor_hidden_nn` | `[[32, 32]]` |
-
-### Actor-Critic (AC)
-
-| Parameter | Value |
-|---|---:|
-| `gamma` | `[0.99]` |
-| `actor_lr` | `[0.001]` |
-| `actor_hidden_nn` | `[[64, 64]]` |
-| `critic_lr` | `[0.001]` |
-| `critic_hidden_nn` | `[[128, 128]]` |
-| `TN_step` | `[10]` |
-
-### Advantage Actor-Critic (A2C)
-
-| Parameter | Value |
-|---|---:|
-| `gamma` | `[0.99]` |
-| `actor_lr` | `[0.0001]` |
-| `actor_hidden_nn` | `[[64, 64]]` |
-| `critic_lr` | `[0.01]` |
-| `critic_hidden_nn` | `[[128, 128]]` |
-| `TN_step` | `[10]` |
-
-### DQN
-
-| Parameter | Value |
-|---|---:|
-| `gamma` | `0.99` |
-| `learning_rate` | `[0.001]` |
-| `nn_hidden_layer_widths` | `[[128, 128]]` |
-| `exploration_method` | `"egreedy"` |
-| `epsilons` | `[0.05]` |
-| `epsilon_start` | `0.05` |
-| `epsilon_end` | `0.05` |
-| `epsilon_decay` | `1` |
-| `epsilon_decay_interval` | `0` |
-| `softmax_temps` | `[1.0, 0.5, 0.1]` |
-| `TN_active` | `[True]` |
-| `TN_step` | `[100]` |
-| `ER_active` | `[True]` |
-| `ER_replay_buffer_size` | `80000` |
-| `ER_batch_size` | `[64]` |
-| `ER_min_replay_size` | `2000` |
-| `ER_sample_train_frequency` | `[1]` |
-| `ER_replay_ratio` | `1.0` |
+The experiment pipeline is driven by `Experiment.py`, which defines the global run settings and algorithm-specific hyperparameters. By default, the script runs **PPO together with DQN and A2C** for the final comparison; the other algorithms can be enabled or disabled by toggling the corresponding flags in the `included_algorithms` dictionary. Dedicated `Experiment_*.py` scripts are provided so that each ablation / sweep can be reproduced with a single command.
 
 ## Setup
 
@@ -205,19 +44,32 @@ The project dependencies are listed in `requirements.txt`:
 
 ## Usage
 
-### Run the Full Experiment
+Each experiment / sub-task corresponds to a single `Experiment*.py` script, so every result in the report can be reproduced with a **single command**.
 
-Run the experiment entrypoint directly:
+### Run the Final Comparison (PPO vs. A2C vs. DQN)
 
 ```bash
 python Experiment.py
 ```
 
-By default, only `REINFORCE` is enabled in `Experiment.py`. To run other algorithms, set the corresponding flags to `True`:
+This is the main entrypoint and reproduces the final learning-curve comparison between PPO (with its optimal hyperparameters), A2C and DQN. Algorithms can be turned on/off by editing the `included_algorithms` dictionary inside `Experiment.py`.
 
-- `include_AC_in_training`
-- `include_A2C_in_training`
-- `include_DQN_in_training`
+### Run the PPO Ablation / Hyperparameter Sweeps
+
+Each PPO hyperparameter sweep used in the report has its own dedicated script. Run any one of them with a single command:
+
+| Sub-task / Sweep | Command |
+|---|---|
+| Discount factor `gamma` sweep | `python Experiment_Default_Gamma.py` |
+| Actor learning rate `alpha` sweep | `python Experiment_ActorLR.py` |
+| Critic learning rate `beta` sweep | `python Experiment_Beta.py` |
+| Actor network architecture sweep | `python Experiment_Default_ActorNN.py` |
+| Critic network architecture sweep | `python Experiment_Default_CriticNN.py` |
+| PPO clip range `clip_eps` sweep | `python Experiment_Default_Eps.py` |
+| Number of PPO epochs sweep | `python Experiment_Default_Epochs.py` |
+| Alternative PPO configuration (run 2) | `python Experiment2.py` |
+| Alternative PPO configuration (run 3) | `python Experiment3.py` |
+| Long-horizon PPO evaluation run | `python Experiment10.py` |
 
 ### Test the Environment
 
@@ -225,32 +77,232 @@ The project is centered on the CartPole-v1 environment. A quick smoke test is to
 
 ### Visualize a Trained Policy
 
-Set the plotting flags in `Experiment.py` to `True`:
+Set the plotting flags in any `Experiment*.py` to `True`:
 
-- `curve_plot = True`
+- `show_curve_plots = True`
 - `animation_plot = True`
 
 This enables learning-curve visualization and optional CartPole animation output.
 
+### Reuse Existing Results
+
+Each experiment script exposes two flags in `global_config` that control caching:
+
+- `use_existing_disk_data` — reuse `.xlsx` runs from `data sheets/` if present
+- `use_existing_disk_trained_networks` — reuse saved networks from `Checkpoints/`
+
+Setting both to `True` lets a sweep finish in seconds when the data already exists on disk; setting them to `False` forces a fresh training run.
+
 ### Customize Experiments
 
-Adjust the configuration dictionaries in `Experiment.py`:
+Adjust the configuration dictionaries inside any `Experiment*.py` script:
 
 - `global_config`
-- `reinforce_config`
-- `ac_config`
-- `a2c_config`
-- `dqn_config`
+- `PPO_config`
+- `DQN_config`
+- `A2C_config`
+- `REINFORCE_config`
+- `AC_config`
 
-This is the intended entry point for changing architectures, learning rates, replay settings, or benchmark settings.
+This is the intended entry point for changing architectures, learning rates, clip ranges, rollout lengths, or benchmark settings.
 
-### PyTorch Compilation Settings
+## Environment
 
-No custom compilation settings are required. The project runs in standard eager mode with the installed PyTorch version.
+- **Task:** CartPole-v1
+- **Framework:** Gymnasium
+- **Primary libraries:** NumPy, SciPy, Matplotlib, Pandas, OpenPyXL, tqdm, PyTorch
+- **Output style:** plots, spreadsheets, and optional animations
+- **Default benchmark source:** `benchmark_curve = 1` with benchmark name `Baseline`
+
+The project is configured to reuse existing disk data when available, which keeps repeated experiment runs fast and reproducible.
+
+## Project Structure
+
+- `Experiment.py` — main experiment entrypoint and hyperparameter configuration (final PPO vs. A2C vs. DQN comparison)
+- `Experiment_Default_Gamma.py` — single-command sweep over PPO `gamma`
+- `Experiment_ActorLR.py` — single-command sweep over PPO actor learning rate
+- `Experiment_Beta.py` — single-command sweep over PPO critic learning rate
+- `Experiment_Default_ActorNN.py` — single-command sweep over PPO actor network architectures
+- `Experiment_Default_CriticNN.py` — single-command sweep over PPO critic network architectures
+- `Experiment_Default_Eps.py` — single-command sweep over PPO clipping epsilon
+- `Experiment_Default_Epochs.py` — single-command sweep over PPO optimisation epochs
+- `Experiment2.py`, `Experiment3.py`, `Experiment10.py` — alternative PPO configurations / long-horizon evaluation
+- `PPO.py` — PPO-clipped (with GAE) implementation
+- `Library.py` — central library that wires experiments to algorithms, plotting, and Excel logging
+- `functions.py` — core experiment execution utilities
+- `facilitation_functions.py` — result extraction, Excel helpers, and job-building utilities
+- `Helper.py` — shared helper functions
+- `Agent.py` — agent logic shared across algorithms
+- `Environment.py` — environment wrapper / interaction logic
+- `Checkpointing.py` — utilities for saving/loading trained networks
+- `REINFORCE.py`, `AC.py`, `A2C.py` — reused policy-gradient / actor-critic implementations from the previous assignment
+- `assignment2_repo/` — previous assignment code reused for DQN
+- `assignment3_repo/` — previous assignment code reused for REINFORCE / AC / A2C baselines
+- `Assignment_4.pdf` — assignment statement
+- `requirements.txt` — Python dependencies
+- `A2C algorithm.png`, `AC algorithm.png`, `REINFORCE algorithm.png` — reference figures
+- `test_anim.gif` — example animation artifact
+
+## Architecture & Implementation Details
+
+### Neural Network Modules
+
+The PPO actor (categorical policy) and critic (state-value) networks are compact multilayer perceptrons tuned for CartPole-v1. The baseline implementations reused for comparison use the same MLP topology pattern:
+
+- **PPO:** actor network `[128, 128]`, critic network `[512, 512]`
+- **A2C:** actor network `[64, 64]`, critic network `[128, 128]`
+- **REINFORCE:** actor network `[128, 128]`
+- **DQN:** Q-network `[128, 128]`
+
+### Training Loop
+
+PPO collects fixed-length rollouts (`rollout_steps` env transitions), computes GAE advantages, and then performs `n_epochs` full-batch gradient updates of the clipped surrogate objective per rollout. The shared experiment pipeline coordinates repeated runs, logging, smoothing, and benchmarking. The training loop is parameterised through the dictionaries in `Experiment.py`, so experiments can be reproduced or swept with minimal code changes.
+
+### Generalized Advantage Estimation (GAE)
+
+PPO uses GAE (Schulman et al., 2015) as the advantage estimator:
+
+- `gae_lambda = 0.96` (bias-variance trade-off)
+- Setting `gae_lambda = 1.0` falls back to plain Monte-Carlo advantages
+
+### PPO-clipped Surrogate Objective
+
+The clipped surrogate objective constrains the policy ratio between the new and old policies:
+
+- `clip_eps = 0.1` (clipping range for the probability ratio)
+- `n_epochs = 30` (gradient passes over each rollout)
+- `rollout_steps = 512` (env steps per rollout / PPO buffer size)
+
+### Target Network
+
+Target network updates are used where applicable for the baselines:
+
+- **A2C:** `TN_step = 10`
+- **DQN:** `TN_active = True`, `TN_step = 100`
+
+PPO does not use a target network; policy stability is enforced through the clipped surrogate objective.
+
+### Experience Replay
+
+Experience replay is enabled for DQN only:
+
+- `ER_active = True`
+- `ER_replay_buffer_size = 80000`
+- `ER_batch_size = 64`
+- `ER_min_replay_size = 2000`
+- `ER_sample_train_frequency = 1`
+- `ER_replay_ratio = 1.0`
+
+PPO is on-policy, so its rollout buffer is fully refreshed between updates.
+
+### Exploration Strategies
+
+PPO explores implicitly through the stochasticity of its categorical policy. DQN uses epsilon-greedy exploration by default:
+
+- `exploration_method = "egreedy"`
+- `epsilons = [0.05]`
+- `epsilon_start = 0.05`
+- `epsilon_end = 0.05`
+- `epsilon_decay = 1`
+- `epsilon_decay_interval = 0`
+
+A softmax exploration sweep is also defined for DQN:
+
+- `softmax_temps = [1.0, 0.5, 0.1]`
+
+### Experiment Orchestrator
+
+`Experiment.py` is the single source of truth for:
+
+- global run settings
+- which algorithms are included in the run
+- per-algorithm hyperparameter sweeps
+- plotting / smoothing configuration
+- benchmark selection
+- reproducibility seeds
+
+## Hyperparameters (Optimal Configuration)
+
+### Global Parameters
+
+| Parameter | Value |
+|---|---:|
+| `benchmark_curve` | `1` |
+| `benchmark_name` | `Baseline` |
+| `n_repetitions` | `5` |
+| `plot_smoothing_window` | `[101, 201, 251, 351]` |
+| `curve_confidence_interval` | `0.6` |
+| `curve_shaded_area_opacity` | `0.06` |
+| `use_existing_disk_data` | `False` |
+| `use_existing_disk_trained_networks` | `True` |
+| `show_curve_plots` | `True` |
+| `animation_plot` | `False` |
+| `n_timesteps` | `1000000` |
+| `eval_interval` | `250` |
+| `max_train_episode_length` | `500` |
+| `max_eval_episode_length` | `500` |
+| `n_eval_episodes` | `5` |
+| `base_seed` | `42` |
+
+### PPO (Optimal)
+
+| Parameter | Value |
+|---|---:|
+| `gamma` | `[0.99]` |
+| `actor_lr` | `[3e-4]` |
+| `actor_hidden_nn` | `[[128, 128]]` |
+| `critic_lr` | `[0.01]` |
+| `critic_hidden_nn` | `[[512, 512]]` |
+| `gae_lambda` | `[0.96]` |
+| `clip_eps` | `[0.1]` |
+| `n_epochs` | `[30]` |
+| `rollout_steps` | `[512]` |
+
+### REINFORCE
+
+| Parameter | Value |
+|---|---:|
+| `gamma` | `[0.99]` |
+| `actor_lr` | `[1e-3]` |
+| `actor_hidden_nn` | `[[128, 128]]` |
+
+### Advantage Actor-Critic (A2C)
+
+| Parameter | Value |
+|---|---:|
+| `gamma` | `[0.99]` |
+| `actor_lr` | `[1e-4]` |
+| `actor_hidden_nn` | `[64, 64]` |
+| `critic_lr` | `[0.01]` |
+| `critic_hidden_nn` | `[[128, 128]]` |
+| `TN_step` | `[10]` |
+
+### DQN
+
+| Parameter | Value |
+|---|---:|
+| `gamma` | `0.99` |
+| `learning_rate` | `[0.001]` |
+| `nn_hidden_layer_widths` | `[[128, 128]]` |
+| `exploration_method` | `"egreedy"` |
+| `epsilons` | `[0.05]` |
+| `epsilon_start` | `0.05` |
+| `epsilon_end` | `0.05` |
+| `epsilon_decay` | `1` |
+| `epsilon_decay_interval` | `0` |
+| `softmax_temps` | `[1.0, 0.5, 0.1]` |
+| `TN_active` | `[True]` |
+| `TN_step` | `[100]` |
+| `ER_active` | `[True]` |
+| `ER_replay_buffer_size` | `80000` |
+| `ER_batch_size` | `[64]` |
+| `ER_min_replay_size` | `2000` |
+| `ER_sample_train_frequency` | `[1]` |
+| `ER_replay_ratio` | `1.0` |
 
 ## Ablation Study Results
 
-The repository is set up to generate experiment results automatically from the configuration in `Experiment.py`.
+The repository is set up to generate ablation results automatically from the configuration in each `Experiment*.py` script. Every PPO sub-task in the report (gamma, actor LR, critic LR, actor NN, critic NN, clip epsilon, optimisation epochs) maps one-to-one to a single command listed in the [Usage](#usage) section.
 
 - Learning curves are produced from repeated runs.
 - Existing `.xlsx` data can be reused from disk when `use_existing_disk_data = True`.
@@ -260,10 +312,11 @@ If you rerun the experiments with different hyperparameters, the resulting curve
 
 ## Key Design Decisions
 
-- **Single configuration entrypoint:** all important run settings live in `Experiment.py`
+- **Single configuration entrypoint per sub-task:** every ablation / sweep lives in its own `Experiment*.py` so each one can be reproduced with a single command
 - **Algorithm separation:** each method has its own module for clarity and maintainability
-- **Shared experiment tooling:** common logging, plotting, and Excel handling are centralized
-- **Legacy DQN reuse:** the DQN implementation from assignment 2 is preserved in `assignment2_repo/`
+- **Shared experiment tooling:** common logging, plotting, and Excel handling are centralised in `Library.py` / `functions.py`
+- **Legacy baseline reuse:** the DQN implementation from assignment 2 and the REINFORCE / AC / A2C implementations from assignment 3 are preserved in `assignment2_repo/` and `assignment3_repo/`
+- **Disk caching:** `use_existing_disk_data` and `use_existing_disk_trained_networks` let sweeps be re-plotted without retraining
 - **Reproducibility:** repeated runs use a fixed base seed and a consistent experiment structure
 
 ## License

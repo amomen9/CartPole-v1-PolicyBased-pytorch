@@ -26,8 +26,8 @@ def experiment():
         "show_curve_plots": True,           # Show learning curve plot at the end of or during the training.
         "separate_algorithm_plots": False,   # If True, each algorithm gets its own set of plots (one per smoothing window). Each algo's plots are saved to disk and (if show_curve_plots) shown non-blocking as soon as that algo finishes executing, so faster algos surface their plots first. Default: False (one combined plot per smoothing window).
         "animation_plot": False,            # Show CartPole animation at the end.
-        "use_existing_disk_data": True,     # Whether to use existing data (.xlsx files) from disk if exists.
-        "use_existing_disk_trained_networks": False,
+        "use_existing_disk_data": False,     # Whether to use existing data (.xlsx files) from disk if exists.
+        "use_existing_disk_trained_networks": True,
         # Environment
         "max_train_episode_length": 500, #500        # Episode truncation step. Default: 500.
         "base_seed": 42,                    # Base seed for CartPole environment and agent initialization. Each repetition will use a different seed derived from this base seed (e.g., base_seed + repetition_index).
@@ -44,11 +44,11 @@ def experiment():
     # Select which algorithms to include in the training and plotting using included_algorithms.
     # Set value to True to include, False to exclude.
     included_algorithms = {
-        "DQN": False,
+        "DQN": True,
         "REINFORCE": False,
         "AC": False,
         "A2C": False,
-        "PPO": True,
+        "PPO": False,
     }
     # Using DQN implementation from the previous assignment (existing in the assignment2_repo directory)
     # ------------- Algorithm: DQN hyperparameters (optimal) ----
@@ -146,28 +146,28 @@ def experiment():
     }
     # ------------- End A2C hyperparameters -----------
 
-    # ------------- Algorithm Type: PPO hyperparameters (core PPO + GAE) ----
-    # Proximal Policy Optimisation (PPO-clipped) - Schulman et al., 2017
+    # ------------- Algorithm Type: PPO hyperparameters (basic PPO + GAE) ----
+    # Proximal Policy Optimisation (PPO-clipped) - Schulman
     PPO_config = {
         "gamma": [0.99],                  # list of discount factors to sweep
         "actor_lr": [3e-4],               # actor learning rate(s) to sweep
-        "actor_hidden_nn": [[64, 64]],    # actor NN architectures to sweep
-        "critic_lr": [1e-3],              # 4e-3 # critic learning rate(s) to sweep
-        "critic_hidden_nn": [[128, 128]], # 256  # critic NN architectures to sweep
-        "gae_lambda": [0.95],     # 0.96 # GAE lambda parameter which controls the bias-variance trade-off of the Generalized Advantage Estimation (GAE). Default: 0.95. Set to 1.0 to disable GAE and use regular advantage estimation.
-        "clip_eps": [0.2],                # 0.1  # PPO clipping epsilon which controls the clipping range for the probability ratio in the PPO surrogate objective. Default: 0.2.
-        "n_epochs": [10],                 # 15   # of optimisation epochs per rollout which controls how many times we reuse each collected rollout batch of data to update the policy. Default: 10. Set to 1 to skip PPO epoch trials and only do one epoch per rollout.
-        "rollout_steps": [2048],          # 1024 # of env steps per rollout (PPO buffer size) which controls how many steps of data we collect in each rollout before we perform policy updates. Default: 2048. Set to a large number (e.g., 1e6) to skip rollout length trials and effectively use the entire episode as one rollout.
+        "actor_hidden_nn": [[128, 128]],    # actor NN architectures to sweep
+        "critic_lr": [0.01],              # 4e-3 # critic learning rate(s) to sweep
+        "critic_hidden_nn": [[512, 512]], # 256  # critic NN architectures to sweep
+        "gae_lambda": [0.96],     # 0.96 # GAE lambda parameter which controls the bias-variance trade-off of the Generalized Advantage Estimation (GAE). Default: 0.95. Set to 1.0 to disable GAE and use regular advantage estimation.
+        "clip_eps": [0.1],                # 0.1  # PPO clipping epsilon which controls the clipping range for the probability ratio in the PPO surrogate objective. Default: 0.2.
+        "n_epochs": [30],                 # 15   # of optimisation epochs per rollout which controls how many times we reuse each collected rollout batch of data to update the policy. Default: 10. Set to 1 to skip PPO epoch trials and only do one epoch per rollout.
+        "rollout_steps": [512],          # 1024 # of env steps per rollout (PPO buffer size) which controls how many steps of data we collect in each rollout before we perform policy updates. Default: 2048. Set to a large number (e.g., 1e6) to skip rollout length trials and effectively use the entire episode as one rollout.
         "legend_parameters": {            # [curve label, show flag]
             "gamma": [r"$\gamma$: ", True],
             "actor_lr": [r"Actor $\alpha$: ", True],
-            "critic_lr": [r"Critic $\beta$: ", False],
-            "actor_hidden_nn": [r"Actor NN: ", True],
-            "critic_hidden_nn": [r"Critic NN: ", True],
+            "critic_lr": [r"Critic $\beta$: ", True],
+            "actor_hidden_nn": [r"Actor NN: ", False],
+            "critic_hidden_nn": [r"Critic NN: ", False],
             "gae_lambda": [r"$\lambda_{GAE}$: ", True],
-            "clip_eps": [r"$\epsilon_{clip}$: ", False],
-            "n_epochs": [r"Epochs: ", False],
-            "rollout_steps": [r"Rollout: ", False],
+            "clip_eps": [r"$\epsilon_{clip}$: ", True],
+            "n_epochs": [r"Epochs: ", True],
+            "rollout_steps": [r"Rollout: ", True],
         },
     }
     # ------------- End PPO hyperparameters -----------

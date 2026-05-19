@@ -45,6 +45,7 @@ def run_dqn_trial(
     eval_with_env_episode_trials: bool = False,
     n_eval_episodes: int = 5,
     full_episode_updates: bool = False,
+    pretrained_state_dict=None,
 ):
     """Run one DQN training trial and return model plus learning-curve data."""
     if seed is not None:
@@ -55,6 +56,8 @@ def run_dqn_trial(
     nn_depth = len(nn_hidden_layer_widths) + 2
 
     model = PolicyNetwork(nn_depth=nn_depth, nn_hidden_layer_widths=nn_hidden_layer_widths)
+    if pretrained_state_dict is not None:
+        model.load_state_dict(pretrained_state_dict, strict=True)
 
     # Ensure target-network cache does not leak state between trials.
     reset_dqn_target_cache()
@@ -133,9 +136,15 @@ def run_dqn_trial_returns(
     eval_with_env_episode_trials: bool = False,
     n_eval_episodes: int = 5,
     full_episode_updates: bool = False,
+    pretrained_state_dict=None,
+    return_model: bool = False,
 ):
-    """Run one DQN trial and return only arrays to reduce IPC overhead."""
-    _, returns, timesteps = run_dqn_trial(
+    """Run one DQN trial and return only arrays to reduce IPC overhead.
+
+    If ``return_model=True``, the trained ``PolicyNetwork`` is appended to the
+    returned tuple so the caller can persist its ``state_dict`` (checkpointing).
+    """
+    model, returns, timesteps = run_dqn_trial(
         n_env_steps=n_env_steps,
         max_episode_length=max_episode_length,
         max_eval_episode_length=max_eval_episode_length,
@@ -169,8 +178,13 @@ def run_dqn_trial_returns(
         er_replay_ratio=er_replay_ratio,
         shared_step_counter=shared_step_counter,
         full_episode_updates=full_episode_updates,
+        pretrained_state_dict=pretrained_state_dict,
     )
-    return np.asarray(returns, dtype=np.float32), np.asarray(timesteps, dtype=np.int32)
+    returns_arr = np.asarray(returns, dtype=np.float32)
+    timesteps_arr = np.asarray(timesteps, dtype=np.int32)
+    if return_model:
+        return returns_arr, timesteps_arr, model
+    return returns_arr, timesteps_arr
 
 
 def neural_net_policy(obs, model, exploration_method="epsilon_greedy", softmax_temp=1.0):

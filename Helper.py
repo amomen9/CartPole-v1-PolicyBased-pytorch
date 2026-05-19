@@ -1798,17 +1798,48 @@ def _dqn_job_kwargs_to_trial_common(job_kwargs: dict[str, Any], eval_interval: i
 
 
 def _run_dqn_one_rep(trial_common: dict[str, Any], run_seed: int, rep_index: int, n_repetitions: int,
-                     shared_step_counter=None):
-    """Run one DQN repetition. Pickle-safe for ProcessPoolExecutor."""
+                     shared_step_counter=None,
+                     use_existing_disk_trained_networks: bool = False):
+    """Run one DQN repetition. Pickle-safe for ProcessPoolExecutor.
+
+    Mirrors the checkpointing behaviour of the policy-gradient algorithms:
+    optionally pre-loads the Q-network from disk before training, and on the
+    first repetition (``rep_index == 0``) persists the trained Q-network to
+    disk via :func:`Checkpointing.save_state_dict_overwrite`.
+    """
+    import torch
     from assignment2_repo.DQN import run_dqn_trial_returns
-    return run_dqn_trial_returns(
+    from Checkpointing import (
+        dqn_q_checkpoint_path,
+        save_state_dict_overwrite,
+    )
+
+    ck = dqn_q_checkpoint_path(
+        nn_hidden_layer_widths=trial_common["nn_hidden_layer_widths"],
+    )
+
+    pretrained_state_dict = None
+    if use_existing_disk_trained_networks and os.path.isfile(ck.file_path):
+        pretrained_state_dict = torch.load(ck.file_path, map_location="cpu")
+
+    returns_arr, timesteps_arr, model = run_dqn_trial_returns(
         seed=run_seed,
         trial_run_index=rep_index + 1,
         total_trial_runs=n_repetitions,
         enable_progress_bar=False,
         shared_step_counter=shared_step_counter,
+        pretrained_state_dict=pretrained_state_dict,
+        return_model=True,
         **trial_common,
     )
+
+    if rep_index == 0:
+        save_state_dict_overwrite(
+            model=model,
+            checkpoint_path=ck.file_path,
+        )
+
+    return returns_arr, timesteps_arr
 
 
 def _run_pending_parallel(pending_settings, n_repetitions, n_timesteps, eval_interval,
@@ -1870,6 +1901,7 @@ def _run_pending_parallel(pending_settings, n_repetitions, n_timesteps, eval_int
                             rep_index=r,
                             n_repetitions=n_repetitions,
                             shared_step_counter=step_counters[(sp, r)],
+                            use_existing_disk_trained_networks=use_existing_disk_trained_networks,
                         )
                     else:
                             algo_extra_kwargs: dict[str, Any] = {}

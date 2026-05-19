@@ -50,12 +50,12 @@ class PPO_Agent(BaseAgent):
             n_agent_state_elements,
             n_actions,
             actor_hidden_nn,
-            activation=nn.Tanh,
+            activation=nn.ReLU,
         )
         self.value_func = ValueNetwork(
             n_agent_state_elements,
             critic_hidden_nn,
-            activation=nn.Tanh,
+            activation=nn.ReLU,
         )
 
         self.opt_actor = torch.optim.Adam(self.policy.parameters(), lr=actor_lr)
@@ -66,9 +66,9 @@ class PPO_Agent(BaseAgent):
 
         state = torch.as_tensor(np.asarray(obs), dtype=torch.float32)
         with torch.no_grad():
-            probs = self.policy(state)
+            logits = self.policy(state)
             value = self.value_func(state)
-        dist = torch.distributions.Categorical(probs)
+        dist = torch.distributions.Categorical(logits=logits)
         action = dist.sample()
         return int(action.item()), dist.log_prob(action).item(), float(value.item())
 
@@ -110,8 +110,8 @@ class PPO_Agent(BaseAgent):
             return
 
         for _ in range(int(self.n_epochs)):
-            probs = self.policy(states_t)
-            dist = torch.distributions.Categorical(probs)
+            logits = self.policy(states_t)
+            dist = torch.distributions.Categorical(logits=logits)
             new_log_probs = dist.log_prob(actions_t)
 
             ratio = torch.exp(new_log_probs - old_log_probs_t)
@@ -141,8 +141,8 @@ class PPO_Agent(BaseAgent):
 
             for _ in range(max_steps):
                 with torch.no_grad():
-                    probs = self.policy(obs)
-                    action = int(torch.argmax(probs, dim=-1).item())
+                    logits = self.policy(obs)
+                    action = int(torch.argmax(logits, dim=-1).item())
 
                 obs, reward, terminated, truncated, _ = env.step(action)
                 ep_return += float(reward)
@@ -173,7 +173,7 @@ class PolicyNetwork(nn.Module):
 
     def forward(self, x):
         x = torch.as_tensor(x, dtype=torch.float32)
-        return torch.softmax(self.net(x), dim=-1)
+        return self.net(x)
 
 
 class ValueNetwork(nn.Module):

@@ -45,7 +45,7 @@ def experiment():
     # Set value to True to include, False to exclude.
     included_algorithms = {
         "DQN": True,
-        "REINFORCE": True,
+        "REINFORCE": False,
         "AC": False,
         "A2C": True,
         "PPO": True,
@@ -74,7 +74,7 @@ def experiment():
         "legend_parameters": {              # [plot label, show flag]
             "gamma": [r"$\gamma$: ", True],
             "learning_rate": [r"$\alpha$: ", True],
-            "nn_hidden_layer_widths": [r"NN Widths: ", True],
+            "nn_hidden_layer_widths": [r"NN Widths: ", False],
             "exploration_method": [r"Exp Method: ", False],
             "epsilons": [r"$\epsilon$: ", False],
             "epsilon_start": [r"$\epsilon$ Start: ", False],
@@ -120,8 +120,8 @@ def experiment():
             "gamma": [r"$\gamma$: ", True],
             "actor_lr": [r"Actor $\alpha$: ", True],
             "actor_hidden_nn": [r"Actor NN: ", True],
-            "critic_lr": [r"Critic $\beta$: ", False],
-            "critic_hidden_nn": [r"Critic NN: ", False],
+            "critic_lr": [r"Critic $\beta$: ", True],
+            "critic_hidden_nn": [r"Critic NN: ", True],
             "TN_step": [r"TN Step: ", False],
         },
     }
@@ -138,8 +138,8 @@ def experiment():
         "legend_parameters": {          # [plot label, show flag]
             "gamma": [r"$\gamma$: ", True],
             "actor_lr": [r"Actor $\alpha$: ", True],
-            "critic_lr": [r"Critic $\beta$: ", False],
-            "actor_hidden_nn": [r"Actor NN: ", True],
+            "critic_lr": [r"Critic $\beta$: ", True],
+            "actor_hidden_nn": [r"Actor NN: ", False],
             "critic_hidden_nn": [r"Critic NN: ", False],
             "TN_step": [r"TN Step: ", False],
         },
@@ -154,15 +154,15 @@ def experiment():
         "actor_hidden_nn": [[64, 64]],    # actor NN architectures to sweep
         "critic_lr": [4e-3],              # 4e-3 # critic learning rate(s) to sweep
         "critic_hidden_nn": [[256, 256]], # 256  # critic NN architectures to sweep
-        "gae_lambda": [0.96],     # 0.96 # GAE lambda parameter which controls the bias-variance trade-off of the Generalized Advantage Estimation (GAE). Default: 0.95. Set to 1.0 to disable GAE and use regular advantage estimation.
-        "clip_eps": [0.12],                # 0.1  # PPO clipping epsilon which controls the clipping range for the probability ratio in the PPO surrogate objective. Default: 0.2.
+        "gae_lambda": [0.96],             # 0.96 # GAE lambda parameter which controls the bias-variance trade-off of the Generalized Advantage Estimation (GAE). Default: 0.95. Set to 1.0 to disable GAE and use regular advantage estimation.
+        "clip_eps": [0.12],               # 0.1  # PPO clipping epsilon which controls the clipping range for the probability ratio in the PPO surrogate objective. Default: 0.2.
         "n_epochs": [15],                 # 15   # of optimisation epochs per rollout which controls how many times we reuse each collected rollout batch of data to update the policy. Default: 10. Set to 1 to skip PPO epoch trials and only do one epoch per rollout.
         "rollout_steps": [1024],          # 1024 # of env steps per rollout (PPO buffer size) which controls how many steps of data we collect in each rollout before we perform policy updates. Default: 2048. Set to a large number (e.g., 1e6) to skip rollout length trials and effectively use the entire episode as one rollout.
         "legend_parameters": {            # [curve label, show flag]
             "gamma": [r"$\gamma$: ", True],
             "actor_lr": [r"Actor $\alpha$: ", True],
-            "critic_lr": [r"Critic $\beta$: ", False],
-            "actor_hidden_nn": [r"Actor NN: ", True],
+            "critic_lr": [r"Critic $\beta$: ", True],
+            "actor_hidden_nn": [r"Actor NN: ", False],
             "critic_hidden_nn": [r"Critic NN: ", False],
             "gae_lambda": [r"$\lambda_{GAE}$: ", False],
             "clip_eps": [r"$\epsilon_{clip}$: ", False],
