@@ -2764,3 +2764,279 @@ def save_algorithm_workbook(
     if verbose:
         print(f"Saved {added_count} new setting(s) to {filepath}")
     return filepath, added_count
+
+
+# ── Returns summary table ─────────────────────────────────────────────────────
+
+def _pooled_stats_from_curves(
+    learning_curve: np.ndarray,
+    learning_curve_std: np.ndarray,
+    n_repetitions: int,
+) -> tuple[float, float, int]:
+    """Reconstruct (mean, population-std, n_samples) from per-step mean/sample-std.
+
+    Used when per-rep raw returns are not available on disk. Treats
+    'learning_curve_std' as a sample std with ddof=1 across reps at each step.
+    """
+    lc = np.asarray(learning_curve, dtype=np.float64).reshape(-1)
+    ls = np.asarray(learning_curve_std, dtype=np.float64).reshape(-1)
+    if lc.size == 0:
+        return float("nan"), float("nan"), 0
+    n = max(int(n_repetitions), 1)
+    var_pop_per_step = ((n - 1) / n) * (ls ** 2) if n > 1 else np.zeros_like(lc)
+    e_x2 = float(np.mean(lc ** 2 + var_pop_per_step))
+    m = float(np.mean(lc))
+    var_total = max(e_x2 - m * m, 0.0)
+    return m, float(np.sqrt(var_total)), int(lc.size * n)
+
+
+def _format_number(value: float, *, decimals: int = 2) -> str:
+    if value is None or not np.isfinite(value):
+        return "n/a"
+    return f"{value:,.{decimals}f}"
+
+
+def _render_aligned_table(headers: list[str], rows: list[list[str]]) -> str:
+    """Render a plain-text table with aligned columns (right-align numeric cols)."""
+    if not rows:
+        return ""
+    widths = [len(h) for h in headers]
+    for row in rows:
+        for i, cell in enumerate(row):
+            widths[i] = max(widths[i], len(cell))
+
+    def _fmt_row(cells: list[str]) -> str:
+        out = []
+        for i, cell in enumerate(cells):
+            if i <= 1:
+                out.append(cell.ljust(widths[i]))
+            else:
+                out.append(cell.rjust(widths[i]))
+        return "  ".join(out)
+
+    sep = "  ".join("-" * w for w in widths)
+    lines = [_fmt_row(headers), sep]
+    for row in rows:
+        lines.append(_fmt_row(row))
+    return "\n".join(lines)
+
+
+def build_returns_summary_table(
+    *,
+    algo_jobs: dict[str, list[dict[str, Any]]],
+    setting_results: list,
+    algo_job_offsets: dict[str, int],
+    n_repetitions: int,
+    last_fraction: float = 0.1,
+    output_dir: str = ".",
+    csv_filename: str = "results_summary.csv",
+    md_filename: str = "results_summary.md",
+    print_to_stdout: bool = True,
+) -> dict[str, Any]:
+    """Aggregate returns per (algorithm, non-excluded-HP) row and emit a table.
+
+    Settings whose curve labels match exactly are merged into a single row, so
+    sweeps that differ only by 'excluded' (legend show_flag=False) hyperparameters
+    collapse to one line. All repetitions and all eval points are pooled into the
+    overall mean/std; the last 'last_fraction' of eval points produces the
+    'last N%' columns.
+    """
+    last_fraction = float(last_fraction)
+    last_fraction = min(max(last_fraction, 0.0), 1.0)
+
+    grouped: dict[tuple[str, str], dict[str, Any]] = {}
+    order: list[tuple[str, str]] = []
+
+    for algo_upper, jobs in algo_jobs.items():
+        offset = algo_job_offsets[algo_upper]
+        for i, job in enumerate(jobs):
+            entry = setting_results[offset + i]
+            if entry is None:
+                continue
+            curve_label = job.get("curve_label", f"{algo_upper}_{i}")
+            key = (algo_upper, curve_label)
+            if key not in grouped:
+                grouped[key] = {
+                    "algo": algo_upper,
+                    "label": curve_label,
+                    "all_values": [],
+                    "last_values": [],
+                    "n_settings": 0,
+                    "missing_raw": 0,
+                }
+                order.append(key)
+
+            lc = np.asarray(entry[0], dtype=np.float64).reshape(-1)
+            ls = np.asarray(entry[1], dtype=np.float64).reshape(-1)
+            raw = entry[3] if len(entry) >= 4 else None
+
+            grouped[key]["n_settings"] += 1
+
+            if raw is not None and getattr(raw, "size", 0) > 0:
+                raw_arr = np.asarray(raw, dtype=np.float64)
+                if raw_arr.ndim == 1:
+                    raw_arr = raw_arr.reshape(1, -1)
+                grouped[key]["all_values"].append(raw_arr.reshape(-1))
+                n_pts = raw_arr.shape[1]
+                n_last = max(1, int(np.ceil(last_fraction * n_pts))) if last_fraction > 0 else 0
+                if n_last > 0:
+                    grouped[key]["last_values"].append(raw_arr[:, -n_last:].reshape(-1))
+            else:
+                grouped[key]["missing_raw"] += 1
+                # Fallback: synthesize from (lc, lc_std) treated as per-step rep mean/std.
+                n = max(int(n_repetitions), 1)
+                grouped[key].setdefault("fallback_curves_all", []).append((lc, ls, n))
+                if last_fraction > 0 and lc.size > 0:
+                    n_last = max(1, int(np.ceil(last_fraction * lc.size)))
+                    grouped[key].setdefault("fallback_curves_last", []).append(
+                        (lc[-n_last:], ls[-n_last:], n)
+                    )
+
+    def _aggregate(values_list, fallback_list):
+        if values_list:
+            flat = np.concatenate([v for v in values_list if v.size > 0]) if values_list else np.array([])
+        else:
+            flat = np.array([])
+        if fallback_list:
+            # Reconstruct first/second moments per fallback chunk and combine.
+            total_n = 0
+            sum_x = 0.0
+            sum_x2 = 0.0
+            if flat.size > 0:
+                total_n += flat.size
+                sum_x += float(np.sum(flat))
+                sum_x2 += float(np.sum(flat * flat))
+            for lc, ls, n in fallback_list:
+                if lc.size == 0:
+                    continue
+                var_pop_per_step = ((n - 1) / n) * (ls ** 2) if n > 1 else np.zeros_like(lc)
+                chunk_n = lc.size * n
+                chunk_sum = float(np.sum(lc)) * n
+                chunk_sum_x2 = float(np.sum(lc ** 2 + var_pop_per_step)) * n
+                total_n += chunk_n
+                sum_x += chunk_sum
+                sum_x2 += chunk_sum_x2
+            if total_n == 0:
+                return float("nan"), float("nan"), 0
+            mean = sum_x / total_n
+            var = max(sum_x2 / total_n - mean * mean, 0.0)
+            return mean, float(np.sqrt(var)), total_n
+        if flat.size == 0:
+            return float("nan"), float("nan"), 0
+        return float(np.mean(flat)), float(np.std(flat, ddof=0)), int(flat.size)
+
+    rows_data: list[dict[str, Any]] = []
+    for key in order:
+        info = grouped[key]
+        mean_all, std_all, n_all = _aggregate(
+            info["all_values"], info.get("fallback_curves_all", [])
+        )
+        mean_last, std_last, n_last = _aggregate(
+            info["last_values"], info.get("fallback_curves_last", [])
+        )
+        rows_data.append({
+            "algorithm": info["algo"],
+            "setting": info["label"],
+            "mean_all": mean_all,
+            "std_all": std_all,
+            "n_all": n_all,
+            "mean_last": mean_last,
+            "std_last": std_last,
+            "n_last": n_last,
+            "n_settings": info["n_settings"],
+            "missing_raw": info["missing_raw"],
+        })
+
+    last_pct = int(round(last_fraction * 100))
+    headers = [
+        "Algorithm",
+        "Setting",
+        "Mean (all)",
+        "Std (all)",
+        f"Mean (last {last_pct}%)",
+        f"Std (last {last_pct}%)",
+        "N (all)",
+        "N (last)",
+    ]
+    text_rows: list[list[str]] = []
+    csv_rows: list[list[str]] = []
+    md_rows: list[list[str]] = []
+    for row in rows_data:
+        text_rows.append([
+            row["algorithm"],
+            row["setting"],
+            _format_number(row["mean_all"]),
+            _format_number(row["std_all"]),
+            _format_number(row["mean_last"]),
+            _format_number(row["std_last"]),
+            f"{row['n_all']:,}",
+            f"{row['n_last']:,}",
+        ])
+        csv_rows.append([
+            row["algorithm"],
+            row["setting"],
+            f"{row['mean_all']:.6f}" if np.isfinite(row["mean_all"]) else "",
+            f"{row['std_all']:.6f}" if np.isfinite(row["std_all"]) else "",
+            f"{row['mean_last']:.6f}" if np.isfinite(row["mean_last"]) else "",
+            f"{row['std_last']:.6f}" if np.isfinite(row["std_last"]) else "",
+            str(row["n_all"]),
+            str(row["n_last"]),
+        ])
+        md_rows.append(text_rows[-1])
+
+    rendered_text = _render_aligned_table(headers, text_rows) if text_rows else "(no completed settings to summarize)"
+
+    title_stdout = f"Returns summary - mean/std across all repetitions and eval points (n_repetitions={n_repetitions})"
+    title_md = f"Returns summary - mean ± std across all repetitions and eval points (n_repetitions={n_repetitions})"
+
+    # ── Console (ASCII-safe for Windows cp1252 terminals) ──
+    if print_to_stdout:
+        def _safe_print(s: str) -> None:
+            try:
+                print(s)
+            except UnicodeEncodeError:
+                print(s.encode("ascii", errors="replace").decode("ascii"))
+
+        _safe_print("\n" + "=" * len(title_stdout))
+        _safe_print(title_stdout)
+        _safe_print("=" * len(title_stdout))
+        _safe_print(rendered_text)
+        _safe_print("")
+
+    os.makedirs(output_dir, exist_ok=True)
+
+    # ── Markdown ──
+    md_path = os.path.join(output_dir, md_filename)
+    md_lines = [f"# {title_md}", ""]
+    if md_rows:
+        md_lines.append("| " + " | ".join(headers) + " |")
+        align = ["---", "---", "---:", "---:", "---:", "---:", "---:", "---:"]
+        md_lines.append("| " + " | ".join(align) + " |")
+        for row in md_rows:
+            md_lines.append("| " + " | ".join(row) + " |")
+    else:
+        md_lines.append("_(no completed settings to summarize)_")
+    with open(md_path, "w", encoding="utf-8") as f:
+        f.write("\n".join(md_lines) + "\n")
+
+    # ── CSV ──
+    csv_path = os.path.join(output_dir, csv_filename)
+    import csv as _csv
+    with open(csv_path, "w", encoding="utf-8", newline="") as f:
+        writer = _csv.writer(f)
+        writer.writerow(headers)
+        for row in csv_rows:
+            writer.writerow(row)
+
+    if print_to_stdout:
+        print(f"Saved returns summary to: {md_path}")
+        print(f"Saved returns summary to: {csv_path}")
+        print()
+
+    return {
+        "rows": rows_data,
+        "headers": headers,
+        "markdown_path": md_path,
+        "csv_path": csv_path,
+        "text": rendered_text,
+    }

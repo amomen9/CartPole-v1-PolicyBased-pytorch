@@ -416,6 +416,7 @@ def run_selected_experiments(
         _load_all_excel_curves,
         _match_sheets_to_jobs,
         _run_pending_parallel,
+        build_returns_summary_table,
         save_algorithm_workbook,
     )
 
@@ -1120,6 +1121,19 @@ def run_selected_experiments(
 
     if show_individual_plots or animation_plot or combined_fig_shown:
         plt.show(block=show_curve_plots)
+
+    # ── Final summary: mean & std of returns per (algorithm, setting) ──
+    try:
+        build_returns_summary_table(
+            algo_jobs=algo_jobs,
+            setting_results=setting_results,
+            algo_job_offsets=algo_job_offsets,
+            n_repetitions=n_repetitions,
+            last_fraction=0.1,
+            output_dir=".",
+        )
+    except Exception as exc:
+        print(f"[summary] Failed to build returns summary table: {exc}")
 
     total_time = (time.perf_counter() - start_time) / 60.0
     with open("output.log", "w", encoding="utf-8") as f:

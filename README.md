@@ -80,7 +80,7 @@ The project is centered on the CartPole-v1 environment. A quick smoke test is to
 
 ### Visualize a Trained Policy
 
-Set the plotting flags in any `Experiment*.py` to `True`:
+Set the plotting flags in `Experiment.py` to `True`:
 
 - `show_curve_plots = True`
 - `animation_plot = True`
@@ -89,7 +89,7 @@ This enables learning-curve visualization and optional CartPole animation output
 
 ### Reuse Existing Results
 
-Each experiment script exposes two flags in `global_config` that control caching:
+`Experiment.py` exposes two flags in `global_config` that control caching:
 
 - `use_existing_disk_data` — reuse `.xlsx` runs from `data sheets/` if present
 - `use_existing_disk_trained_networks` — reuse saved networks from `Checkpoints/`
@@ -98,7 +98,7 @@ Setting both to `True` lets a sweep finish in seconds when the data already exis
 
 ### Customize Experiments
 
-Adjust the configuration dictionaries inside any `Experiment*.py` script:
+Adjust the configuration dictionaries inside `Experiment.py`:
 
 - `global_config`
 - `PPO_config`
@@ -121,19 +121,9 @@ The project is configured to reuse existing disk data when available, which keep
 
 ## Project Structure
 
-- `Experiment.py` — main experiment entrypoint and hyperparameter configuration (final PPO vs. A2C vs. DQN comparison)
-- `Experiment_Default_Gamma.py` — single-command sweep over PPO `gamma`
-- `Experiment_ActorLR.py` — single-command sweep over PPO actor learning rate
-- `Experiment_Beta.py` — single-command sweep over PPO critic learning rate
-- `Experiment_Default_ActorNN.py` — single-command sweep over PPO actor network architectures
-- `Experiment_Default_CriticNN.py` — single-command sweep over PPO critic network architectures
-- `Experiment_Default_Eps.py` — single-command sweep over PPO clipping epsilon
-- `Experiment_Default_Epochs.py` — single-command sweep over PPO optimisation epochs
-- `Experiment2.py`, `Experiment3.py`, `Experiment10.py` — alternative PPO configurations / long-horizon evaluation
+- `Experiment.py` — main experiment entrypoint and hyperparameter configuration (final PPO vs. A2C vs. DQN comparison and all PPO sweeps)
 - `PPO.py` — PPO-clipped (with GAE) implementation
 - `Library.py` — central library that wires experiments to algorithms, plotting, and Excel logging
-- `functions.py` — core experiment execution utilities
-- `facilitation_functions.py` — result extraction, Excel helpers, and job-building utilities
 - `Helper.py` — shared helper functions
 - `Agent.py` — agent logic shared across algorithms
 - `Environment.py` — environment wrapper / interaction logic
@@ -141,10 +131,12 @@ The project is configured to reuse existing disk data when available, which keep
 - `REINFORCE.py`, `AC.py`, `A2C.py` — reused policy-gradient / actor-critic implementations from the previous assignment
 - `assignment2_repo/` — previous assignment code reused for DQN
 - `assignment3_repo/` — previous assignment code reused for REINFORCE / AC / A2C baselines
-- `Assignment_4.pdf` — assignment statement
+- `Baseline data/` — benchmark CSV files used as the reference learning curve
+- `Checkpoints/` — saved trained networks reused when `use_existing_disk_trained_networks = True`
+- `data sheets/` — `.xlsx` run logs reused when `use_existing_disk_data = True`
+- `plots/` — generated learning-curve figures
+- `README.md` — this file
 - `requirements.txt` — Python dependencies
-- `A2C algorithm.png`, `AC algorithm.png`, `REINFORCE algorithm.png` — reference figures
-- `test_anim.gif` — example animation artifact
 
 ## Architecture & Implementation Details
 
@@ -305,7 +297,7 @@ A softmax exploration sweep is also defined for DQN:
 
 ## Ablation Study Results
 
-The repository is set up to generate ablation results automatically from the configuration in each `Experiment*.py` script. Every PPO sub-task in the report (gamma, actor LR, critic LR, actor NN, critic NN, clip epsilon, optimisation epochs) maps one-to-one to a single command listed in the [Usage](#usage) section.
+The repository is set up to generate ablation results automatically from the configuration in `Experiment.py`. Every PPO sub-task in the report (gamma, actor LR, critic LR, actor NN, critic NN, clip epsilon, optimisation epochs) is reproduced by editing the corresponding list inside `PPO_config` and rerunning `python Experiment.py` as described in the [Usage](#usage) section.
 
 - Learning curves are produced from repeated runs.
 - Existing `.xlsx` data can be reused from disk when `use_existing_disk_data = True`.
@@ -315,9 +307,9 @@ If you rerun the experiments with different hyperparameters, the resulting curve
 
 ## Key Design Decisions
 
-- **Single configuration entrypoint per sub-task:** every ablation / sweep lives in its own `Experiment*.py` so each one can be reproduced with a single command
+- **Single configuration entrypoint:** all important run settings live in `Experiment.py`, so every ablation / sweep is reproduced with a single command
 - **Algorithm separation:** each method has its own module for clarity and maintainability
-- **Shared experiment tooling:** common logging, plotting, and Excel handling are centralised in `Library.py` / `functions.py`
+- **Shared experiment tooling:** common logging, plotting, and Excel handling are centralised in `Library.py`
 - **Legacy baseline reuse:** the DQN implementation from assignment 2 and the REINFORCE / AC / A2C implementations from assignment 3 are preserved in `assignment2_repo/` and `assignment3_repo/`
 - **Disk caching:** `use_existing_disk_data` and `use_existing_disk_trained_networks` let sweeps be re-plotted without retraining
 - **Reproducibility:** repeated runs use a fixed base seed and a consistent experiment structure
