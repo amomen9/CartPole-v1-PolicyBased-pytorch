@@ -20,7 +20,7 @@ def experiment():
         # Plotting parameters
         "benchmark_curve": 1,               # Default: 1, choose one: 1 or 2 for the benchmark CSV (BaselineDataCartPole_run1.csv or BaselineDataCartPole_run2.csv).
         "benchmark_name": "Baseline",       # Benchmark name to show in the legend for the benchmark curve. Default: "Baseline".
-        "plot_smoothing_window": [101, 201, 251],  # Use multiple values to plot multiple curves. Default: [1, 51, 101, 201, 251, 301]. Set to [1] to skip smoothing.
+        "plot_smoothing_window": [101, 201, 251, 351],  # Use multiple values to plot multiple curves. Default: [1, 51, 101, 201, 251, 301]. Set to [1] to skip smoothing.
         "curve_confidence_interval": 0.6,   # Curve shading confidence interval. Default: 0.95. Set to 0 to skip CI shading.
         "curve_shaded_area_opacity": 0.06,  # Opacity of the shaded area for confidence intervals. Default: 0.05 (5% opacity).
         "show_curve_plots": True,           # Show learning curve plot at the end of or during the training.
@@ -149,23 +149,23 @@ def experiment():
     # ------------- Algorithm Type: PPO hyperparameters (core PPO + GAE) ----
     # Proximal Policy Optimisation (PPO-clipped) - Schulman et al., 2017
     PPO_config = {
-        "gamma": [0.99],                # list of discount factors to sweep
-        "actor_lr": [3e-4],           # actor learning rate(s) to sweep
-        "actor_hidden_nn": [[64, 64]],   # actor NN architectures to sweep
-        "critic_lr": [1e-3],           # critic learning rate(s) to sweep
-        "critic_hidden_nn": [[32, 32],[64, 64],[128, 128]], # critic NN architectures to sweep
-        "gae_lambda": [0.95],           # GAE lambda parameter which controls the bias-variance trade-off of the Generalized Advantage Estimation (GAE). Default: 0.95. Set to 1.0 to disable GAE and use regular advantage estimation.
-        "clip_eps": [0.2],              # PPO clipping epsilon which controls the clipping range for the probability ratio in the PPO surrogate objective. Default: 0.2.
-        "n_epochs": [10],               # # of optimisation epochs per rollout which controls how many times we reuse each collected rollout batch of data to update the policy. Default: 10. Set to 1 to skip PPO epoch trials and only do one epoch per rollout.
-        "rollout_steps": [2048],        # # of env steps per rollout (PPO buffer size) which controls how many steps of data we collect in each rollout before we perform policy updates. Default: 2048. Set to a large number (e.g., 1e6) to skip rollout length trials and effectively use the entire episode as one rollout.
-        "legend_parameters": {          # [curve label, show flag]
-            "gamma": [r"$\gamma$: ", False],
+        "gamma": [0.99],                  # list of discount factors to sweep
+        "actor_lr": [3e-4],               # actor learning rate(s) to sweep
+        "actor_hidden_nn": [[64, 64]],    # actor NN architectures to sweep
+        "critic_lr": [1e-3],              # 4e-3 # critic learning rate(s) to sweep
+        "critic_hidden_nn": [[128, 128]], # 256  # critic NN architectures to sweep
+        "gae_lambda": [0.95],     # 0.96 # GAE lambda parameter which controls the bias-variance trade-off of the Generalized Advantage Estimation (GAE). Default: 0.95. Set to 1.0 to disable GAE and use regular advantage estimation.
+        "clip_eps": [0.2],                # 0.1  # PPO clipping epsilon which controls the clipping range for the probability ratio in the PPO surrogate objective. Default: 0.2.
+        "n_epochs": [10],                 # 15   # of optimisation epochs per rollout which controls how many times we reuse each collected rollout batch of data to update the policy. Default: 10. Set to 1 to skip PPO epoch trials and only do one epoch per rollout.
+        "rollout_steps": [2048],          # 1024 # of env steps per rollout (PPO buffer size) which controls how many steps of data we collect in each rollout before we perform policy updates. Default: 2048. Set to a large number (e.g., 1e6) to skip rollout length trials and effectively use the entire episode as one rollout.
+        "legend_parameters": {            # [curve label, show flag]
+            "gamma": [r"$\gamma$: ", True],
             "actor_lr": [r"Actor $\alpha$: ", True],
             "critic_lr": [r"Critic $\beta$: ", False],
             "actor_hidden_nn": [r"Actor NN: ", True],
             "critic_hidden_nn": [r"Critic NN: ", True],
             "gae_lambda": [r"$\lambda_{GAE}$: ", True],
-            "clip_eps": [r"$\epsilon_{clip}$: ", True],
+            "clip_eps": [r"$\epsilon_{clip}$: ", False],
             "n_epochs": [r"Epochs: ", False],
             "rollout_steps": [r"Rollout: ", False],
         },
