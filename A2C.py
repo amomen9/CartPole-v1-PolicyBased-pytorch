@@ -122,7 +122,7 @@ class A2C_Agent(BaseAgent):
         """Evaluate the current policy greedily (deterministic).
 
         Uses environment episode rollouts (slower than the training-loop proxy
-        `last_episode_return`).
+        'last_episode_return').
         """
         env = CartPoleEnvironment(max_episode_length=max_steps, render_mode="rgb_array")
 

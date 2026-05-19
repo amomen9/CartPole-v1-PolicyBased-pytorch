@@ -145,8 +145,8 @@ def run_ac(
     - optional shared_step_counter for parent-owned parallel progress bars
 
     Evaluation at each eval_interval:
-    - default: use fast proxy `last_episode_return`
-    - when enabled: use greedy environment episode trials via `agent.evaluate()`
+    - default: use fast proxy 'last_episode_return'
+    - when enabled: use greedy environment episode trials via 'agent.evaluate()'
     """
 
 

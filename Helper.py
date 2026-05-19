@@ -33,7 +33,7 @@ from scipy.signal import savgol_filter
 from scipy.stats import t as t_dist
 
 
-# Timestamp captured at module import time — represents the start of execution
+# Timestamp captured at module import time - represents the start of execution
 # for the current run. Used to suffix plot filenames so all plots from one run
 # share the same timestamp (format: YYYY.MM.DD_HH.MM.SS).
 RUN_TIMESTAMP = datetime.now().strftime("%Y.%m.%d_%H.%M.%S")
@@ -244,7 +244,7 @@ def average_over_repetitions(
     return_raw=False,
     unused_cpu_cores: int = 0,
 ):
-    """Run ``n_repetitions`` of the given method and return (mean, std, timesteps)."""
+    """Run 'n_repetitions' of the given method and return (mean, std, timesteps)."""
 
     from concurrent.futures import ProcessPoolExecutor, as_completed  # noqa: F401
     from multiprocessing import Manager
@@ -650,9 +650,9 @@ def _load_results_from_excel(
 
     Validation is per-sheet: each sheet must agree with every key in the filtered
     algo_config and filtered global_config (a missing column on the sheet is
-    treated as a match — lenient back-compat for workbooks written before
-    global_config was persisted per sheet). The ``n_timesteps`` key is the
-    exception, validated with ``>=`` rather than equality.
+    treated as a match - lenient back-compat for workbooks written before
+    global_config was persisted per sheet). The 'n_timesteps' key is the
+    exception, validated with '>=' rather than equality.
 
     Returns a tuple (results, mismatches):
         results: list of dicts [{"learning_curve", "learning_curve_std", "timesteps", "curve_label"}, ...]
@@ -819,19 +819,19 @@ def _match_sheets_to_jobs(
     """For every job, scan every sheet in the workbook for the first match.
 
     A sheet matches a job when every non-excluded key in the job's combined
-    hyperparams (its own ``hyperparams`` plus the relevant ``global_config``
-    keys) agrees with the corresponding sheet column. ``n_timesteps`` is
-    matched with ``>=`` (the learning curve is cropped to the running value).
-    Lenient back-compat: if the sheet is missing ``eval_with_env_episode_trials``
+    hyperparams (its own 'hyperparams' plus the relevant 'global_config'
+    keys) agrees with the corresponding sheet column. 'n_timesteps' is
+    matched with '>=' (the learning curve is cropped to the running value).
+    Lenient back-compat: if the sheet is missing 'eval_with_env_episode_trials'
     the job still matches when its value is False; similarly for
-    ``n_eval_episodes`` when env-episode evaluation is disabled. Sheet columns
+    'n_eval_episodes' when env-episode evaluation is disabled. Sheet columns
     not referenced by the job are ignored. Each sheet matches at most one job
     (first-job-first-match wins).
 
-    Returns (aligned, mismatches) where ``aligned[i]`` is ``None`` when job
-    ``i`` has no match, otherwise a result dict with the cropped learning
+    Returns (aligned, mismatches) where 'aligned[i]' is 'None' when job
+    'i' has no match, otherwise a result dict with the cropped learning
     curve, std, timesteps and a curve label rebuilt from the current legend.
-    ``mismatches`` aggregates the first informative reason per parameter that
+    'mismatches' aggregates the first informative reason per parameter that
     blocked any candidate match.
     """
     algo_config = algo_config or {}
@@ -848,7 +848,7 @@ def _match_sheets_to_jobs(
     required = {"timestep", "learning_curve_mean", "learning_curve_std"}
 
     def _parse_sheets(sheet_map):
-        out: list[tuple[str, dict[str, str], np.ndarray, np.ndarray, np.ndarray, Any]] = []
+        out: list[tuple[str, dict[str, str], np.ndarray, np.ndarray, np.ndarray, Any, Any]] = []
         for sheet_name in sorted(sheet_map.keys()):
             df = sheet_map[sheet_name]
             if not required.issubset(set(df.columns)):
@@ -865,7 +865,20 @@ def _match_sheets_to_jobs(
                 if col_name in required or col_name == "curve_label" or col_name.startswith("rep_"):
                     continue
                 sheet_hp[col_name] = _parse_sheet_value(df[col].iloc[0])
-            out.append((sheet_name, sheet_hp, ts, lc, lc_s, df))
+            rep_cols_sorted = sorted(
+                (c for c in df.columns if str(c).startswith("rep_")),
+                key=lambda s: int(str(s).split("_", 1)[1]) if str(s).split("_", 1)[1].isdigit() else 10**9,
+            )
+            raw_returns = None
+            if rep_cols_sorted:
+                try:
+                    raw_returns = np.asarray(
+                        [df[c].values.astype(np.float32) for c in rep_cols_sorted],
+                        dtype=np.float32,
+                    )
+                except Exception:
+                    raw_returns = None
+            out.append((sheet_name, sheet_hp, ts, lc, lc_s, df, raw_returns))
         return out
 
     header_row = 1 if formatted_sheets else 0
@@ -904,7 +917,7 @@ def _match_sheets_to_jobs(
         except (TypeError, ValueError):
             running_n_ts = None
 
-        for sheet_idx, (_sn, sheet_hp, ts, lc, lc_s, df) in enumerate(parsed):
+        for sheet_idx, (_sn, sheet_hp, ts, lc, lc_s, df, raw_returns) in enumerate(parsed):
             if sheet_idx in used:
                 continue
 
@@ -947,11 +960,14 @@ def _match_sheets_to_jobs(
                 continue
 
             ts_out, lc_out, lc_s_out = ts, lc, lc_s
+            raw_out = raw_returns
             if running_n_ts is not None:
                 mask = ts_out <= running_n_ts
                 ts_out = ts_out[mask]
                 lc_out = lc_out[mask]
                 lc_s_out = lc_s_out[mask]
+                if raw_out is not None and raw_out.ndim == 2 and raw_out.shape[1] == len(mask):
+                    raw_out = raw_out[:, mask]
 
             label_parts = [algo_prefix]
             for legend_key, (legend_label, show) in legend.items():
@@ -974,6 +990,7 @@ def _match_sheets_to_jobs(
                 "learning_curve_std": lc_s_out,
                 "timesteps": ts_out,
                 "curve_label": ", ".join(label_parts),
+                "raw_returns": raw_out,
             }
             used.add(sheet_idx)
             break
@@ -1012,9 +1029,9 @@ def _load_all_excel_curves(
 
     algo_configs: dict mapping algo name (e.g. "REINFORCE", "DQN") to its config dict.
     Each file's algo is inferred from the filename stem, so only files named
-    like ``REINFORCE.xlsx`` or ``DQN.xlsx`` are matched.
+    like 'REINFORCE.xlsx' or 'DQN.xlsx' are matched.
     Sheets are filtered by HP value matching and labels are built using legend_parameters,
-    both delegated to _load_results_from_excel. When ``global_config`` is supplied
+    both delegated to _load_results_from_excel. When 'global_config' is supplied
     each sheet is also validated against the filtered global_config keys.
 
     Returns a list of dicts: [{curve_label, learning_curve, learning_curve_std, timesteps, source_file}, ...]
@@ -1085,7 +1102,7 @@ def _meta_value_text(value: Any) -> str:
 
 
 def _meta_filtered_items(config: dict[str, Any] | None, exclusions: frozenset) -> dict[str, str]:
-    """Return the ``{key: text}`` mapping for ``config`` after dropping excluded keys.
+    """Return the '{key: text}' mapping for 'config' after dropping excluded keys.
 
     Values are normalized to a stable string so writing and reading produce
     identical comparable representations.
@@ -1124,14 +1141,14 @@ def _normalize_legend_entry(param_name: str, entry: Any) -> LegendEntry:
 def _resolve_legend_flags(cfg: dict[str, Any], *, warn_on_suppression: bool = True) -> dict[str, LegendEntry]:
     """Resolve which parameters should appear in the legend.
 
-    Uses ``legend_parameters`` dict if present. Falls back to (and is
-    overridden by) the legacy ``nn_include_hp_in_legend`` /
-    ``nn_include_lr_in_legend`` flags for backward compatibility.
+    Uses 'legend_parameters' dict if present. Falls back to (and is
+    overridden by) the legacy 'nn_include_hp_in_legend' /
+    'nn_include_lr_in_legend' flags for backward compatibility.
 
-    When DQN epsilon decay is disabled (``epsilon_decay_interval == 0``),
+    When DQN epsilon decay is disabled ('epsilon_decay_interval == 0'),
     suppress the dependent epsilon-decay fields from the legend so the
     DQN labels match the shared REINFORCE/AC/A2C path. If
-    ``warn_on_suppression`` is True, print one warning per suppressed field.
+    'warn_on_suppression' is True, print one warning per suppressed field.
 
     Returns a dict {param_name: (display_label, bool)}.
     """
@@ -1804,7 +1821,7 @@ def _run_dqn_one_rep(trial_common: dict[str, Any], run_seed: int, rep_index: int
 
     Mirrors the checkpointing behaviour of the policy-gradient algorithms:
     optionally pre-loads the Q-network from disk before training, and on the
-    first repetition (``rep_index == 0``) persists the trained Q-network to
+    first repetition ('rep_index == 0') persists the trained Q-network to
     disk via :func:`Checkpointing.save_state_dict_overwrite`.
     """
     import torch
@@ -2385,7 +2402,7 @@ def _rows_from_result(
 ) -> list[list[Any]]:
     """Convert a (mean,std,timesteps[,raw_returns]) tuple into row-wise Excel rows.
 
-    If ``raw_returns`` is provided it is expected to have shape:
+    If 'raw_returns' is provided it is expected to have shape:
         (n_repetitions, n_points)
 
     Then each row becomes:
@@ -2456,7 +2473,7 @@ def _build_rows(
 
     Writes:
     - timestep / mean / std for every row
-    - rep_1..rep_n for every row (when ``raw_returns`` is available)
+    - rep_1..rep_n for every row (when 'raw_returns' is available)
     - hyperparameters + curve_label ONLY on the first timestep row
     """
     base_rows = _rows_from_result(result)

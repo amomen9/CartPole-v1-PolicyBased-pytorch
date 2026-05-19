@@ -22,10 +22,14 @@ The experiment pipeline is driven by `Experiment.py`, which defines the global r
 
 ### Installation
 
+Install the required python packages using the command below:
+
 ```bash
-git clone <repository-url>
-cd <repository-directory>
 pip install -r requirements.txt
+```
+or
+```bash
+python -m pip install -r requirements.txt
 ```
 
 ### Dependencies
@@ -44,7 +48,7 @@ The project dependencies are listed in `requirements.txt`:
 
 ## Usage
 
-Each experiment / sub-task corresponds to a single `Experiment*.py` script, so every result in the report can be reproduced with a **single command**.
+Every result in the report can be reproduced with a **single command** by running `Experiment.py`. Different sub-tasks (the final comparison and each PPO hyperparameter sweep) are selected via the `included_algorithms` dictionary and the lists inside `PPO_config` (and the other algorithm configs) at the top of `Experiment.py`.
 
 ### Run the Final Comparison (PPO vs. A2C vs. DQN)
 
@@ -54,22 +58,21 @@ python Experiment.py
 
 This is the main entrypoint and reproduces the final learning-curve comparison between PPO (with its optimal hyperparameters), A2C and DQN. Algorithms can be turned on/off by editing the `included_algorithms` dictionary inside `Experiment.py`.
 
+Alternatively, the algorithms to include can be selected directly from the command line with one flag per algorithm (`--DQN`, `--REINFORCE`, `--AC`, `--A2C`, `--PPO`). When any algorithm flag is provided, it overrides the `included_algorithms` dictionary inside `Experiment.py`. For example, to run all four algorithms together:
+
+```bash
+python Experiment.py --A2C --DQN --AC --PPO
+```
+
 ### Run the PPO Ablation / Hyperparameter Sweeps
 
-Each PPO hyperparameter sweep used in the report has its own dedicated script. Run any one of them with a single command:
+Every PPO hyperparameter sweep used in the report is reproduced from `Experiment.py` by extending the corresponding list inside `PPO_config` (for example, set `"gamma": [0.9, 0.99, 1.0]` to sweep three discount factors, or `"clip_eps": [0.1, 0.2, 0.3]` to sweep the clip range), then running the same command:
 
-| Sub-task / Sweep | Command |
-|---|---|
-| Discount factor `gamma` sweep | `python Experiment_Default_Gamma.py` |
-| Actor learning rate `alpha` sweep | `python Experiment_ActorLR.py` |
-| Critic learning rate `beta` sweep | `python Experiment_Beta.py` |
-| Actor network architecture sweep | `python Experiment_Default_ActorNN.py` |
-| Critic network architecture sweep | `python Experiment_Default_CriticNN.py` |
-| PPO clip range `clip_eps` sweep | `python Experiment_Default_Eps.py` |
-| Number of PPO epochs sweep | `python Experiment_Default_Epochs.py` |
-| Alternative PPO configuration (run 2) | `python Experiment2.py` |
-| Alternative PPO configuration (run 3) | `python Experiment3.py` |
-| Long-horizon PPO evaluation run | `python Experiment10.py` |
+```bash
+python Experiment.py
+```
+
+The same applies to actor / critic learning rates, network architectures, `gae_lambda`, `n_epochs`, and `rollout_steps` — each is a list inside `PPO_config` and any combination of values will be swept in a single run.
 
 ### Test the Environment
 
@@ -225,80 +228,80 @@ A softmax exploration sweep is also defined for DQN:
 
 ### Global Parameters
 
-| Parameter | Value |
-|---|---:|
-| `benchmark_curve` | `1` |
-| `benchmark_name` | `Baseline` |
-| `n_repetitions` | `5` |
-| `plot_smoothing_window` | `[101, 201, 251, 351]` |
-| `curve_confidence_interval` | `0.6` |
-| `curve_shaded_area_opacity` | `0.06` |
-| `use_existing_disk_data` | `False` |
-| `use_existing_disk_trained_networks` | `True` |
-| `show_curve_plots` | `True` |
-| `animation_plot` | `False` |
-| `n_timesteps` | `1000000` |
-| `eval_interval` | `250` |
-| `max_train_episode_length` | `500` |
-| `max_eval_episode_length` | `500` |
-| `n_eval_episodes` | `5` |
-| `base_seed` | `42` |
+| Parameter                              |                    Value |
+| -------------------------------------- | -----------------------: |
+| `benchmark_curve`                    |                    `1` |
+| `benchmark_name`                     |             `Baseline` |
+| `n_repetitions`                      |                    `5` |
+| `plot_smoothing_window`              | `[101, 201, 251, 351]` |
+| `curve_confidence_interval`          |                  `0.6` |
+| `curve_shaded_area_opacity`          |                 `0.06` |
+| `use_existing_disk_data`             |                `False` |
+| `use_existing_disk_trained_networks` |                 `True` |
+| `show_curve_plots`                   |                 `True` |
+| `animation_plot`                     |                `False` |
+| `n_timesteps`                        |              `1000000` |
+| `eval_interval`                      |                  `250` |
+| `max_train_episode_length`           |                  `500` |
+| `max_eval_episode_length`            |                  `500` |
+| `n_eval_episodes`                    |                    `5` |
+| `base_seed`                          |                   `42` |
 
 ### PPO (Optimal)
 
-| Parameter | Value |
-|---|---:|
-| `gamma` | `[0.99]` |
-| `actor_lr` | `[3e-4]` |
-| `actor_hidden_nn` | `[[128, 128]]` |
-| `critic_lr` | `[0.01]` |
+| Parameter            |            Value |
+| -------------------- | ---------------: |
+| `gamma`            |       `[0.99]` |
+| `actor_lr`         |       `[3e-4]` |
+| `actor_hidden_nn`  | `[[128, 128]]` |
+| `critic_lr`        |       `[0.01]` |
 | `critic_hidden_nn` | `[[512, 512]]` |
-| `gae_lambda` | `[0.96]` |
-| `clip_eps` | `[0.1]` |
-| `n_epochs` | `[30]` |
-| `rollout_steps` | `[512]` |
+| `gae_lambda`       |       `[0.96]` |
+| `clip_eps`         |        `[0.1]` |
+| `n_epochs`         |         `[30]` |
+| `rollout_steps`    |        `[512]` |
 
 ### REINFORCE
 
-| Parameter | Value |
-|---|---:|
-| `gamma` | `[0.99]` |
-| `actor_lr` | `[1e-3]` |
+| Parameter           |            Value |
+| ------------------- | ---------------: |
+| `gamma`           |       `[0.99]` |
+| `actor_lr`        |       `[1e-3]` |
 | `actor_hidden_nn` | `[[128, 128]]` |
 
 ### Advantage Actor-Critic (A2C)
 
-| Parameter | Value |
-|---|---:|
-| `gamma` | `[0.99]` |
-| `actor_lr` | `[1e-4]` |
-| `actor_hidden_nn` | `[64, 64]` |
-| `critic_lr` | `[0.01]` |
+| Parameter            |            Value |
+| -------------------- | ---------------: |
+| `gamma`            |       `[0.99]` |
+| `actor_lr`         |       `[1e-4]` |
+| `actor_hidden_nn`  |     `[64, 64]` |
+| `critic_lr`        |       `[0.01]` |
 | `critic_hidden_nn` | `[[128, 128]]` |
-| `TN_step` | `[10]` |
+| `TN_step`          |         `[10]` |
 
 ### DQN
 
-| Parameter | Value |
-|---|---:|
-| `gamma` | `0.99` |
-| `learning_rate` | `[0.001]` |
-| `nn_hidden_layer_widths` | `[[128, 128]]` |
-| `exploration_method` | `"egreedy"` |
-| `epsilons` | `[0.05]` |
-| `epsilon_start` | `0.05` |
-| `epsilon_end` | `0.05` |
-| `epsilon_decay` | `1` |
-| `epsilon_decay_interval` | `0` |
-| `softmax_temps` | `[1.0, 0.5, 0.1]` |
-| `TN_active` | `[True]` |
-| `TN_step` | `[100]` |
-| `ER_active` | `[True]` |
-| `ER_replay_buffer_size` | `80000` |
-| `ER_batch_size` | `[64]` |
-| `ER_min_replay_size` | `2000` |
-| `ER_sample_train_frequency` | `[1]` |
-| `ER_replay_ratio` | `1.0` |
+| Parameter                     |               Value |
+| ----------------------------- | ------------------: |
+| `gamma`                     |            `0.99` |
+| `learning_rate`             |         `[0.001]` |
+| `nn_hidden_layer_widths`    |    `[[128, 128]]` |
+| `exploration_method`        |       `"egreedy"` |
+| `epsilons`                  |          `[0.05]` |
+| `epsilon_start`             |            `0.05` |
+| `epsilon_end`               |            `0.05` |
+| `epsilon_decay`             |               `1` |
+| `epsilon_decay_interval`    |               `0` |
+| `softmax_temps`             | `[1.0, 0.5, 0.1]` |
+| `TN_active`                 |          `[True]` |
+| `TN_step`                   |           `[100]` |
+| `ER_active`                 |          `[True]` |
+| `ER_replay_buffer_size`     |           `80000` |
+| `ER_batch_size`             |            `[64]` |
+| `ER_min_replay_size`        |            `2000` |
+| `ER_sample_train_frequency` |             `[1]` |
+| `ER_replay_ratio`           |             `1.0` |
 
 ## Ablation Study Results
 

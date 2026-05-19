@@ -75,7 +75,7 @@ class PPO_Agent(BaseAgent):
     def compute_gae(self, rewards, values, dones, last_value):
         """Generalised Advantage Estimation (Schulman et al., 2015).
 
-        Returns ``(advantages, returns)`` where ``returns = advantages + values``.
+        Returns '(advantages, returns)' where 'returns = advantages + values'.
         """
 
         T = len(rewards)
@@ -214,8 +214,8 @@ def run_ppo(
     """PPO training loop with eval-interval return recording.
 
     Steps through the environment one transition at a time, filling a
-    fixed-length rollout buffer (``rollout_steps``). Once full PPO performs
-    ``n_epochs`` full-batch gradient updates and the buffer is cleared.
+    fixed-length rollout buffer ('rollout_steps'). Once full PPO performs
+    'n_epochs' full-batch gradient updates and the buffer is cleared.
     """
 
     data_count = math.ceil(n_timesteps / eval_interval)

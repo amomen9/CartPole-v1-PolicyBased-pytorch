@@ -35,8 +35,8 @@ def run_reinforce(
     """REINFORCE training loop. Steps through the environment one step at a time.
 
     Every eval_interval global steps, records either:
-    - the fast proxy `last_episode_return` (default), or
-    - a greedy environment evaluation via `agent.evaluate()` ("episode trials").
+    - the fast proxy 'last_episode_return' (default), or
+    - a greedy environment evaluation via 'agent.evaluate()' ("episode trials").
 
     Returns (eval_returns, eval_timesteps) as pre-allocated numpy arrays, matching DQN data collection.
 

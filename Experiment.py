@@ -6,6 +6,9 @@ Leiden University, The Netherlands
 By Thomas Moerland
 """
 
+import argparse
+import sys
+
 from Library import run_selected_experiments
 
 
@@ -47,9 +50,41 @@ def experiment():
         "DQN": True,
         "REINFORCE": False,
         "AC": False,
-        "A2C": False,
-        "PPO": False,
+        "A2C": True,
+        "PPO": True,
     }
+    
+    ###############################################################################################
+    
+    ###################[ PPO, Algorithm of this assignment ]###################
+    # ------------- Algorithm Type: PPO hyperparameters (basic PPO + GAE) ----
+    # Proximal Policy Optimisation (PPO-clipped) - Schulman
+    PPO_config = {
+        "gamma": [0.99],                  # list of discount factors to sweep
+        "actor_lr": [3e-4],               # actor learning rate(s) to sweep
+        "actor_hidden_nn": [[128, 128]],    # actor NN architectures to sweep
+        "critic_lr": [0.01],              # 4e-3 # critic learning rate(s) to sweep
+        "critic_hidden_nn": [[512, 512]], # 256  # critic NN architectures to sweep
+        "gae_lambda": [0.96],     # 0.96 # GAE lambda parameter which controls the bias-variance trade-off of the Generalized Advantage Estimation (GAE). Default: 0.95. Set to 1.0 to disable GAE and use regular advantage estimation.
+        "clip_eps": [0.1],                # 0.1  # PPO clipping epsilon which controls the clipping range for the probability ratio in the PPO surrogate objective. Default: 0.2.
+        "n_epochs": [30],                 # 15   # of optimisation epochs per rollout which controls how many times we reuse each collected rollout batch of data to update the policy. Default: 10. Set to 1 to skip PPO epoch trials and only do one epoch per rollout.
+        "rollout_steps": [512],          # 1024 # of env steps per rollout (PPO buffer size) which controls how many steps of data we collect in each rollout before we perform policy updates. Default: 2048. Set to a large number (e.g., 1e6) to skip rollout length trials and effectively use the entire episode as one rollout.
+        "legend_parameters": {            # [curve label, show flag]
+            "gamma": [r"$\gamma$: ", True],
+            "actor_lr": [r"Actor $\alpha$: ", True],
+            "critic_lr": [r"Critic $\beta$: ", True],
+            "actor_hidden_nn": [r"Actor NN: ", False],
+            "critic_hidden_nn": [r"Critic NN: ", False],
+            "gae_lambda": [r"$\lambda_{GAE}$: ", True],
+            "clip_eps": [r"$\epsilon_{clip}$: ", True],
+            "n_epochs": [r"Epochs: ", True],
+            "rollout_steps": [r"Rollout: ", True],
+        },
+    }
+    # ------------- End PPO hyperparameters -----------
+    ###############################################################################################
+    
+    ################[ Other algorithms for comparison from the previous assignments ]##############
     # Using DQN implementation from the previous assignment (existing in the assignment2_repo directory)
     # ------------- Algorithm: DQN hyperparameters (optimal) ----
     DQN_config = {
@@ -146,35 +181,28 @@ def experiment():
     }
     # ------------- End A2C hyperparameters -----------
 
-    # ------------- Algorithm Type: PPO hyperparameters (basic PPO + GAE) ----
-    # Proximal Policy Optimisation (PPO-clipped) - Schulman
-    PPO_config = {
-        "gamma": [0.99],                  # list of discount factors to sweep
-        "actor_lr": [3e-4],               # actor learning rate(s) to sweep
-        "actor_hidden_nn": [[128, 128]],    # actor NN architectures to sweep
-        "critic_lr": [0.01],              # 4e-3 # critic learning rate(s) to sweep
-        "critic_hidden_nn": [[512, 512]], # 256  # critic NN architectures to sweep
-        "gae_lambda": [0.96],     # 0.96 # GAE lambda parameter which controls the bias-variance trade-off of the Generalized Advantage Estimation (GAE). Default: 0.95. Set to 1.0 to disable GAE and use regular advantage estimation.
-        "clip_eps": [0.1],                # 0.1  # PPO clipping epsilon which controls the clipping range for the probability ratio in the PPO surrogate objective. Default: 0.2.
-        "n_epochs": [30],                 # 15   # of optimisation epochs per rollout which controls how many times we reuse each collected rollout batch of data to update the policy. Default: 10. Set to 1 to skip PPO epoch trials and only do one epoch per rollout.
-        "rollout_steps": [512],          # 1024 # of env steps per rollout (PPO buffer size) which controls how many steps of data we collect in each rollout before we perform policy updates. Default: 2048. Set to a large number (e.g., 1e6) to skip rollout length trials and effectively use the entire episode as one rollout.
-        "legend_parameters": {            # [curve label, show flag]
-            "gamma": [r"$\gamma$: ", True],
-            "actor_lr": [r"Actor $\alpha$: ", True],
-            "critic_lr": [r"Critic $\beta$: ", True],
-            "actor_hidden_nn": [r"Actor NN: ", False],
-            "critic_hidden_nn": [r"Critic NN: ", False],
-            "gae_lambda": [r"$\lambda_{GAE}$: ", True],
-            "clip_eps": [r"$\epsilon_{clip}$: ", True],
-            "n_epochs": [r"Epochs: ", True],
-            "rollout_steps": [r"Rollout: ", True],
-        },
-    }
-    # ------------- End PPO hyperparameters -----------
+    ###############################################################################################
 
-    ##########################################################
+
+
 
     ordered_algorithms = ["DQN", "REINFORCE", "AC", "A2C", "PPO"]
+
+    # Allow algorithms to be selected from the command line, e.g.:
+    #     python Experiment.py --A2C --DQN --AC --PPO
+    # If any algorithm flag is passed, it overrides `included_algorithms` above.
+    parser = argparse.ArgumentParser(
+        description="Run selected RL algorithms on CartPole-v1.",
+        add_help=True,
+    )
+    for algo in ordered_algorithms:
+        parser.add_argument(f"--{algo}", action="store_true",
+                            help=f"Include {algo} in the run.")
+    cli_args = parser.parse_args(sys.argv[1:])
+    cli_selected = {algo: getattr(cli_args, algo) for algo in ordered_algorithms}
+    if any(cli_selected.values()):
+        included_algorithms = cli_selected
+
     experiments = [algo for algo in ordered_algorithms if included_algorithms.get(algo, False)]
 
     run_selected_experiments(

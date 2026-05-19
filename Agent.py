@@ -20,7 +20,7 @@ import Library as fn
 class BaseAgent:
     """Base agent for policy-gradient methods on CartPole.
 
-    Subclasses (REINFORCE, AC, A2C, A3C) must override `update()`.
+    Subclasses (REINFORCE, AC, A2C, A3C) must override 'update()'.
 
     The actor is a Policy_NN (sigmoid curve output → P(action=1|s)).
     The critic is a Value_NN:

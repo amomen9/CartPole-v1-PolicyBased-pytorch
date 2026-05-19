@@ -391,7 +391,7 @@ def run_selected_experiments(
     unused_cpu_cores = int(gc.get("UNUSED_CPU_CORES", 0))
     if unused_cpu_cores < 0:
         unused_cpu_cores = 0
-    # Keep the *original* show_curve_plots value for the matplotlib `block=` behavior;
+    # Keep the *original* show_curve_plots value for the matplotlib "block=" behavior;
     # show_individual_plots is the derived flag that can be turned off when the
     # combined preview replaces the individual curve plots.
     show_curve_plots = bool(gc.get("show_curve_plots", False))
@@ -658,6 +658,7 @@ def run_selected_experiments(
                         entry["learning_curve"],
                         entry["learning_curve_std"],
                         entry["timesteps"],
+                        entry.get("raw_returns"),
                     )
                     jobs[i]["curve_label"] = entry["curve_label"]
 
@@ -1178,7 +1179,7 @@ def average_over_repetitions(
     return_raw=False,
     unused_cpu_cores: int = 0,
 ):
-    """Run ``n_repetitions`` of the given method and return (mean, std, timesteps)."""
+    """Run 'n_repetitions' of the given method and return (mean, std, timesteps)."""
 
     from Helper import average_over_repetitions as _impl
     return _impl(
