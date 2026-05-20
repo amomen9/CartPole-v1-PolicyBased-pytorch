@@ -151,23 +151,23 @@ def experiment():
     PPO_config = {
         "gamma": [0.99],                  # list of discount factors to sweep
         "actor_lr": [3e-4],               # actor learning rate(s) to sweep
-        "actor_hidden_nn": [[64, 64]],    # actor NN architectures to sweep
-        "critic_lr": [1e-3],              # 4e-3 # critic learning rate(s) to sweep
-        "critic_hidden_nn": [[128, 128]], # 256  # critic NN architectures to sweep
-        "gae_lambda": [0.95],     # 0.96 # GAE lambda parameter which controls the bias-variance trade-off of the Generalized Advantage Estimation (GAE). Default: 0.95. Set to 1.0 to disable GAE and use regular advantage estimation.
-        "clip_eps": [0.2],                # 0.1  # PPO clipping epsilon which controls the clipping range for the probability ratio in the PPO surrogate objective. Default: 0.2.
-        "n_epochs": [10],                 # 15   # of optimisation epochs per rollout which controls how many times we reuse each collected rollout batch of data to update the policy. Default: 10. Set to 1 to skip PPO epoch trials and only do one epoch per rollout.
-        "rollout_steps": [2048],          # 1024 # of env steps per rollout (PPO buffer size) which controls how many steps of data we collect in each rollout before we perform policy updates. Default: 2048. Set to a large number (e.g., 1e6) to skip rollout length trials and effectively use the entire episode as one rollout.
+        "actor_hidden_nn": [[128, 128]],    # actor NN architectures to sweep
+        "critic_lr": [0.01],              # 4e-3 # critic learning rate(s) to sweep
+        "critic_hidden_nn": [[512, 512]], # 256  # critic NN architectures to sweep
+        "gae_lambda": [0.96],     # 0.96 # GAE lambda parameter which controls the bias-variance trade-off of the Generalized Advantage Estimation (GAE). Default: 0.95. Set to 1.0 to disable GAE and use regular advantage estimation.
+        "clip_eps": [0.1],                # 0.1  # PPO clipping epsilon which controls the clipping range for the probability ratio in the PPO surrogate objective. Default: 0.2.
+        "n_epochs": [30],                 # 15   # of optimisation epochs per rollout which controls how many times we reuse each collected rollout batch of data to update the policy. Default: 10. Set to 1 to skip PPO epoch trials and only do one epoch per rollout.
+        "rollout_steps": [512],          # 1024 # of env steps per rollout (PPO buffer size) which controls how many steps of data we collect in each rollout before we perform policy updates. Default: 2048. Set to a large number (e.g., 1e6) to skip rollout length trials and effectively use the entire episode as one rollout.
         "legend_parameters": {            # [curve label, show flag]
             "gamma": [r"$\gamma$: ", True],
             "actor_lr": [r"Actor $\alpha$: ", True],
-            "critic_lr": [r"Critic $\beta$: ", False],
-            "actor_hidden_nn": [r"Actor NN: ", True],
-            "critic_hidden_nn": [r"Critic NN: ", True],
+            "critic_lr": [r"Critic $\beta$: ", True],
+            "actor_hidden_nn": [r"Actor NN: ", False],
+            "critic_hidden_nn": [r"Critic NN: ", False],
             "gae_lambda": [r"$\lambda_{GAE}$: ", True],
-            "clip_eps": [r"$\epsilon_{clip}$: ", False],
-            "n_epochs": [r"Epochs: ", False],
-            "rollout_steps": [r"Rollout: ", False],
+            "clip_eps": [r"$\epsilon_{clip}$: ", True],
+            "n_epochs": [r"Epochs: ", True],
+            "rollout_steps": [r"Rollout: ", True],
         },
     }
     # ------------- End PPO hyperparameters -----------
