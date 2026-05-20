@@ -2883,6 +2883,28 @@ def _render_aligned_table(headers: list[str], rows: list[list[str]]) -> str:
     return "\n".join(lines)
 
 
+def _non_excluded_hp_items(job_hp: dict[str, Any]) -> list[tuple[str, str]]:
+    """Return sorted (key, stable-text) items from job hyperparams with structural
+    exclusions removed. Independent of 'legend_parameters' show flags.
+    """
+    excluded = GLOBAL_CONFIG_EXCLUSIONS | ALGO_CONFIG_EXCLUSIONS
+    items: list[tuple[str, str]] = []
+    for k, v in job_hp.items():
+        key = str(k)
+        if key in excluded:
+            continue
+        items.append((key, _meta_value_text(v)))
+    items.sort(key=lambda kv: kv[0])
+    return items
+
+
+def _format_setting_label(algo_upper: str, hp_items: list[tuple[str, str]]) -> str:
+    parts = [algo_upper]
+    for k, v in hp_items:
+        parts.append(f"{k}={v}")
+    return ", ".join(parts)
+
+
 def build_returns_summary_table(
     *,
     algo_jobs: dict[str, list[dict[str, Any]]],
@@ -2897,17 +2919,18 @@ def build_returns_summary_table(
 ) -> dict[str, Any]:
     """Aggregate returns per (algorithm, non-excluded-HP) row and emit a table.
 
-    Settings whose curve labels match exactly are merged into a single row, so
-    sweeps that differ only by 'excluded' (legend show_flag=False) hyperparameters
-    collapse to one line. All repetitions and all eval points are pooled into the
-    overall mean/std; the last 'last_fraction' of eval points produces the
-    'last N%' columns.
+    Settings sharing identical non-excluded hyperparameters (after removing only
+    GLOBAL_CONFIG_EXCLUSIONS / ALGO_CONFIG_EXCLUSIONS) collapse into one row.
+    Group identity and the "Setting" label are derived from every non-excluded
+    hyperparameter in 'job["hyperparams"]', independent of 'legend_parameters'.
+    All repetitions and all eval points are pooled into the overall mean/std;
+    the last 'last_fraction' of eval points produces the 'last N%' columns.
     """
     last_fraction = float(last_fraction)
     last_fraction = min(max(last_fraction, 0.0), 1.0)
 
-    grouped: dict[tuple[str, str], dict[str, Any]] = {}
-    order: list[tuple[str, str]] = []
+    grouped: dict[tuple[str, tuple[tuple[str, str], ...]], dict[str, Any]] = {}
+    order: list[tuple[str, tuple[tuple[str, str], ...]]] = []
 
     for algo_upper, jobs in algo_jobs.items():
         offset = algo_job_offsets[algo_upper]
@@ -2915,12 +2938,13 @@ def build_returns_summary_table(
             entry = setting_results[offset + i]
             if entry is None:
                 continue
-            curve_label = job.get("curve_label", f"{algo_upper}_{i}")
-            key = (algo_upper, curve_label)
+            hp_items = _non_excluded_hp_items(job.get("hyperparams", {}))
+            setting_label = _format_setting_label(algo_upper, hp_items)
+            key = (algo_upper, tuple(hp_items))
             if key not in grouped:
                 grouped[key] = {
                     "algo": algo_upper,
-                    "label": curve_label,
+                    "label": setting_label,
                     "all_values": [],
                     "last_values": [],
                     "n_settings": 0,

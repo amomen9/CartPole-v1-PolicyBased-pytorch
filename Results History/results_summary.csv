@@ -1,0 +1,4 @@
+Algorithm,Setting,Mean (all),Std (all),Mean (last 10%),Std (last 10%),N (all),N (last)
+DQN,"DQN, $\gamma$: 0.99, $\alpha$: 0.001, NN Widths: [128,128], $\epsilon$: 0.05, TN: True, ER: True",411.066590,139.904792,420.323900,131.544838,20000,2000
+A2C,"A2C, $\gamma$: 0.99, Actor $\alpha$: 1e-4, Critic $\beta$: 0.01, Actor NN: [64,64], Critic NN: [128,128]",500.000000,0.000000,500.000000,0.000000,20000,2000
+PPO,"PPO, $\gamma$: 0.99, Actor $\alpha$: 3e-4, Critic $\beta$: 0.01, $\lambda_{GAE}$: 0.96, $\epsilon_{clip}$: 0.1, Epochs: 30, Rollout: 512",498.285850,15.750227,498.744500,17.128302,20000,2000
