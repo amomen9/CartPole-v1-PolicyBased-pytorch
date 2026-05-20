@@ -1,6 +1,6 @@
-# CartPole-v1 PPO — Implementation and Comparative Study
+# CartPole-v1 PPO - Implementation and Comparative Study
 
-Repository for the Reinforcement Learning course assignment 4 (Leiden University) — **Proximal Policy Optimisation on CartPole-v1**.
+Repository for the Reinforcement Learning course assignment 4 (Leiden University) - **Proximal Policy Optimisation on CartPole-v1**.
 
 ## Overview
 
@@ -72,7 +72,7 @@ Every PPO hyperparameter sweep used in the report is reproduced from `Experiment
 python Experiment.py
 ```
 
-The same applies to actor / critic learning rates, network architectures, `gae_lambda`, `n_epochs`, and `rollout_steps` — each is a list inside `PPO_config` and any combination of values will be swept in a single run.
+The same applies to actor / critic learning rates, network architectures, `gae_lambda`, `n_epochs`, and `rollout_steps` - each is a list inside `PPO_config` and any combination of values will be swept in a single run.
 
 ### Test the Environment
 
@@ -91,8 +91,8 @@ This enables learning-curve visualization and optional CartPole animation output
 
 `Experiment.py` exposes two flags in `global_config` that control caching:
 
-- `use_existing_disk_data` — reuse `.xlsx` runs from `data sheets/` if present
-- `use_existing_disk_trained_networks` — reuse saved networks from `Checkpoints/`
+- `use_existing_disk_data` - reuse `.xlsx` runs from `data sheets/` if present
+- `use_existing_disk_trained_networks` - reuse saved networks from `Checkpoints/`
 
 Setting both to `True` lets a sweep finish in seconds when the data already exists on disk; setting them to `False` forces a fresh training run.
 
@@ -121,22 +121,22 @@ The project is configured to reuse existing disk data when available, which keep
 
 ## Project Structure
 
-- `Experiment.py` — main experiment entrypoint and hyperparameter configuration (final PPO vs. A2C vs. DQN comparison and all PPO sweeps)
-- `PPO.py` — PPO-clipped (with GAE) implementation
-- `Library.py` — central library that wires experiments to algorithms, plotting, and Excel logging
-- `Helper.py` — shared helper functions
-- `Agent.py` — agent logic shared across algorithms
-- `Environment.py` — environment wrapper / interaction logic
-- `Checkpointing.py` — utilities for saving/loading trained networks
-- `REINFORCE.py`, `AC.py`, `A2C.py` — reused policy-gradient / actor-critic implementations from the previous assignment
-- `assignment2_repo/` — previous assignment code reused for DQN
-- `assignment3_repo/` — previous assignment code reused for REINFORCE / AC / A2C baselines
-- `Baseline data/` — benchmark CSV files used as the reference learning curve
-- `Checkpoints/` — saved trained networks reused when `use_existing_disk_trained_networks = True`
-- `data sheets/` — `.xlsx` run logs reused when `use_existing_disk_data = True`
-- `plots/` — generated learning-curve figures
-- `README.md` — this file
-- `requirements.txt` — Python dependencies
+- `Experiment.py` - main experiment entrypoint and hyperparameter configuration (final PPO vs. A2C vs. DQN comparison and all PPO sweeps)
+- `PPO.py` - PPO-clipped (with GAE) implementation
+- `Library.py` - central library that wires experiments to algorithms, plotting, and Excel logging
+- `Helper.py` - shared helper functions
+- `Agent.py` - agent logic shared across algorithms
+- `Environment.py` - environment wrapper / interaction logic
+- `Checkpointing.py` - utilities for saving/loading trained networks
+- `REINFORCE.py`, `AC.py`, `A2C.py` - reused policy-gradient / actor-critic implementations from the previous assignment
+- `assignment2_repo/` - previous assignment code reused for DQN
+- `assignment3_repo/` - previous assignment code reused for REINFORCE / AC / A2C baselines
+- `Baseline data/` - benchmark CSV files used as the reference learning curve
+- `Checkpoints/` - saved trained networks reused when `use_existing_disk_trained_networks = True`
+- `data sheets/` - `.xlsx` run logs reused when `use_existing_disk_data = True`
+- `plots/` - generated learning-curve figures
+- `README.md` - this file
+- `requirements.txt` - Python dependencies
 
 ## Architecture & Implementation Details
 
@@ -222,8 +222,6 @@ A softmax exploration sweep is also defined for DQN:
 
 | Parameter                              |                    Value |
 | -------------------------------------- | -----------------------: |
-| `benchmark_curve`                    |                    `1` |
-| `benchmark_name`                     |             `Baseline` |
 | `n_repetitions`                      |                    `5` |
 | `plot_smoothing_window`              | `[101, 201, 251, 351]` |
 | `curve_confidence_interval`          |                  `0.6` |

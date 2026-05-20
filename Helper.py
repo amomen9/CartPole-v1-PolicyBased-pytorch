@@ -171,6 +171,7 @@ def _load_benchmark_curve(
     project_n_timesteps,
     benchmark_eval_interval=250,
     episode_return_column="Episode_Return",
+    benchmark_name="Baseline",
 ):
     benchmark_files = {
         1: os.path.join("Baseline data", "BaselineDataCartPole_run1.csv"),
@@ -179,7 +180,17 @@ def _load_benchmark_curve(
     if benchmark_curve not in benchmark_files:
         raise ValueError("benchmark_curve must be 1 or 2.")
 
-    data = np.genfromtxt(benchmark_files[benchmark_curve], delimiter=",", names=True)
+    benchmark_path = benchmark_files[benchmark_curve]
+    if not os.path.isfile(benchmark_path):
+        LAST_BENCHMARK_WAS_MISSING = True
+        print(
+            f"!!!Warning! {benchmark_name} files were not found on the disk, continuing the operation without {benchmark_name} (The plots will not include the {benchmark_name}.)!!!\n\n"
+        )
+        return np.array([], dtype=np.int32), np.array([], dtype=np.float32)
+
+    LAST_BENCHMARK_WAS_MISSING = False
+
+    data = np.genfromtxt(benchmark_path, delimiter=",", names=True)
     if data.dtype.names is None or episode_return_column not in data.dtype.names:
         raise ValueError(
             f"Selected benchmark file does not contain requested column '{episode_return_column}'."
@@ -611,24 +622,75 @@ def _empty_data_sheets_dir(dir_path):
     os.makedirs(dir_path, exist_ok=True)
 
 
+def _show_excel_save_permission_warning(filepath: str) -> None:
+    """Show a blocking warning figure when an Excel file is locked or write-protected."""
+    warning_fig = plt.figure(figsize=(12, 6))
+    warning_fig.patch.set_facecolor("#fff3cd")
+    ax = warning_fig.add_subplot(111)
+    ax.axis("off")
+    ax.text(
+        0.5,
+        0.68,
+        "Permission denied",
+        ha="center",
+        va="center",
+        fontsize=28,
+        fontweight="bold",
+        color="#b00020",
+        transform=ax.transAxes,
+    )
+    ax.text(
+        0.5,
+        0.42,
+        f"Could not save:\n{filepath}\n\nClose the file in Excel or fix the permissions,\nthen close this window to retry saving.",
+        ha="center",
+        va="center",
+        fontsize=18,
+        color="black",
+        transform=ax.transAxes,
+    )
+    warning_fig.tight_layout()
+    plt.show(block=True)
+    plt.close(warning_fig)
+
+
 def _save_results_to_excel(dir_path, base_filename, setting_jobs, setting_results):
     filepath = os.path.join(dir_path, f"{base_filename}.xlsx")
-    with pd.ExcelWriter(filepath, engine='openpyxl') as writer:
-        for idx, (job, result) in enumerate(zip(setting_jobs, setting_results)):
-            learning_curve, learning_curve_std, timesteps = result
-            sheet_name = f"Setting_{idx + 1:03d}"
-            data = {
-                "timestep": timesteps,
-                "learning_curve_mean": learning_curve,
-                "learning_curve_std": learning_curve_std,
-            }
-            hp = job["hyperparams"]
-            for key, value in hp.items():
-                data[key] = value
-            data["curve_label"] = job["curve_label"]
-            df = pd.DataFrame(data)
-            df.to_excel(writer, sheet_name=sheet_name, index=False)
-            _autosize_excel_columns(writer.sheets[sheet_name], df)
+    try:
+        with pd.ExcelWriter(filepath, engine='openpyxl') as writer:
+            for idx, (job, result) in enumerate(zip(setting_jobs, setting_results)):
+                learning_curve, learning_curve_std, timesteps = result
+                sheet_name = f"Setting_{idx + 1:03d}"
+                data = {
+                    "timestep": timesteps,
+                    "learning_curve_mean": learning_curve,
+                    "learning_curve_std": learning_curve_std,
+                }
+                hp = job["hyperparams"]
+                for key, value in hp.items():
+                    data[key] = value
+                data["curve_label"] = job["curve_label"]
+                df = pd.DataFrame(data)
+                df.to_excel(writer, sheet_name=sheet_name, index=False)
+                _autosize_excel_columns(writer.sheets[sheet_name], df)
+    except PermissionError:
+        _show_excel_save_permission_warning(filepath)
+        with pd.ExcelWriter(filepath, engine='openpyxl') as writer:
+            for idx, (job, result) in enumerate(zip(setting_jobs, setting_results)):
+                learning_curve, learning_curve_std, timesteps = result
+                sheet_name = f"Setting_{idx + 1:03d}"
+                data = {
+                    "timestep": timesteps,
+                    "learning_curve_mean": learning_curve,
+                    "learning_curve_std": learning_curve_std,
+                }
+                hp = job["hyperparams"]
+                for key, value in hp.items():
+                    data[key] = value
+                data["curve_label"] = job["curve_label"]
+                df = pd.DataFrame(data)
+                df.to_excel(writer, sheet_name=sheet_name, index=False)
+                _autosize_excel_columns(writer.sheets[sheet_name], df)
     print(f"Saved {len(setting_results)} settings to {filepath}")
 
 

@@ -136,7 +136,15 @@ def _load_benchmark_curve(benchmark_curve, project_eval_interval, project_n_time
     if benchmark_curve not in benchmark_files:
         raise ValueError("benchmark_curve must be 1 or 2.")
 
-    data = np.genfromtxt(benchmark_files[benchmark_curve], delimiter=",", names=True)
+    benchmark_path = benchmark_files[benchmark_curve]
+    if not os.path.isfile(benchmark_path):
+        benchmark_name = "Baseline"
+        print(
+            f"!!!Warning! {benchmark_name} files were not found on the disk, continuing the operation without {benchmark_name} (The plots will not include the {benchmark_name}.)!!!\n"
+        )
+        return np.array([], dtype=np.int32), np.array([], dtype=np.float32)
+
+    data = np.genfromtxt(benchmark_path, delimiter=",", names=True)
     if data.dtype.names is None or episode_return_column not in data.dtype.names:
         raise ValueError(
             f"Selected benchmark file does not contain requested column '{episode_return_column}'."

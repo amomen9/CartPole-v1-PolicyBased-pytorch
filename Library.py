@@ -1119,9 +1119,6 @@ def run_selected_experiments(
             policy=lambda obs: trained_nn_policy(agent.actor, obs),
         )
 
-    if show_individual_plots or animation_plot or combined_fig_shown:
-        plt.show(block=show_curve_plots)
-
     # ── Final summary: mean & std of returns per (algorithm, setting) ──
     try:
         build_returns_summary_table(
@@ -1139,6 +1136,9 @@ def run_selected_experiments(
     with open("output.log", "w", encoding="utf-8") as f:
         f.write(f"Total execution time: {total_time:.3f} minutes\n")
     print(f"\nExperiment finished in {total_time:.3f} minutes.")
+
+    if show_individual_plots or animation_plot or combined_fig_shown:
+        plt.show(block=show_curve_plots)
 
 
 
