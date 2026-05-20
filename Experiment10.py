@@ -44,10 +44,10 @@ def experiment():
     # Select which algorithms to include in the training and plotting using included_algorithms.
     # Set value to True to include, False to exclude.
     included_algorithms = {
-        "DQN": False,
+        "DQN": True,
         "REINFORCE": False,
         "AC": False,
-        "A2C": False,
+        "A2C": True,
         "PPO": True,
     }
     # Using DQN implementation from the previous assignment (existing in the assignment2_repo directory)

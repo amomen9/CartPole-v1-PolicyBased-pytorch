@@ -650,47 +650,55 @@ def _show_excel_save_permission_warning(filepath: str) -> None:
         transform=ax.transAxes,
     )
     warning_fig.tight_layout()
-    plt.show(block=True)
+
+    # Show ONLY this figure (plt.show would also pop up every other open figure).
+    closed = {"v": False}
+
+    def _on_close(_evt):
+        closed["v"] = True
+        try:
+            warning_fig.canvas.stop_event_loop()
+        except Exception:
+            pass
+
+    warning_fig.canvas.mpl_connect("close_event", _on_close)
+    try:
+        warning_fig.canvas.manager.show()
+    except AttributeError:
+        warning_fig.show()
+
+    while not closed["v"]:
+        try:
+            warning_fig.canvas.start_event_loop(timeout=0.2)
+        except Exception:
+            break
+
     plt.close(warning_fig)
 
 
 def _save_results_to_excel(dir_path, base_filename, setting_jobs, setting_results):
     filepath = os.path.join(dir_path, f"{base_filename}.xlsx")
-    try:
-        with pd.ExcelWriter(filepath, engine='openpyxl') as writer:
-            for idx, (job, result) in enumerate(zip(setting_jobs, setting_results)):
-                learning_curve, learning_curve_std, timesteps = result
-                sheet_name = f"Setting_{idx + 1:03d}"
-                data = {
-                    "timestep": timesteps,
-                    "learning_curve_mean": learning_curve,
-                    "learning_curve_std": learning_curve_std,
-                }
-                hp = job["hyperparams"]
-                for key, value in hp.items():
-                    data[key] = value
-                data["curve_label"] = job["curve_label"]
-                df = pd.DataFrame(data)
-                df.to_excel(writer, sheet_name=sheet_name, index=False)
-                _autosize_excel_columns(writer.sheets[sheet_name], df)
-    except PermissionError:
-        _show_excel_save_permission_warning(filepath)
-        with pd.ExcelWriter(filepath, engine='openpyxl') as writer:
-            for idx, (job, result) in enumerate(zip(setting_jobs, setting_results)):
-                learning_curve, learning_curve_std, timesteps = result
-                sheet_name = f"Setting_{idx + 1:03d}"
-                data = {
-                    "timestep": timesteps,
-                    "learning_curve_mean": learning_curve,
-                    "learning_curve_std": learning_curve_std,
-                }
-                hp = job["hyperparams"]
-                for key, value in hp.items():
-                    data[key] = value
-                data["curve_label"] = job["curve_label"]
-                df = pd.DataFrame(data)
-                df.to_excel(writer, sheet_name=sheet_name, index=False)
-                _autosize_excel_columns(writer.sheets[sheet_name], df)
+    while True:
+        try:
+            with pd.ExcelWriter(filepath, engine='openpyxl') as writer:
+                for idx, (job, result) in enumerate(zip(setting_jobs, setting_results)):
+                    learning_curve, learning_curve_std, timesteps = result
+                    sheet_name = f"Setting_{idx + 1:03d}"
+                    data = {
+                        "timestep": timesteps,
+                        "learning_curve_mean": learning_curve,
+                        "learning_curve_std": learning_curve_std,
+                    }
+                    hp = job["hyperparams"]
+                    for key, value in hp.items():
+                        data[key] = value
+                    data["curve_label"] = job["curve_label"]
+                    df = pd.DataFrame(data)
+                    df.to_excel(writer, sheet_name=sheet_name, index=False)
+                    _autosize_excel_columns(writer.sheets[sheet_name], df)
+            break
+        except PermissionError:
+            _show_excel_save_permission_warning(filepath)
     print(f"Saved {len(setting_results)} settings to {filepath}")
 
 
@@ -2822,7 +2830,12 @@ def save_algorithm_workbook(
             else:
                 _write_raw_excel_sheet(worksheet, headers, rows)
 
-    workbook.save(filepath)
+    while True:
+        try:
+            workbook.save(filepath)
+            break
+        except PermissionError:
+            _show_excel_save_permission_warning(filepath)
     if verbose:
         print(f"Saved {added_count} new setting(s) to {filepath}")
     return filepath, added_count
