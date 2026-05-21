@@ -92,7 +92,7 @@ This enables learning-curve visualization and optional CartPole animation output
 `Experiment.py` exposes two flags in `global_config` that control caching:
 
 - `use_existing_disk_data` - reuse `.xlsx` runs from `data sheets/` if present
-- `use_existing_disk_networks_checkpoints` - reuse saved networks from `Checkpoints/`
+- `use_saved_disk_networks_checkpoints` - reuse saved networks from `Checkpoints/`
 
 Setting both to `True` lets a sweep finish in seconds when the data already exists on disk; setting them to `False` forces a fresh training run.
 
@@ -132,7 +132,7 @@ The project is configured to reuse existing disk data when available, which keep
 - `assignment2_repo/` - previous assignment code reused for DQN
 - `assignment3_repo/` - previous assignment code reused for REINFORCE / AC / A2C baselines
 - `Baseline data/` - benchmark CSV files used as the reference learning curve
-- `Checkpoints/` - saved trained networks reused when `use_existing_disk_networks_checkpoints = True`
+- `Checkpoints/` - saved trained networks reused when `use_saved_disk_networks_checkpoints = True`
 - `data sheets/` - `.xlsx` run logs reused when `use_existing_disk_data = True`
 - `plots/` - generated learning-curve figures
 - `README.md` - this file
@@ -227,7 +227,7 @@ A softmax exploration sweep is also defined for DQN:
 | `curve_confidence_interval`          |                  `0.6` |
 | `curve_shaded_area_opacity`          |                 `0.06` |
 | `use_existing_disk_data`             |                `False` |
-| `use_existing_disk_networks_checkpoints` |                 `True` |
+| `use_saved_disk_networks_checkpoints` |                 `True` |
 | `show_curve_plots`                   |                 `True` |
 | `animation_plot`                     |                `False` |
 | `n_timesteps`                        |              `1000000` |
@@ -309,7 +309,7 @@ If you rerun the experiments with different hyperparameters, the resulting curve
 - **Algorithm separation:** each method has its own module for clarity and maintainability
 - **Shared experiment tooling:** common logging, plotting, and Excel handling are centralised in `Library.py`
 - **Legacy baseline reuse:** the DQN implementation from assignment 2 and the REINFORCE / AC / A2C implementations from assignment 3 are preserved in `assignment2_repo/` and `assignment3_repo/`
-- **Disk caching:** `use_existing_disk_data` and `use_existing_disk_networks_checkpoints` let sweeps be re-plotted without retraining
+- **Disk caching:** `use_existing_disk_data` and `use_saved_disk_networks_checkpoints` let sweeps be re-plotted without retraining
 - **Reproducibility:** repeated runs use a fixed base seed and a consistent experiment structure
 
 ## License
