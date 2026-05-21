@@ -2938,6 +2938,7 @@ def build_returns_summary_table(
     md_filename: str = "results_summary.md",
     print_to_stdout: bool = True,
     use_saved_disk_networks_checkpoints: bool = False,
+    global_config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Aggregate returns per (algorithm, non-excluded-HP) row and emit a table.
 
@@ -3137,86 +3138,144 @@ def build_returns_summary_table(
             writer.writerow(row)
 
     boxplot_path = None
+    mean_ci_plot_path = None
     if use_saved_disk_networks_checkpoints and rows_data:
         try:
-            grouped_rows: dict[str, list[dict[str, Any]]] = {}
-            for row in rows_data:
-                grouped_rows.setdefault(row["algorithm"], []).append(row)
+            pooled_all_by_algo: dict[str, list[np.ndarray]] = {}
+            pooled_last_by_algo: dict[str, list[np.ndarray]] = {}
 
-            algorithms = sorted(grouped_rows.keys())
-            if algorithms:
-                mean_all_data = []
-                mean_last_data = []
-                for algo in algorithms:
-                    algo_rows = grouped_rows[algo]
-                    mean_all_data.append(
-                        [row["mean_all"] for row in algo_rows if np.isfinite(row["mean_all"])]
+            for info in grouped.values():
+                algo = info["algo"]
+                if info["all_values"]:
+                    pooled_all_by_algo.setdefault(algo, []).extend(info["all_values"])
+                if info["last_values"]:
+                    pooled_last_by_algo.setdefault(algo, []).extend(info["last_values"])
+
+            algorithms = sorted(set(pooled_all_by_algo.keys()) | set(pooled_last_by_algo.keys()))
+            valid_algorithms: list[str] = []
+            all_data: list[list[float]] = []
+            last_data: list[list[float]] = []
+
+            for algo in algorithms:
+                all_chunks = [np.asarray(v, dtype=np.float64).reshape(-1) for v in pooled_all_by_algo.get(algo, []) if np.asarray(v).size > 0]
+                last_chunks = [np.asarray(v, dtype=np.float64).reshape(-1) for v in pooled_last_by_algo.get(algo, []) if np.asarray(v).size > 0]
+                all_vals = np.concatenate(all_chunks).tolist() if all_chunks else []
+                last_vals = np.concatenate(last_chunks).tolist() if last_chunks else []
+                if not all_vals and not last_vals:
+                    continue
+                valid_algorithms.append(algo)
+                all_data.append(all_vals)
+                last_data.append(last_vals)
+
+            if valid_algorithms:
+                fig, ax = plt.subplots(figsize=(max(10, 2.5 * len(valid_algorithms)), 6))
+                positions = np.arange(1, len(valid_algorithms) + 1, dtype=float)
+                offset = 0.18
+
+                if any(all_data):
+                    ax.boxplot(
+                        all_data,
+                        positions=positions - offset,
+                        widths=0.28,
+                        vert=True,
+                        patch_artist=True,
+                        showmeans=True,
+                        boxprops=dict(facecolor="#d9d9d9", edgecolor="black", linewidth=1.2),
+                        whiskerprops=dict(color="black", linewidth=1.0),
+                        capprops=dict(color="black", linewidth=1.0),
+                        medianprops=dict(color="black", linewidth=1.4),
+                        meanprops=dict(marker="o", markerfacecolor="white", markeredgecolor="black", markersize=4),
                     )
-                    mean_last_data.append(
-                        [row["mean_last"] for row in algo_rows if np.isfinite(row["mean_last"])]
+                if any(last_data):
+                    ax.boxplot(
+                        last_data,
+                        positions=positions + offset,
+                        widths=0.28,
+                        vert=True,
+                        patch_artist=True,
+                        showmeans=True,
+                        boxprops=dict(facecolor="#b3e5ff", edgecolor="black", linewidth=1.2),
+                        whiskerprops=dict(color="black", linewidth=1.0),
+                        capprops=dict(color="black", linewidth=1.0),
+                        medianprops=dict(color="black", linewidth=1.4),
+                        meanprops=dict(marker="o", markerfacecolor="white", markeredgecolor="black", markersize=4),
                     )
 
-                valid_algorithms = [
-                    algo for algo, all_vals, last_vals in zip(algorithms, mean_all_data, mean_last_data)
-                    if all_vals or last_vals
-                ]
-                mean_all_data = [vals for vals in mean_all_data if vals]
-                mean_last_data = [vals for vals in mean_last_data if vals]
+                ax.set_xticks(positions)
+                ax.set_xticklabels(valid_algorithms)
+                ax.set_ylabel("Return")
+                ax.set_title("Returns summary box plot by algorithm")
+                ax.grid(axis="y", linestyle="--", alpha=0.3)
+                ax.legend(
+                    [
+                        Line2D([0], [0], color="#d9d9d9", marker="s", linestyle="none", markeredgecolor="black"),
+                        Line2D([0], [0], color="#b3e5ff", marker="s", linestyle="none", markeredgecolor="black"),
+                    ],
+                    ["Mean (all settings)", "Mean (last N% settings)"],
+                    loc="best",
+                    fontsize=8,
+                )
+                fig.tight_layout()
+                boxplot_path = os.path.join(output_dir, "results_summary_boxplot.png")
+                fig.savefig(boxplot_path, dpi=300)
+                plt.close(fig)
+                if print_to_stdout:
+                    print(f"Saved returns summary box plot to: {boxplot_path}")
 
-                if valid_algorithms:
-                    fig, ax = plt.subplots(figsize=(max(10, 2.5 * len(valid_algorithms)), 6))
-                    positions = np.arange(1, len(valid_algorithms) + 1, dtype=float)
-                    offset = 0.18
+            curve_confidence_interval = 0.0
+            curve_shaded_area_opacity = 0.05
+            if isinstance(global_config, dict):
+                try:
+                    curve_confidence_interval = float(global_config.get("curve_confidence_interval", 0.0))
+                except (TypeError, ValueError):
+                    curve_confidence_interval = 0.0
+                try:
+                    curve_shaded_area_opacity = float(global_config.get("curve_shaded_area_opacity", 0.05))
+                except (TypeError, ValueError):
+                    curve_shaded_area_opacity = 0.05
 
-                    if mean_all_data:
-                        ax.boxplot(
-                            mean_all_data,
-                            positions=positions - offset,
-                            widths=0.28,
-                            vert=True,
-                            patch_artist=True,
-                            showmeans=True,
-                            boxprops=dict(facecolor="#d9d9d9", edgecolor="black", linewidth=1.2),
-                            whiskerprops=dict(color="black", linewidth=1.0),
-                            capprops=dict(color="black", linewidth=1.0),
-                            medianprops=dict(color="black", linewidth=1.4),
-                            meanprops=dict(marker="o", markerfacecolor="white", markeredgecolor="black", markersize=4),
-                        )
-                    if mean_last_data:
-                        ax.boxplot(
-                            mean_last_data,
-                            positions=positions + offset,
-                            widths=0.28,
-                            vert=True,
-                            patch_artist=True,
-                            showmeans=True,
-                            boxprops=dict(facecolor="#b3e5ff", edgecolor="black", linewidth=1.2),
-                            whiskerprops=dict(color="black", linewidth=1.0),
-                            capprops=dict(color="black", linewidth=1.0),
-                            medianprops=dict(color="black", linewidth=1.4),
-                            meanprops=dict(marker="o", markerfacecolor="white", markeredgecolor="black", markersize=4),
-                        )
+            if rows_data:
+                fig, ax = plt.subplots(figsize=(max(10, 1.2 * len(rows_data)), 6))
+                x_positions = np.arange(1, len(rows_data) + 1, dtype=float)
+                half_width = 0.35
+                palette = plt.get_cmap("tab10")
 
-                    ax.set_xticks(positions)
-                    ax.set_xticklabels(valid_algorithms)
-                    ax.set_ylabel("Return")
-                    ax.set_title("Returns summary box plot by algorithm")
-                    ax.grid(axis="y", linestyle="--", alpha=0.3)
-                    ax.legend(
-                        [
-                            Line2D([0], [0], color="#d9d9d9", marker="s", linestyle="none", markeredgecolor="black"),
-                            Line2D([0], [0], color="#b3e5ff", marker="s", linestyle="none", markeredgecolor="black"),
-                        ],
-                        ["Mean (all settings)", "Mean (last N% settings)"],
-                        loc="best",
-                        fontsize=8,
+                for idx, (x_pos, row) in enumerate(zip(x_positions, rows_data)):
+                    mean_value = float(row["mean_all"])
+                    std_value = float(row["std_all"])
+                    n_value = int(row["n_all"])
+                    if not np.isfinite(mean_value):
+                        continue
+                    if n_value > 1 and np.isfinite(std_value):
+                        from scipy.stats import t as t_dist
+                        t_crit = t_dist.ppf(1 - curve_confidence_interval / 2, df=max(n_value - 1, 1)) if curve_confidence_interval > 0.0 else 0.0
+                        margin = t_crit * std_value / np.sqrt(max(n_value, 1))
+                    else:
+                        margin = 0.0
+                    lower = mean_value - margin
+                    upper = mean_value + margin
+                    color = palette(idx % palette.N)
+                    ax.fill_between(
+                        [x_pos - half_width, x_pos + half_width],
+                        [lower, lower],
+                        [upper, upper],
+                        color=color,
+                        alpha=curve_shaded_area_opacity,
+                        linewidth=0,
                     )
-                    fig.tight_layout()
-                    boxplot_path = os.path.join(output_dir, "results_summary_boxplot.png")
-                    fig.savefig(boxplot_path, dpi=300)
-                    plt.close(fig)
-                    if print_to_stdout:
-                        print(f"Saved returns summary box plot to: {boxplot_path}")
+                    ax.plot([x_pos - half_width, x_pos + half_width], [mean_value, mean_value], color=color, linewidth=1.8)
+
+                ax.set_xticks(x_positions)
+                ax.set_xticklabels([row["setting"] for row in rows_data], rotation=45, ha="right")
+                ax.set_ylabel("Return")
+                ax.set_title("Returns summary mean ± CI by curve")
+                ax.grid(axis="y", linestyle="--", alpha=0.3)
+                fig.tight_layout()
+                mean_ci_plot_path = os.path.join(output_dir, "results_summary_mean_ci.png")
+                fig.savefig(mean_ci_plot_path, dpi=300)
+                plt.close(fig)
+                if print_to_stdout:
+                    print(f"Saved returns summary mean/CI plot to: {mean_ci_plot_path}")
         except Exception as exc:
             if print_to_stdout:
                 print(f"[summary] Failed to build returns summary box plot: {exc}")
@@ -3232,5 +3291,6 @@ def build_returns_summary_table(
         "markdown_path": md_path,
         "csv_path": csv_path,
         "boxplot_path": boxplot_path,
+        "mean_ci_plot_path": mean_ci_plot_path,
         "text": rendered_text,
     }

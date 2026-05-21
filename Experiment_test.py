@@ -61,7 +61,7 @@ def experiment():
         "DQN": False,
         "REINFORCE": False,
         "AC": False,
-        "A2C": False,
+        "A2C": True,
         "PPO": True,
     }
     

@@ -29,23 +29,23 @@ def experiment():
         "use_existing_disk_data": True,     # Whether to use existing data (.xlsx files) from disk if exists.
         "use_saved_disk_networks_checkpoints": False,
         # Environment
-        "max_train_episode_length": 2000, #500        # Episode truncation step. Default: 500.
+        "max_train_episode_length": 500, #500        # Episode truncation step. Default: 500.
         "base_seed": 42,                    # Base seed for CartPole environment and agent initialization. Each repetition will use a different seed derived from this base seed (e.g., base_seed + repetition_index).
         # Agent
         "n_timesteps": 1e6, #1e6,              # Total number of training timesteps. Default: 1000000.
-        "max_eval_episode_length": 50000, #500        # Episode truncation step. Default: 500.
+        "max_eval_episode_length": 20000, #500        # Episode truncation step. Default: 500.
         "eval_interval": 250,
         "eval_with_env_episode_trials": True, # Default: True. Set to False to use the fast proxy full episode return value from training (last_episode_return) for evaluation instead of running separate greedy environment episode trials via agent.evaluate(). Note: setting to False will speed up training and plotting, but will not provide true evaluation curves. Setting to True will provide true evaluation curves but will significantly increase training time due to the need to run separate evaluation episodes at each eval_interval.
-        "n_eval_episodes": 5,
+        "n_eval_episodes": 3,
         "title_parameters": {               # [plot label, show flag]
             "n_repetitions": [r"Reps: ", True],
             "curve_confidence_interval": [r"CCI: ", False],
         },
         "legend_parameters": {              # [plot label, show flag]
-            "use_saved_disk_networks_checkpoints": [r"CHP: ", False],
-            "max_train_episode_length": [r"L: ", False],
-            "max_eval_episode_length": [r"EvL: ", False],
-            "eval_with_env_episode_trials": [r"EvEnv: ", False],
+            "use_saved_disk_networks_checkpoints": [r"CHP: ", True],
+            "max_train_episode_length": [r"L: ", True],
+            "max_eval_episode_length": [r"EvL: ", True],
+            "eval_with_env_episode_trials": [r"EvEnv: ", True],
             "n_eval_episodes": [r"EvEp: ", False],
         },            
     }

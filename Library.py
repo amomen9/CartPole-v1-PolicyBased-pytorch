@@ -21,11 +21,11 @@ class LearningCurvePlot:
         self.ax.set_xlabel('Timestep')
         self.ax.set_ylabel('Episode Return')
         if title is not None:
-            self.ax.set_title(title, fontsize=14)
+            self.fig.suptitle(title, fontsize=14, y=0.98)
         if subtitle is not None:
             self.fig.text(
                 0.5,
-                0.96,
+                0.925,
                 subtitle,
                 ha="center",
                 va="top",
@@ -1166,8 +1166,9 @@ def run_selected_experiments(
             algo_job_offsets=algo_job_offsets,
             n_repetitions=n_repetitions,
             last_fraction=0.1,
-            output_dir=".",
+            output_dir="Trial Continuation Analysis",
             use_saved_disk_networks_checkpoints=use_saved_disk_networks_checkpoints,
+            global_config=gc,
         )
     except Exception as exc:
         print(f"[summary] Failed to build returns summary table: {exc}")
