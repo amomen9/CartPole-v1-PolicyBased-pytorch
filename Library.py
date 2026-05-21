@@ -566,6 +566,29 @@ def run_selected_experiments(
     # In separate_algorithm_plots mode: one figure per (algorithm, smoothing window) pair so that
     # each algo's plots can be finalized and shown the moment that algo finishes executing.
     title_tag = " + ".join(experiments)
+    title_parameters = gc.get("title_parameters", {})
+
+    def _format_title_value(value):
+        if isinstance(value, (bool, np.bool_)):
+            return "✓" if bool(value) else "✗"
+        return str(value)
+
+    def _build_title_suffix() -> str:
+        if not isinstance(title_parameters, dict):
+            return ""
+        parts = []
+        for key, entry in title_parameters.items():
+            if not isinstance(entry, (list, tuple)) or len(entry) != 2:
+                continue
+            label, show = entry
+            if not show:
+                continue
+            if key not in gc:
+                continue
+            parts.append(f"{label}{_format_title_value(gc[key])}")
+        return ", ".join(parts)
+
+    title_suffix = _build_title_suffix()
 
     def _build_pc_for_title(title_prefix: str, create_figures: bool = True) -> list[dict]:
         cfgs = []
@@ -578,6 +601,8 @@ def run_selected_experiments(
             benchmark_returns = np.minimum(benchmark_returns, float(optimal_episode_return))
             suffix_label = "not smoothed plot" if is_not_smoothed else "smoothed plot"
             title_str = f"{title_prefix} - {suffix_label}"
+            if title_suffix:
+                title_str = f"{title_str}\n{title_suffix}"
             # In separate mode, defer figure creation to _finalize_algo_plot so that
             # not-yet-populated algo windows don't pop up as empty placeholders the
             # moment another algo's plot is shown non-blocking.
