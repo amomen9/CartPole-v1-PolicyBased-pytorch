@@ -27,7 +27,7 @@ def experiment():
         "separate_algorithm_plots": False,   # If True, each algorithm gets its own set of plots (one per smoothing window). Each algo's plots are saved to disk and (if show_curve_plots) shown non-blocking as soon as that algo finishes executing, so faster algos surface their plots first. Default: False (one combined plot per smoothing window).
         "animation_plot": False,            # Show CartPole animation at the end.
         "use_existing_disk_data": True,     # Whether to use existing data (.xlsx files) from disk if exists.
-        "use_existing_disk_trained_networks": False,
+        "use_existing_disk_networks_checkpoints": False,
         # Environment
         "max_train_episode_length": 500, #500        # Episode truncation step. Default: 500.
         "base_seed": 42,                    # Base seed for CartPole environment and agent initialization. Each repetition will use a different seed derived from this base seed (e.g., base_seed + repetition_index).

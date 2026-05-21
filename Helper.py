@@ -1144,7 +1144,7 @@ GLOBAL_CONFIG_EXCLUSIONS = frozenset({
     "show_curve_plots",
     "animation_plot",
     "use_existing_disk_data",
-    "use_existing_disk_trained_networks",
+    "use_existing_disk_networks_checkpoints",
     "format_sheets",
     "formatted_sheets",
     "separate_algorithm_plots",
@@ -1886,7 +1886,7 @@ def _dqn_job_kwargs_to_trial_common(job_kwargs: dict[str, Any], eval_interval: i
 
 def _run_dqn_one_rep(trial_common: dict[str, Any], run_seed: int, rep_index: int, n_repetitions: int,
                      shared_step_counter=None,
-                     use_existing_disk_trained_networks: bool = False):
+                     use_existing_disk_networks_checkpoints: bool = False):
     """Run one DQN repetition. Pickle-safe for ProcessPoolExecutor.
 
     Mirrors the checkpointing behaviour of the policy-gradient algorithms:
@@ -1906,7 +1906,7 @@ def _run_dqn_one_rep(trial_common: dict[str, Any], run_seed: int, rep_index: int
     )
 
     pretrained_state_dict = None
-    if use_existing_disk_trained_networks and os.path.isfile(ck.file_path):
+    if use_existing_disk_networks_checkpoints and os.path.isfile(ck.file_path):
         pretrained_state_dict = torch.load(ck.file_path, map_location="cpu")
 
     returns_arr, timesteps_arr, model = run_dqn_trial_returns(
@@ -1931,7 +1931,7 @@ def _run_dqn_one_rep(trial_common: dict[str, Any], run_seed: int, rep_index: int
 
 def _run_pending_parallel(pending_settings, n_repetitions, n_timesteps, eval_interval,
                           max_train_episode_length, max_eval_episode_length, base_seed,
-                          use_existing_disk_trained_networks: bool,
+                          use_existing_disk_networks_checkpoints: bool,
     setting_results: list[
         tuple[np.ndarray, np.ndarray, np.ndarray] | tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]
         | None
@@ -1988,7 +1988,7 @@ def _run_pending_parallel(pending_settings, n_repetitions, n_timesteps, eval_int
                             rep_index=r,
                             n_repetitions=n_repetitions,
                             shared_step_counter=step_counters[(sp, r)],
-                            use_existing_disk_trained_networks=use_existing_disk_trained_networks,
+                            use_existing_disk_networks_checkpoints=use_existing_disk_networks_checkpoints,
                         )
                     else:
                             algo_extra_kwargs: dict[str, Any] = {}
@@ -2023,7 +2023,7 @@ def _run_pending_parallel(pending_settings, n_repetitions, n_timesteps, eval_int
                                 shared_step_counter=step_counters[(sp, r)],
                                 eval_with_env_episode_trials=bool(kw.get("eval_with_env_episode_trials", False)),
                                 n_eval_episodes=int(kw.get("n_eval_episodes", 5)),
-                                use_existing_disk_trained_networks=use_existing_disk_trained_networks,
+                                use_existing_disk_networks_checkpoints=use_existing_disk_networks_checkpoints,
                                 **algo_extra_kwargs,
                             )
                     futures[future] = (sp, r)
@@ -2116,13 +2116,13 @@ def _run_pending_parallel(pending_settings, n_repetitions, n_timesteps, eval_int
                             try:
                                 rep_results[(sp, r)] = f.result()
                             except Exception as exc:
-                                if use_existing_disk_trained_networks:
+                                if use_existing_disk_networks_checkpoints:
                                     print(
-                                        "\n[Trial failure detected with use_existing_disk_trained_networks=True]\n"
+                                        "\n[Trial failure detected with use_existing_disk_networks_checkpoints=True]\n"
                                         "Suggestion: verify that the model architecture hyperparameters\n"
                                         "(actor_hidden_nn / critic_hidden_nn / TN_step, etc.) match the\n"
                                         "saved checkpoint signature in Checkpoints/. If they differ,\n"
-                                        "set use_existing_disk_trained_networks=False to resume training.\n"
+                                        "set use_existing_disk_networks_checkpoints=False to resume training.\n"
                                         f"Error: {exc}\n"
                                     )
                                     try:

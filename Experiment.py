@@ -30,7 +30,7 @@ def experiment():
         "separate_algorithm_plots": False,   # If True, each algorithm gets its own set of plots (one per smoothing window). Each algo's plots are saved to disk and (if show_curve_plots) shown non-blocking as soon as that algo finishes executing, so faster algos surface their plots first. Default: False (one combined plot per smoothing window).
         "animation_plot": False,            # Show CartPole animation at the end.
         "use_existing_disk_data": False,     # Whether to use existing data (.xlsx files) from disk if exists.
-        "use_existing_disk_trained_networks": True,
+        "use_existing_disk_networks_checkpoints": True,
         # Environment
         "max_train_episode_length": 500, #500        # Episode truncation step. Default: 500.
         "base_seed": 42,                    # Base seed for CartPole environment and agent initialization. Each repetition will use a different seed derived from this base seed (e.g., base_seed + repetition_index).
@@ -40,6 +40,15 @@ def experiment():
         "eval_interval": 250,
         "eval_with_env_episode_trials": True, # Default: True. Set to False to use the fast proxy full episode return value from training (last_episode_return) for evaluation instead of running separate greedy environment episode trials via agent.evaluate(). Note: setting to False will speed up training and plotting, but will not provide true evaluation curves. Setting to True will provide true evaluation curves but will significantly increase training time due to the need to run separate evaluation episodes at each eval_interval.
         "n_eval_episodes": 5,
+        "legend_parameters": {              # [plot label, show flag]
+                "n_repetitions": [r"Reps: ", True],
+                "curve_confidence_interval": [r"CCI: ", False],
+                "use_existing_disk_networks_checkpoints": [r"CHP: ", False],
+                "max_train_episode_length": [r"Train Len: ", False],
+                "max_eval_episode_length": [r"Eval Len: ", False],
+                "eval_with_env_episode_trials": [r"Eval Env: ", False],
+        },    
+        
     }
     ################[           End Global Parameters            ]################
 
