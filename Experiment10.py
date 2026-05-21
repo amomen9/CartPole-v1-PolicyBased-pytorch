@@ -38,16 +38,14 @@ def experiment():
         "eval_with_env_episode_trials": False, # Default & Recommended: True. Set to False to use the fast proxy full episode return value from training (last_episode_return) for evaluation instead of running separate greedy environment episode trials via agent.evaluate(). Note: setting to False will speed up training and plotting, but will not provide true evaluation curves. Setting to True will provide true evaluation curves but will significantly increase training time due to the need to run separate evaluation episodes at each eval_interval.
         "n_eval_episodes": 3,
         "title_parameters": {               # [plot label, show flag]
-                "n_repetitions": [r"Reps ", True],
-                "curve_confidence_interval": [r"CI ", False],
+            "n_repetitions": [r"Reps: ", False],
+            "curve_confidence_interval": [r"CI ", False],
         },
         "legend_parameters": {              # [plot label, show flag]
-                "n_repetitions": [r"Reps: ", True],
-                "curve_confidence_interval": [r"CI: ", False],
-                "use_saved_disk_networks_checkpoints": [r"CHP: ", False],
-                "max_train_episode_length": [r"Train Len: ", False],
-                "max_eval_episode_length": [r"Eval Len: ", False],
-                "eval_with_env_episode_trials": [r"Eval Env: ", False],
+            "use_saved_disk_networks_checkpoints": [r"CHP: ", False],
+            "max_train_episode_length": [r"Train Len: ", False],
+            "max_eval_episode_length": [r"Eval Len: ", False],
+            "eval_with_env_episode_trials": [r"Eval Env: ", False],
         },    
     }
     ################[           End Global Parameters            ]################
