@@ -35,18 +35,19 @@ def experiment():
         "n_timesteps": 1e6, #1e6,              # Total number of training timesteps. Default: 1000000.
         "max_eval_episode_length": 50000, #500        # Episode truncation step. Default: 500.
         "eval_interval": 250,
-        "eval_with_env_episode_trials": False, # Default & Recommended: True. Set to False to use the fast proxy full episode return value from training (last_episode_return) for evaluation instead of running separate greedy environment episode trials via agent.evaluate(). Note: setting to False will speed up training and plotting, but will not provide true evaluation curves. Setting to True will provide true evaluation curves but will significantly increase training time due to the need to run separate evaluation episodes at each eval_interval.
-        "n_eval_episodes": 3,
+        "eval_with_env_episode_trials": True, # Default: True. Set to False to use the fast proxy full episode return value from training (last_episode_return) for evaluation instead of running separate greedy environment episode trials via agent.evaluate(). Note: setting to False will speed up training and plotting, but will not provide true evaluation curves. Setting to True will provide true evaluation curves but will significantly increase training time due to the need to run separate evaluation episodes at each eval_interval.
+        "n_eval_episodes": 5,
         "title_parameters": {               # [plot label, show flag]
-            "n_repetitions": [r"Reps: ", False],
-            "curve_confidence_interval": [r"CI ", False],
+            "n_repetitions": [r"Reps: ", True],
+            "curve_confidence_interval": [r"CCI: ", False],
         },
         "legend_parameters": {              # [plot label, show flag]
             "use_saved_disk_networks_checkpoints": [r"CHP: ", False],
-            "max_train_episode_length": [r"Train Len: ", False],
-            "max_eval_episode_length": [r"Eval Len: ", False],
-            "eval_with_env_episode_trials": [r"Eval Env: ", False],
-        },    
+            "max_train_episode_length": [r"L: ", False],
+            "max_eval_episode_length": [r"EvL: ", False],
+            "eval_with_env_episode_trials": [r"EvEnv: ", False],
+            "n_eval_episodes": [r"EvEp: ", False],
+        },            
     }
     ################[           End Global Parameters            ]################
 

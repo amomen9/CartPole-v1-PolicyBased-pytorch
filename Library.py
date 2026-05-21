@@ -16,12 +16,21 @@ from scipy.stats import t as t_dist
 # Begin Class LearningCurvePlot ##############################################################
 class LearningCurvePlot:
 
-    def __init__(self, title=None):
+    def __init__(self, title=None, subtitle=None):
         self.fig, self.ax = plt.subplots()
         self.ax.set_xlabel('Timestep')
         self.ax.set_ylabel('Episode Return')
         if title is not None:
-            self.ax.set_title(title)
+            self.ax.set_title(title, fontsize=14)
+        if subtitle is not None:
+            self.fig.text(
+                0.5,
+                0.96,
+                subtitle,
+                ha="center",
+                va="top",
+                fontsize=10,
+            )
 
     def add_curve(self, x, y, label=None, ls="solid", color=None):
         """y: vector of average reward results
@@ -483,6 +492,7 @@ def run_selected_experiments(
                 raise ValueError("REINFORCE_config dict is required when REINFORCE is included.")
             jobs = _build_reinforce_jobs(
                 algo_config=REINFORCE_config,
+                global_config=gc,
                 n_repetitions=n_repetitions,
                 n_timesteps=n_timesteps,
                 eval_interval=eval_interval,
@@ -497,6 +507,7 @@ def run_selected_experiments(
                 raise ValueError("AC_config dict is required when AC is included.")
             jobs = _build_ac_jobs(
                 algo_config=AC_config,
+                global_config=gc,
                 n_repetitions=n_repetitions,
                 n_timesteps=n_timesteps,
                 eval_interval=eval_interval,
@@ -511,6 +522,7 @@ def run_selected_experiments(
                 raise ValueError("A2C_config dict is required when A2C is included.")
             jobs = _build_a2c_jobs(
                 algo_config=A2C_config,
+                global_config=gc,
                 n_repetitions=n_repetitions,
                 n_timesteps=n_timesteps,
                 eval_interval=eval_interval,
@@ -525,6 +537,7 @@ def run_selected_experiments(
                 raise ValueError("DQN_config dict is required when DQN is included.")
             jobs = _build_dqn_jobs(
                 dqn_config=DQN_config,
+                global_config=gc,
                 n_repetitions=n_repetitions,
                 n_timesteps=n_timesteps,
                 eval_interval=eval_interval,
@@ -539,6 +552,7 @@ def run_selected_experiments(
                 raise ValueError("PPO_config dict is required when PPO is included.")
             jobs = _build_ppo_jobs(
                 algo_config=PPO_config,
+                global_config=gc,
                 n_repetitions=n_repetitions,
                 n_timesteps=n_timesteps,
                 eval_interval=eval_interval,
@@ -601,16 +615,16 @@ def run_selected_experiments(
             benchmark_returns = np.minimum(benchmark_returns, float(optimal_episode_return))
             suffix_label = "not smoothed plot" if is_not_smoothed else "smoothed plot"
             title_str = f"{title_prefix} - {suffix_label}"
-            if title_suffix:
-                title_str = f"{title_str}\n{title_suffix}"
+            subtitle_str = title_suffix if title_suffix else None
             # In separate mode, defer figure creation to _finalize_algo_plot so that
             # not-yet-populated algo windows don't pop up as empty placeholders the
             # moment another algo's plot is shown non-blocking.
-            plot_obj = LearningCurvePlot(title=title_str) if create_figures else None
+            plot_obj = LearningCurvePlot(title=title_str, subtitle=subtitle_str) if create_figures else None
             cfgs.append({
                 "window": window,
                 "is_not_smoothed": is_not_smoothed,
                 "title": title_str,
+                "subtitle": subtitle_str,
                 "plot": plot_obj,
                 "benchmark_steps": benchmark_steps,
                 "benchmark_returns": benchmark_returns,
@@ -767,7 +781,7 @@ def run_selected_experiments(
         # plt.show(block=False) / plt.pause for THIS algo).
         for pc in cfgs:
             if pc.get("plot") is None:
-                pc["plot"] = LearningCurvePlot(title=pc["title"])
+                pc["plot"] = LearningCurvePlot(title=pc["title"], subtitle=pc.get("subtitle"))
 
         extras_for_algo = [
             c for c in extra_curves_early
@@ -1153,6 +1167,7 @@ def run_selected_experiments(
             n_repetitions=n_repetitions,
             last_fraction=0.1,
             output_dir=".",
+            use_saved_disk_networks_checkpoints=use_saved_disk_networks_checkpoints,
         )
     except Exception as exc:
         print(f"[summary] Failed to build returns summary table: {exc}")

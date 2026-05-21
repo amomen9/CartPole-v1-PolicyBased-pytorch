@@ -31,6 +31,7 @@ import matplotlib.pyplot as plt
 import matplotlib.pyplot as visplt
 from scipy.signal import savgol_filter
 from scipy.stats import t as t_dist
+from matplotlib.lines import Line2D
 
 
 # Timestamp captured at module import time - represents the start of execution
@@ -830,29 +831,22 @@ def _load_results_from_excel(
                 learning_curve = learning_curve[mask]
                 learning_curve_std = learning_curve_std[mask]
 
-            label_parts = [algo_prefix]
-            for legend_key, (legend_label, show) in legend.items():
-                if not show:
-                    continue
-                if legend_key in df.columns:
-                    val = _parse_sheet_value(df[legend_key].iloc[0])
-                elif legend_key in algo_config:
-                    val = algo_config[legend_key]
-                else:
-                    continue
-
-                legend_label = _format_legend_label(legend_label)
-
-                if isinstance(val, bool):
-                    label_parts.append(f"{legend_label}{val}")
-                else:
-                    label_parts.append(f"{legend_label}{_format_legend_value(val)}")
-
+            curve_values = df["curve_label"].tolist() if "curve_label" in df.columns else []
+            curve_label = next(
+                (str(value) for value in curve_values if value not in (None, "")),
+                "",
+            )
+            if not curve_label:
+                curve_label = _build_curve_label(
+                    algo_prefix,
+                    global_config=global_config,
+                    algo_config=algo_config,
+                )
             extracted_results.append({
                 "learning_curve": learning_curve,
                 "learning_curve_std": learning_curve_std,
                 "timesteps": timesteps,
-                "curve_label": ", ".join(label_parts),
+                "curve_label": curve_label,
             })
 
         return extracted_results, extracted_mismatches
@@ -1039,27 +1033,16 @@ def _match_sheets_to_jobs(
                 if raw_out is not None and raw_out.ndim == 2 and raw_out.shape[1] == len(mask):
                     raw_out = raw_out[:, mask]
 
-            label_parts = [algo_prefix]
-            for legend_key, (legend_label, show) in legend.items():
-                if not show:
-                    continue
-                if legend_key in df.columns:
-                    val = _parse_sheet_value(df[legend_key].iloc[0])
-                elif legend_key in algo_config:
-                    val = algo_config[legend_key]
-                else:
-                    continue
-                legend_label = _format_legend_label(legend_label)
-                if isinstance(val, bool):
-                    label_parts.append(f"{legend_label}{val}")
-                else:
-                    label_parts.append(f"{legend_label}{_format_legend_value(val)}")
-
+            label_config = {**(algo_config or {}), **job_hp}
             aligned[job_idx] = {
                 "learning_curve": lc_out,
                 "learning_curve_std": lc_s_out,
                 "timesteps": ts_out,
-                "curve_label": ", ".join(label_parts),
+                "curve_label": job.get("curve_label") or _build_curve_label(
+                    algo_prefix,
+                    global_config=global_config,
+                    algo_config=label_config,
+                ),
                 "raw_returns": raw_out,
             }
             used.add(sheet_idx)
@@ -1293,7 +1276,12 @@ def _fmt_legend(v: Any) -> str:
     return str(v)
 
 
-def _build_legend_parts(legend: dict[str, LegendEntry], cfg: dict[str, Any]) -> list[str]:
+def _build_legend_parts(
+    legend: dict[str, LegendEntry],
+    cfg: dict[str, Any],
+    *,
+    prefix: str | None = None,
+) -> list[str]:
     """Build a list of 'label=value' strings for every legend-enabled parameter."""
     parts: list[str] = []
     for key, (label, show) in legend.items():
@@ -1309,7 +1297,29 @@ def _build_legend_parts(legend: dict[str, LegendEntry], cfg: dict[str, Any]) -> 
             parts.append(f"{label}{bool(val)}")
         else:
             parts.append(f"{label}{_format_legend_value(val)}")
+
+    if prefix and parts:
+        parts[0] = f"{prefix}{parts[0]}"
     return parts
+
+
+def _build_curve_label(
+    algo_name: str,
+    *,
+    global_config: dict[str, Any] | None = None,
+    algo_config: dict[str, Any] | None = None,
+) -> str:
+    """Build a curve label with GP> and Algo> prefixes."""
+    parts = [algo_name]
+    if isinstance(global_config, dict):
+        global_legend = _resolve_legend_flags(global_config, warn_on_suppression=False)
+        global_parts = _build_legend_parts(global_legend, global_config, prefix="GP> ")
+        if global_parts:
+            parts.extend(global_parts)
+    if isinstance(algo_config, dict):
+        algo_legend = _resolve_legend_flags(algo_config, warn_on_suppression=False)
+        parts.extend(_build_legend_parts(algo_legend, algo_config, prefix="Algo> "))
+    return ", ".join(parts)
 
 
 # ── Build setting jobs per algorithm ──────────────────────────────────────────
@@ -1343,6 +1353,7 @@ def _parse_pg_config(cfg):
 def _build_reinforce_jobs(
     *,
     algo_config,
+    global_config=None,
     n_repetitions,
     n_timesteps,
     eval_interval,
@@ -1370,8 +1381,7 @@ def _build_reinforce_jobs(
                     "actor_lr": lr_val,
                     "actor_hidden_nn": nn_arch,
                 }
-                label_parts = ["REINFORCE"] + _build_legend_parts(legend, legend_cfg)
-                curve_label = ", ".join(label_parts)
+                curve_label = _build_curve_label("REINFORCE", global_config=global_config, algo_config=legend_cfg)
 
                 setting_jobs.append({
                     "curve_label": curve_label,
@@ -1410,6 +1420,7 @@ def _build_reinforce_jobs(
 def _build_ac_jobs(
     *,
     algo_config,
+    global_config=None,
     n_repetitions,
     n_timesteps,
     eval_interval,
@@ -1449,8 +1460,7 @@ def _build_ac_jobs(
                             "critic_lr": critic_lr_val,
                             "critic_hidden_nn": critic_nn,
                         }
-                        label_parts = ["AC"] + _build_legend_parts(legend, iter_cfg)
-                        curve_label = ", ".join(label_parts)
+                        curve_label = _build_curve_label("AC", global_config=global_config, algo_config=iter_cfg)
                         setting_jobs.append({
                             "curve_label": curve_label,
                             "method": "ac",
@@ -1492,6 +1502,7 @@ def _build_ac_jobs(
 def _build_a2c_jobs(
     *,
     algo_config,
+    global_config=None,
     n_repetitions,
     n_timesteps,
     eval_interval,
@@ -1535,8 +1546,7 @@ def _build_a2c_jobs(
                                 "critic_hidden_nn": critic_nn,
                                 "TN_step": tn_step,
                             }
-                            label_parts = ["A2C"] + _build_legend_parts(legend, iter_cfg)
-                            curve_label = ", ".join(label_parts)
+                            curve_label = _build_curve_label("A2C", global_config=global_config, algo_config=iter_cfg)
                             setting_jobs.append({
                                 "curve_label": curve_label,
                                 "method": "a2c",
@@ -1580,6 +1590,7 @@ def _build_a2c_jobs(
 def _build_ppo_jobs(
     *,
     algo_config,
+    global_config=None,
     n_repetitions,
     n_timesteps,
     eval_interval,
@@ -1636,8 +1647,7 @@ def _build_ppo_jobs(
                                             "n_epochs": n_epochs_val,
                                             "rollout_steps": rollout_steps_val,
                                         }
-                                        label_parts = ["PPO"] + _build_legend_parts(legend, iter_cfg)
-                                        curve_label = ", ".join(label_parts)
+                                        curve_label = _build_curve_label("PPO", global_config=global_config, algo_config=iter_cfg)
                                         setting_jobs.append({
                                             "curve_label": curve_label,
                                             "method": "ppo",
@@ -1684,7 +1694,7 @@ def _build_ppo_jobs(
     return setting_jobs
 
 
-def _build_dqn_jobs(*, dqn_config, n_repetitions, n_timesteps, eval_interval,
+def _build_dqn_jobs(*, dqn_config, global_config=None, n_repetitions, n_timesteps, eval_interval,
                     max_train_episode_length, max_eval_episode_length, base_seed,
                     eval_with_env_episode_trials: bool, n_eval_episodes: int):
     """Build setting_jobs for DQN using assignment2_repo infrastructure."""
@@ -1741,9 +1751,7 @@ def _build_dqn_jobs(*, dqn_config, n_repetitions, n_timesteps, eval_interval,
                                 tn_step = int(tn_step)
                                 iter_cfg = {**cfg, "nn_hidden_layer_widths": nn_arch,
                                             "learning_rate": lr_val, "gamma": gamma}
-                                label_parts = ["DQN"]
-                                label_parts.extend(_build_legend_parts(legend, iter_cfg))
-                                run_label_prefix = ", ".join(label_parts)
+                                run_label_prefix = _build_curve_label("DQN", global_config=global_config, algo_config=iter_cfg)
 
                                 er_kwargs = dict(
                                     er_active=er_active_bool,
@@ -2929,6 +2937,7 @@ def build_returns_summary_table(
     csv_filename: str = "results_summary.csv",
     md_filename: str = "results_summary.md",
     print_to_stdout: bool = True,
+    use_saved_disk_networks_checkpoints: bool = False,
 ) -> dict[str, Any]:
     """Aggregate returns per (algorithm, non-excluded-HP) row and emit a table.
 
@@ -3127,6 +3136,91 @@ def build_returns_summary_table(
         for row in csv_rows:
             writer.writerow(row)
 
+    boxplot_path = None
+    if use_saved_disk_networks_checkpoints and rows_data:
+        try:
+            grouped_rows: dict[str, list[dict[str, Any]]] = {}
+            for row in rows_data:
+                grouped_rows.setdefault(row["algorithm"], []).append(row)
+
+            algorithms = sorted(grouped_rows.keys())
+            if algorithms:
+                mean_all_data = []
+                mean_last_data = []
+                for algo in algorithms:
+                    algo_rows = grouped_rows[algo]
+                    mean_all_data.append(
+                        [row["mean_all"] for row in algo_rows if np.isfinite(row["mean_all"])]
+                    )
+                    mean_last_data.append(
+                        [row["mean_last"] for row in algo_rows if np.isfinite(row["mean_last"])]
+                    )
+
+                valid_algorithms = [
+                    algo for algo, all_vals, last_vals in zip(algorithms, mean_all_data, mean_last_data)
+                    if all_vals or last_vals
+                ]
+                mean_all_data = [vals for vals in mean_all_data if vals]
+                mean_last_data = [vals for vals in mean_last_data if vals]
+
+                if valid_algorithms:
+                    fig, ax = plt.subplots(figsize=(max(10, 2.5 * len(valid_algorithms)), 6))
+                    positions = np.arange(1, len(valid_algorithms) + 1, dtype=float)
+                    offset = 0.18
+
+                    if mean_all_data:
+                        ax.boxplot(
+                            mean_all_data,
+                            positions=positions - offset,
+                            widths=0.28,
+                            vert=True,
+                            patch_artist=True,
+                            showmeans=True,
+                            boxprops=dict(facecolor="#d9d9d9", edgecolor="black", linewidth=1.2),
+                            whiskerprops=dict(color="black", linewidth=1.0),
+                            capprops=dict(color="black", linewidth=1.0),
+                            medianprops=dict(color="black", linewidth=1.4),
+                            meanprops=dict(marker="o", markerfacecolor="white", markeredgecolor="black", markersize=4),
+                        )
+                    if mean_last_data:
+                        ax.boxplot(
+                            mean_last_data,
+                            positions=positions + offset,
+                            widths=0.28,
+                            vert=True,
+                            patch_artist=True,
+                            showmeans=True,
+                            boxprops=dict(facecolor="#b3e5ff", edgecolor="black", linewidth=1.2),
+                            whiskerprops=dict(color="black", linewidth=1.0),
+                            capprops=dict(color="black", linewidth=1.0),
+                            medianprops=dict(color="black", linewidth=1.4),
+                            meanprops=dict(marker="o", markerfacecolor="white", markeredgecolor="black", markersize=4),
+                        )
+
+                    ax.set_xticks(positions)
+                    ax.set_xticklabels(valid_algorithms)
+                    ax.set_ylabel("Return")
+                    ax.set_title("Returns summary box plot by algorithm")
+                    ax.grid(axis="y", linestyle="--", alpha=0.3)
+                    ax.legend(
+                        [
+                            Line2D([0], [0], color="#d9d9d9", marker="s", linestyle="none", markeredgecolor="black"),
+                            Line2D([0], [0], color="#b3e5ff", marker="s", linestyle="none", markeredgecolor="black"),
+                        ],
+                        ["Mean (all settings)", "Mean (last N% settings)"],
+                        loc="best",
+                        fontsize=8,
+                    )
+                    fig.tight_layout()
+                    boxplot_path = os.path.join(output_dir, "results_summary_boxplot.png")
+                    fig.savefig(boxplot_path, dpi=300)
+                    plt.close(fig)
+                    if print_to_stdout:
+                        print(f"Saved returns summary box plot to: {boxplot_path}")
+        except Exception as exc:
+            if print_to_stdout:
+                print(f"[summary] Failed to build returns summary box plot: {exc}")
+
     if print_to_stdout:
         print(f"Saved returns summary to: {md_path}")
         print(f"Saved returns summary to: {csv_path}")
@@ -3137,5 +3231,6 @@ def build_returns_summary_table(
         "headers": headers,
         "markdown_path": md_path,
         "csv_path": csv_path,
+        "boxplot_path": boxplot_path,
         "text": rendered_text,
     }
