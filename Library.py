@@ -427,6 +427,223 @@ def run_actor_checkpoint_evaluation(
         plt.show()
 
 
+def run_actor_checkpoint_evaluation_exhaustive(
+    *,
+    included_algo_checkpoint_eval,
+    max_eval_episode_length,
+    plot_smoothing_window=None,
+    show_curve_smoothing_windows=None,
+    separate_algorithm_plots=False,
+    show_curve_plots=False,
+    unused_cpu_cores=0,
+):
+    cfg = included_algo_checkpoint_eval or {}
+    enabled_algos = [
+        algo.upper()
+        for algo in ("REINFORCE", "AC", "A2C", "PPO")
+        if bool((cfg.get(algo.upper()) or {}).get("enabled", False))
+    ]
+    if not enabled_algos:
+        return
+
+    plot_smoothing_windows = np.atleast_1d(
+        np.asarray(plot_smoothing_window if plot_smoothing_window is not None else np.array([1]), dtype=np.int32)
+    )
+    if plot_smoothing_windows.size < 1:
+        raise ValueError("plot_smoothing_window must contain at least one value.")
+
+    show_curve_smoothing_windows = np.atleast_1d(
+        np.asarray(
+            show_curve_smoothing_windows if show_curve_smoothing_windows is not None else np.array([101, 201]),
+            dtype=np.int32,
+        )
+    )
+    if show_curve_smoothing_windows.size < 1:
+        raise ValueError("show_curve_smoothing_windows must contain at least one value.")
+
+    n_episodes = int(cfg.get("n_episodes", 1000))
+    plots_dir = os.path.abspath(os.path.join("plots", "Checkpoint Evaluation Plots"))
+    os.makedirs(plots_dir, exist_ok=True)
+
+    algo_jobs = []
+    for algo_upper in enabled_algos:
+        algo_cfg = cfg.get(algo_upper) or {}
+        actor_hidden_nn = np.asarray(algo_cfg["actor_hidden_nn"], dtype=np.int32)
+        checkpoint_path = _load_actor_checkpoint_path(algo_upper, actor_hidden_nn)
+        if checkpoint_path is None:
+            print(f"[{algo_upper}] No actor checkpoint found on disk; skipping.")
+            continue
+        print(f"[{algo_upper}] Loading actor checkpoint: {checkpoint_path}")
+        algo_jobs.append(
+            {
+                "algo_upper": algo_upper,
+                "actor_hidden_nn": actor_hidden_nn,
+                "checkpoint_path": checkpoint_path,
+            }
+        )
+
+    if not algo_jobs:
+        return
+
+    cpu_count = os.cpu_count() or 1
+    if unused_cpu_cores is None:
+        unused_cpu_cores = 0
+    unused_cpu_cores = int(unused_cpu_cores)
+    if unused_cpu_cores < 0:
+        unused_cpu_cores = 0
+    available_cpus = max(1, cpu_count - unused_cpu_cores)
+    total_tasks = len(algo_jobs) * n_episodes
+    max_workers = min(total_tasks, available_cpus)
+
+    print(
+        f"CPU cores available: {cpu_count} "
+        f"(reserving UNUSED_CPU_CORES={unused_cpu_cores} => using {available_cpus}). "
+        f"Total tasks: {total_tasks} "
+        f"({len(algo_jobs)} algorithm(s) × {n_episodes} episode(s)). "
+        f"Parallel workers: {max_workers}.\n"
+    )
+
+    results_by_algo = {
+        job["algo_upper"]: np.empty(n_episodes, dtype=np.int32)
+        for job in algo_jobs
+    }
+    eval_numbers = np.arange(1, n_episodes + 1, dtype=np.int32)
+    pbars = {
+        job["algo_upper"]: _create_step_progress_bar(
+            total=n_episodes,
+            desc=f"{job['algo_upper']} checkpoint eval",
+            position=index,
+            leave=True,
+        )
+        for index, job in enumerate(algo_jobs)
+    }
+
+    future_meta = {}
+    futures = []
+    with ProcessPoolExecutor(max_workers=max_workers) as executor:
+        for job in algo_jobs:
+            for eval_index in range(n_episodes):
+                future = executor.submit(
+                    _run_actor_checkpoint_episode,
+                    job["algo_upper"],
+                    job["checkpoint_path"],
+                    job["actor_hidden_nn"],
+                    max_eval_episode_length,
+                )
+                future_meta[future] = (job["algo_upper"], eval_index)
+                futures.append(future)
+
+        try:
+            for future in as_completed(futures):
+                algo_upper, eval_index = future_meta[future]
+                done_step = future.result()
+                results_by_algo[algo_upper][eval_index] = done_step
+                pbars[algo_upper].set_postfix_str(f"done_step={int(done_step)}", refresh=False)
+                pbars[algo_upper].update(1)
+        finally:
+            for pbar in pbars.values():
+                pbar.close()
+            print()
+
+    plot_filename_tag = "-".join(enabled_algos)
+    plot_configs = []
+    if separate_algorithm_plots:
+        for algo_upper in enabled_algos:
+            for window in plot_smoothing_windows:
+                window = int(window)
+                suffix_label = "not smoothed plot" if window <= 1 else "smoothed plot"
+                plot_configs.append(
+                    {
+                        "algo_upper": algo_upper,
+                        "window": window,
+                        "plot": LearningCurvePlot(title=f"{algo_upper} checkpoint evaluation - {suffix_label}"),
+                    }
+                )
+    else:
+        for window in plot_smoothing_windows:
+            window = int(window)
+            suffix_label = "not smoothed plot" if window <= 1 else "smoothed plot"
+            plot_configs.append(
+                {
+                    "window": window,
+                    "plot": LearningCurvePlot(title=f"Checkpoint evaluation - {suffix_label}"),
+                }
+            )
+
+    for pc in plot_configs:
+        if separate_algorithm_plots:
+            algo_upper = pc["algo_upper"]
+            done_steps = results_by_algo[algo_upper]
+            smoothed_steps = _apply_optional_smoothing(np.asarray(done_steps, dtype=np.float32), int(pc["window"]))
+            smoothed_steps = np.minimum(smoothed_steps, float(max_eval_episode_length))
+            pc["plot"].add_curve(eval_numbers, smoothed_steps, label=algo_upper)
+        else:
+            for algo_upper, done_steps in results_by_algo.items():
+                smoothed_steps = _apply_optional_smoothing(np.asarray(done_steps, dtype=np.float32), int(pc["window"]))
+                smoothed_steps = np.minimum(smoothed_steps, float(max_eval_episode_length))
+                style = {
+                    "REINFORCE": {"color": "#d62728", "marker": "o", "ls": "-"},
+                    "AC": {"color": "#1f77b4", "marker": "s", "ls": "--"},
+                    "A2C": {"color": "#2ca02c", "marker": "^", "ls": "-."},
+                    "PPO": {"color": "#9467bd", "marker": "D", "ls": ":"},
+                }.get(algo_upper, {})
+                pc["plot"].add_curve(
+                    eval_numbers,
+                    smoothed_steps,
+                    label=algo_upper,
+                    ls=style.get("ls", "-"),
+                    color=style.get("color"),
+                )
+
+    for pc in plot_configs:
+        window = int(pc["window"])
+        suffix = f"w{window}-not-smoothed" if window <= 1 else f"w{window}-smoothed"
+        filename = f"{plot_filename_tag}_{suffix}.png"
+        output_path = os.path.abspath(os.path.join(plots_dir, filename))
+        saved_path = pc["plot"].save(output_path)
+        print(f"Saved checkpoint evaluation plot to {saved_path}")
+
+    if not separate_algorithm_plots and len(show_curve_smoothing_windows) == 2:
+        combined_fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+        combined_fig.suptitle(
+            f"Twin_{plot_filename_tag} (w={int(show_curve_smoothing_windows[0])} and w={int(show_curve_smoothing_windows[1])})"
+        )
+        desired_windows = [int(show_curve_smoothing_windows[0]), int(show_curve_smoothing_windows[1])]
+        for ax, w in zip(axes, desired_windows):
+            for algo_upper, done_steps in results_by_algo.items():
+                smoothed_steps = _apply_optional_smoothing(np.asarray(done_steps, dtype=np.float32), int(w))
+                smoothed_steps = np.minimum(smoothed_steps, float(max_eval_episode_length))
+                style = {
+                    "REINFORCE": {"color": "#d62728", "marker": "o", "ls": "-"},
+                    "AC": {"color": "#1f77b4", "marker": "s", "ls": "--"},
+                    "A2C": {"color": "#2ca02c", "marker": "^", "ls": "-."},
+                    "PPO": {"color": "#9467bd", "marker": "D", "ls": ":"},
+                }.get(algo_upper, {})
+                ax.plot(
+                    eval_numbers,
+                    smoothed_steps,
+                    label=algo_upper,
+                    linestyle=style.get("ls", "-"),
+                    marker=style.get("marker", "o"),
+                    color=style.get("color"),
+                    linewidth=2.0,
+                    zorder=5,
+                )
+            ax.set_title(f"Checkpoint evaluation - {'not smoothed plot' if w <= 1 else 'smoothed plot'}")
+            ax.set_xlabel("evaluation number")
+            ax.set_ylabel("done step")
+            ax.grid(True, alpha=0.25)
+            ax.legend()
+        try:
+            combined_fig.tight_layout()
+            plt.show(block=show_curve_plots)
+        except Exception as exc:
+            print(f"[plot] Failed to create combined subplot preview: {exc}")
+
+    if show_curve_plots and separate_algorithm_plots:
+        plt.show()
+
+
 # Begin Class CartPoleAgentPlot ##############################################################
 class CartPoleAgentPlot:
     ''' Class for plotting CartPole agent behavior during training '''
