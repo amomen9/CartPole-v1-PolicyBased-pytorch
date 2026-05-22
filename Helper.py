@@ -2926,6 +2926,21 @@ def _format_setting_label(algo_upper: str, hp_items: list[tuple[str, str]]) -> s
     return ", ".join(parts)
 
 
+def _format_summary_setting_label(algo_upper: str, job_hp: dict[str, Any]) -> str:
+    legend = _resolve_legend_flags(job_hp, warn_on_suppression=False)
+    parts = [algo_upper]
+    for key, (label, show) in legend.items():
+        if not show or key not in job_hp:
+            continue
+        value = job_hp[key]
+        label_text = _format_legend_label(label)
+        if isinstance(value, (bool, np.bool_)):
+            parts.append(f"{label_text}={bool(value)}")
+        else:
+            parts.append(f"{label_text}={_format_legend_value(value)}")
+    return ", ".join(parts)
+
+
 def build_returns_summary_table(
     *,
     algo_jobs: dict[str, list[dict[str, Any]]],
@@ -2962,7 +2977,7 @@ def build_returns_summary_table(
             if entry is None:
                 continue
             hp_items = _non_excluded_hp_items(job.get("hyperparams", {}))
-            setting_label = _format_setting_label(algo_upper, hp_items)
+            setting_label = _format_summary_setting_label(algo_upper, job.get("hyperparams", {}))
             key = (algo_upper, tuple(hp_items))
             if key not in grouped:
                 grouped[key] = {
@@ -3263,13 +3278,14 @@ def build_returns_summary_table(
                         alpha=curve_shaded_area_opacity,
                         linewidth=0,
                     )
-                    ax.plot([x_pos - half_width, x_pos + half_width], [mean_value, mean_value], color=color, linewidth=1.8)
+                    ax.plot([x_pos - half_width, x_pos + half_width], [mean_value, mean_value], color=color, linewidth=1.8, label=row["setting"])
 
                 ax.set_xticks(x_positions)
                 ax.set_xticklabels([row["setting"] for row in rows_data], rotation=45, ha="right")
                 ax.set_ylabel("Return")
                 ax.set_title("Returns summary mean ± CI by curve")
                 ax.grid(axis="y", linestyle="--", alpha=0.3)
+                ax.legend(loc="best", fontsize=8)
                 fig.tight_layout()
                 mean_ci_plot_path = os.path.join(output_dir, "results_summary_mean_ci.png")
                 fig.savefig(mean_ci_plot_path, dpi=300)
