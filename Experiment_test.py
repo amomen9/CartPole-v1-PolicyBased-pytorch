@@ -35,7 +35,7 @@ def experiment():
         "max_train_episode_length": 500, #500        # Episode truncation step. Default: 500.
         "base_seed": 42,                    # Base seed for CartPole environment and agent initialization. Each repetition will use a different seed derived from this base seed (e.g., base_seed + repetition_index).
         # Agent
-        "n_timesteps": 11e4, #1e6,              # Total number of training timesteps. Default: 1000000.
+        "n_timesteps": 15e3, #1e6,              # Total number of training timesteps. Default: 1000000.
         "max_eval_episode_length": 500, #500        # Episode truncation step. Default: 500.
         "eval_interval": 250,
         "eval_with_env_episode_trials": True, # Default: True. Set to False to use the fast proxy full episode return value from training (last_episode_return) for evaluation instead of running separate greedy environment episode trials via agent.evaluate(). Note: setting to False will speed up training and plotting, but will not provide true evaluation curves. Setting to True will provide true evaluation curves but will significantly increase training time due to the need to run separate evaluation episodes at each eval_interval.

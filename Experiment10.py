@@ -64,7 +64,7 @@ def experiment():
     
     included_algo_checkpoint_eval = {
         "DQN": {
-            "enabled": True
+            "enabled": False
         },
         "REINFORCE": {
             "enabled": False
@@ -73,10 +73,10 @@ def experiment():
             "enabled": False
         },
         "A2C": {
-            "enabled": True
+            "enabled": False
         },
         "PPO": {
-            "enabled": True
+            "enabled": False
         },
         "n_episodes": 100,  # Number of episodes to run for each checkpoint evaluation. Default: 100.
     }
@@ -216,6 +216,7 @@ def experiment():
         A2C_config=A2C_config,
         DQN_config=DQN_config,
         PPO_config=PPO_config,
+        included_algo_checkpoint_eval=locals().get("included_algo_checkpoint_eval"),
     )
 
 
