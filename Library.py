@@ -437,6 +437,11 @@ def run_actor_checkpoint_evaluation_exhaustive(
     show_curve_plots=False,
     unused_cpu_cores=0,
 ):
+    start_time = time.perf_counter()
+    start_human = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    print(f"Experiment started at: {start_human}\n")
+    with open("output.log", "w", encoding="utf-8") as f:
+        f.write(f"Start the process at: {start_human}\n")
     cfg = included_algo_checkpoint_eval or {}
     enabled_algos = [
         algo.upper()
@@ -576,23 +581,26 @@ def run_actor_checkpoint_evaluation_exhaustive(
             done_steps = results_by_algo[algo_upper]
             smoothed_steps = _apply_optional_smoothing(np.asarray(done_steps, dtype=np.float32), int(pc["window"]))
             smoothed_steps = np.minimum(smoothed_steps, float(max_eval_episode_length))
-            pc["plot"].add_curve(eval_numbers, smoothed_steps, label=algo_upper)
+            pc["plot"].add_curve(eval_numbers, smoothed_steps, label=algo_upper, color={
+                "REINFORCE": "#d62728",
+                "AC": "#1f77b4",
+                "A2C": "#2ca02c",
+                "PPO": "#9467bd",
+            }.get(algo_upper))
         else:
             for algo_upper, done_steps in results_by_algo.items():
                 smoothed_steps = _apply_optional_smoothing(np.asarray(done_steps, dtype=np.float32), int(pc["window"]))
                 smoothed_steps = np.minimum(smoothed_steps, float(max_eval_episode_length))
-                style = {
-                    "REINFORCE": {"color": "#d62728", "marker": "o", "ls": "-"},
-                    "AC": {"color": "#1f77b4", "marker": "s", "ls": "--"},
-                    "A2C": {"color": "#2ca02c", "marker": "^", "ls": "-."},
-                    "PPO": {"color": "#9467bd", "marker": "D", "ls": ":"},
-                }.get(algo_upper, {})
                 pc["plot"].add_curve(
                     eval_numbers,
                     smoothed_steps,
                     label=algo_upper,
-                    ls=style.get("ls", "-"),
-                    color=style.get("color"),
+                    color={
+                        "REINFORCE": "#d62728",
+                        "AC": "#1f77b4",
+                        "A2C": "#2ca02c",
+                        "PPO": "#9467bd",
+                    }.get(algo_upper),
                 )
 
     for pc in plot_configs:
@@ -600,6 +608,7 @@ def run_actor_checkpoint_evaluation_exhaustive(
         suffix = f"w{window}-not-smoothed" if window <= 1 else f"w{window}-smoothed"
         filename = f"{plot_filename_tag}_{suffix}.png"
         output_path = os.path.abspath(os.path.join(plots_dir, filename))
+        pc["plot"].add_hline(max_eval_episode_length, label="CartPole Optimum")
         saved_path = pc["plot"].save(output_path)
         print(f"Saved checkpoint evaluation plot to {saved_path}")
 
@@ -613,22 +622,20 @@ def run_actor_checkpoint_evaluation_exhaustive(
             for algo_upper, done_steps in results_by_algo.items():
                 smoothed_steps = _apply_optional_smoothing(np.asarray(done_steps, dtype=np.float32), int(w))
                 smoothed_steps = np.minimum(smoothed_steps, float(max_eval_episode_length))
-                style = {
-                    "REINFORCE": {"color": "#d62728", "marker": "o", "ls": "-"},
-                    "AC": {"color": "#1f77b4", "marker": "s", "ls": "--"},
-                    "A2C": {"color": "#2ca02c", "marker": "^", "ls": "-."},
-                    "PPO": {"color": "#9467bd", "marker": "D", "ls": ":"},
-                }.get(algo_upper, {})
                 ax.plot(
                     eval_numbers,
                     smoothed_steps,
                     label=algo_upper,
-                    linestyle=style.get("ls", "-"),
-                    marker=style.get("marker", "o"),
-                    color=style.get("color"),
+                    color={
+                        "REINFORCE": "#d62728",
+                        "AC": "#1f77b4",
+                        "A2C": "#2ca02c",
+                        "PPO": "#9467bd",
+                    }.get(algo_upper),
                     linewidth=2.0,
                     zorder=5,
                 )
+            ax.axhline(max_eval_episode_length, color="gray", linestyle=":", linewidth=1.5, label="CartPole Optimum")
             ax.set_title(f"Checkpoint evaluation - {'not smoothed plot' if w <= 1 else 'smoothed plot'}")
             ax.set_xlabel("evaluation number")
             ax.set_ylabel("done step")
@@ -640,9 +647,10 @@ def run_actor_checkpoint_evaluation_exhaustive(
         except Exception as exc:
             print(f"[plot] Failed to create combined subplot preview: {exc}")
 
-    if show_curve_plots and separate_algorithm_plots:
-        plt.show()
-
+    total_time = (time.perf_counter() - start_time) / 60.0
+    with open("output.log", "w", encoding="utf-8") as f:
+        f.write(f"Total execution time: {total_time:.3f} minutes\n")
+    print(f"\nExperiment finished in {total_time:.3f} minutes.")
 
 # Begin Class CartPoleAgentPlot ##############################################################
 class CartPoleAgentPlot:
