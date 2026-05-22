@@ -20,7 +20,7 @@ def experiment():
         # Plotting parameters
         "benchmark_curve": 1,               # Default: 1, choose one: 1 or 2 for the benchmark CSV (BaselineDataCartPole_run1.csv or BaselineDataCartPole_run2.csv).
         "benchmark_name": "Baseline",       # Benchmark name to show in the legend for the benchmark curve. Default: "Baseline".
-        "plot_smoothing_window": [101, 201, 251, 351],  # Use multiple values to plot multiple curves. Default: [1, 51, 101, 201, 251, 301]. Set to [1] to skip smoothing.
+        "plot_smoothing_window": [201, 351],  # Use multiple values to plot multiple curves. Default: [1, 51, 101, 201, 251, 301]. Set to [1] to skip smoothing.
         "curve_confidence_interval": 0.6,   # Curve shading confidence interval. Default: 0.95. Set to 0 to skip CI shading.
         "curve_shaded_area_opacity": 0.06,  # Opacity of the shaded area for confidence intervals. Default: 0.05 (5% opacity).
         "show_curve_plots": True,           # Show learning curve plot at the end of or during the training.
@@ -52,9 +52,9 @@ def experiment():
     ################[           End Global Parameters            ]################
 
     ################[ Algorithm Hyperparameters & Configurations ]##############
-    # Select which algorithms to include in the training and plotting using included_algorithms.
+    # Select which algorithms to include in the training and plotting using included_algo_learnings.
     # Set value to True to include, False to exclude.
-    included_algorithms = {
+    included_algo_learnings = {
         "DQN": False,
         "REINFORCE": False,
         "AC": False,
@@ -186,7 +186,7 @@ def experiment():
     ##########################################################
 
     ordered_algorithms = ["DQN", "REINFORCE", "AC", "A2C", "PPO"]
-    experiments = [algo for algo in ordered_algorithms if included_algorithms.get(algo, False)]
+    experiments = [algo for algo in ordered_algorithms if included_algo_learnings.get(algo, False)]
 
     run_selected_experiments(
         experiments,

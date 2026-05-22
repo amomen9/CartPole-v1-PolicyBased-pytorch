@@ -52,9 +52,9 @@ def experiment():
     ################[           End Global Parameters            ]################
 
     ################[ Algorithm Hyperparameters & Configurations ]##############
-    # Select which algorithms to include in the training and plotting using included_algorithms.
+    # Select which algorithms to include in the training and plotting using included_algo_learnings.
     # Set value to True to include, False to exclude.
-    included_algorithms = {
+    included_algo_learnings = {
         "DQN": False,
         "REINFORCE": False,
         "AC": False,
@@ -186,7 +186,7 @@ def experiment():
     ##########################################################
 
     ordered_algorithms = ["DQN", "REINFORCE", "AC", "A2C", "PPO"]
-    experiments = [algo for algo in ordered_algorithms if included_algorithms.get(algo, False)]
+    experiments = [algo for algo in ordered_algorithms if included_algo_learnings.get(algo, False)]
 
     run_selected_experiments(
         experiments,
