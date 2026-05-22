@@ -1216,6 +1216,76 @@ def _load_benchmark_curve(
     )
 
 
+def _checkpoint_metadata_from_kwargs(**kwargs):
+    metadata = {}
+    for key, value in kwargs.items():
+        if value is None:
+            continue
+        if isinstance(value, np.ndarray):
+            metadata[key] = value.tolist()
+        elif torch.is_tensor(value):
+            tensor = value.detach().cpu()
+            metadata[key] = tensor.item() if tensor.ndim == 0 else tensor.tolist()
+        elif isinstance(value, (np.bool_, bool)):
+            metadata[key] = bool(value)
+        elif isinstance(value, (np.integer, int)):
+            metadata[key] = int(value)
+        elif isinstance(value, (np.floating, float)):
+            metadata[key] = float(value)
+        else:
+            metadata[key] = value
+    return metadata
+
+
+def _pg_actor_checkpoint_metadata(*, algo_type, actor_hidden_nn, actor_lr, gamma, max_train_episode_length,
+                                  max_eval_episode_length, eval_with_env_episode_trials, n_eval_episodes,
+                                  n_timesteps, eval_interval):
+    return _checkpoint_metadata_from_kwargs(
+        algo_type=algo_type,
+        component="Actor",
+        actor_hidden_nn=actor_hidden_nn,
+        actor_lr=actor_lr,
+        gamma=gamma,
+        max_train_episode_length=max_train_episode_length,
+        max_eval_episode_length=max_eval_episode_length,
+        eval_with_env_episode_trials=eval_with_env_episode_trials,
+        n_eval_episodes=n_eval_episodes,
+        n_timesteps=n_timesteps,
+        eval_interval=eval_interval,
+    )
+
+
+def _pg_critic_checkpoint_metadata(*, algo_type, actor_hidden_nn, critic_hidden_nn, actor_lr, critic_lr, gamma,
+                                   TN_step=None, max_train_episode_length=None, max_eval_episode_length=None,
+                                   eval_with_env_episode_trials=None, n_eval_episodes=None, n_timesteps=None,
+                                   eval_interval=None, gae_lambda=None, clip_eps=None, n_epochs=None,
+                                   rollout_steps=None):
+    return _checkpoint_metadata_from_kwargs(
+        algo_type=algo_type,
+        component="Critic",
+        actor_hidden_nn=actor_hidden_nn,
+        critic_hidden_nn=critic_hidden_nn,
+        actor_lr=actor_lr,
+        critic_lr=critic_lr,
+        gamma=gamma,
+        TN_step=TN_step,
+        max_train_episode_length=max_train_episode_length,
+        max_eval_episode_length=max_eval_episode_length,
+        eval_with_env_episode_trials=eval_with_env_episode_trials,
+        n_eval_episodes=n_eval_episodes,
+        n_timesteps=n_timesteps,
+        eval_interval=eval_interval,
+        gae_lambda=gae_lambda,
+        clip_eps=clip_eps,
+        n_epochs=n_epochs,
+        rollout_steps=rollout_steps,
+    )
+
+
+def _dqn_checkpoint_metadata(**kwargs):
+    return _checkpoint_metadata_from_kwargs(**kwargs)
+
+
 def average_over_repetitions(
     method,
     n_repetitions,
@@ -1320,10 +1390,24 @@ def _run_single_repetition(
             algo_type="REINFORCE",
             actor_hidden_nn=actor_hidden_nn,
         )
+        actor_metadata = {
+            "algo_type": "REINFORCE",
+            "component": "Actor",
+            "actor_hidden_nn": actor_hidden_nn,
+            "actor_lr": actor_lr,
+            "gamma": gamma,
+            "max_train_episode_length": max_train_episode_length,
+            "max_eval_episode_length": max_eval_episode_length,
+            "eval_with_env_episode_trials": eval_with_env_episode_trials,
+            "n_eval_episodes": n_eval_episodes,
+            "n_timesteps": n_timesteps,
+            "eval_interval": eval_interval,
+        }
         if use_saved_disk_networks_checkpoints:
             load_state_dict_if_present(
                 model=agent.actor,
                 checkpoint_path=actor_ck.file_path,
+                metadata=actor_metadata,
             )
 
         env = environ.CartPoleEnvironment(
@@ -1348,6 +1432,7 @@ def _run_single_repetition(
             save_state_dict_overwrite(
                 model=agent.actor,
                 checkpoint_path=actor_ck.file_path,
+                metadata=actor_metadata,
             )
 
     elif method == "ac":
@@ -1375,15 +1460,45 @@ def _run_single_repetition(
             algo_type="AC",
             critic_hidden_nn=critic_hidden_nn,
         )
+        actor_metadata = {
+            "algo_type": "AC",
+            "component": "Actor",
+            "actor_hidden_nn": actor_hidden_nn,
+            "actor_lr": actor_lr,
+            "gamma": gamma,
+            "max_train_episode_length": max_train_episode_length,
+            "max_eval_episode_length": max_eval_episode_length,
+            "eval_with_env_episode_trials": eval_with_env_episode_trials,
+            "n_eval_episodes": n_eval_episodes,
+            "n_timesteps": n_timesteps,
+            "eval_interval": eval_interval,
+        }
+        critic_metadata = {
+            "algo_type": "AC",
+            "component": "Critic",
+            "actor_hidden_nn": actor_hidden_nn,
+            "critic_hidden_nn": critic_hidden_nn,
+            "actor_lr": actor_lr,
+            "critic_lr": critic_lr,
+            "gamma": gamma,
+            "max_train_episode_length": max_train_episode_length,
+            "max_eval_episode_length": max_eval_episode_length,
+            "eval_with_env_episode_trials": eval_with_env_episode_trials,
+            "n_eval_episodes": n_eval_episodes,
+            "n_timesteps": n_timesteps,
+            "eval_interval": eval_interval,
+        }
 
         if use_saved_disk_networks_checkpoints:
             load_state_dict_if_present(
                 model=agent.actor,
                 checkpoint_path=actor_ck.file_path,
+                metadata=actor_metadata,
             )
             load_state_dict_if_present(
                 model=agent.critic,
                 checkpoint_path=critic_ck.file_path,
+                metadata=critic_metadata,
             )
 
         env = environ.CartPoleEnvironment(
@@ -1408,10 +1523,12 @@ def _run_single_repetition(
             save_state_dict_overwrite(
                 model=agent.actor,
                 checkpoint_path=actor_ck.file_path,
+                metadata=actor_metadata,
             )
             save_state_dict_overwrite(
                 model=agent.critic,
                 checkpoint_path=critic_ck.file_path,
+                metadata=critic_metadata,
             )
 
     elif method == "a2c":
@@ -1442,15 +1559,47 @@ def _run_single_repetition(
             algo_type="A2C",
             critic_hidden_nn=critic_hidden_nn,
         )
+        actor_metadata = {
+            "algo_type": "A2C",
+            "component": "Actor",
+            "actor_hidden_nn": actor_hidden_nn,
+            "actor_lr": actor_lr,
+            "gamma": gamma,
+            "TN_step": TN_step,
+            "max_train_episode_length": max_train_episode_length,
+            "max_eval_episode_length": max_eval_episode_length,
+            "eval_with_env_episode_trials": eval_with_env_episode_trials,
+            "n_eval_episodes": n_eval_episodes,
+            "n_timesteps": n_timesteps,
+            "eval_interval": eval_interval,
+        }
+        critic_metadata = {
+            "algo_type": "A2C",
+            "component": "Critic",
+            "actor_hidden_nn": actor_hidden_nn,
+            "critic_hidden_nn": critic_hidden_nn,
+            "actor_lr": actor_lr,
+            "critic_lr": critic_lr,
+            "gamma": gamma,
+            "TN_step": TN_step,
+            "max_train_episode_length": max_train_episode_length,
+            "max_eval_episode_length": max_eval_episode_length,
+            "eval_with_env_episode_trials": eval_with_env_episode_trials,
+            "n_eval_episodes": n_eval_episodes,
+            "n_timesteps": n_timesteps,
+            "eval_interval": eval_interval,
+        }
 
         if use_saved_disk_networks_checkpoints:
             load_state_dict_if_present(
                 model=agent.policy,
                 checkpoint_path=actor_ck.file_path,
+                metadata=actor_metadata,
             )
             load_state_dict_if_present(
                 model=agent.value_func,
                 checkpoint_path=critic_ck.file_path,
+                metadata=critic_metadata,
             )
 
         env = environ.CartPoleEnvironment(
@@ -1476,10 +1625,12 @@ def _run_single_repetition(
             save_state_dict_overwrite(
                 model=agent.policy,
                 checkpoint_path=actor_ck.file_path,
+                metadata=actor_metadata,
             )
             save_state_dict_overwrite(
                 model=agent.value_func,
                 checkpoint_path=critic_ck.file_path,
+                metadata=critic_metadata,
             )
 
     elif method == "ppo":
@@ -1512,15 +1663,53 @@ def _run_single_repetition(
             algo_type="PPO",
             critic_hidden_nn=critic_hidden_nn,
         )
+        actor_metadata = {
+            "algo_type": "PPO",
+            "component": "Actor",
+            "actor_hidden_nn": actor_hidden_nn,
+            "actor_lr": actor_lr,
+            "gamma": gamma,
+            "gae_lambda": gae_lambda,
+            "clip_eps": clip_eps,
+            "n_epochs": n_epochs,
+            "rollout_steps": rollout_steps,
+            "max_train_episode_length": max_train_episode_length,
+            "max_eval_episode_length": max_eval_episode_length,
+            "eval_with_env_episode_trials": eval_with_env_episode_trials,
+            "n_eval_episodes": n_eval_episodes,
+            "n_timesteps": n_timesteps,
+            "eval_interval": eval_interval,
+        }
+        critic_metadata = {
+            "algo_type": "PPO",
+            "component": "Critic",
+            "actor_hidden_nn": actor_hidden_nn,
+            "critic_hidden_nn": critic_hidden_nn,
+            "actor_lr": actor_lr,
+            "critic_lr": critic_lr,
+            "gamma": gamma,
+            "gae_lambda": gae_lambda,
+            "clip_eps": clip_eps,
+            "n_epochs": n_epochs,
+            "rollout_steps": rollout_steps,
+            "max_train_episode_length": max_train_episode_length,
+            "max_eval_episode_length": max_eval_episode_length,
+            "eval_with_env_episode_trials": eval_with_env_episode_trials,
+            "n_eval_episodes": n_eval_episodes,
+            "n_timesteps": n_timesteps,
+            "eval_interval": eval_interval,
+        }
 
         if use_saved_disk_networks_checkpoints:
             load_state_dict_if_present(
                 model=agent.policy,
                 checkpoint_path=actor_ck.file_path,
+                metadata=actor_metadata,
             )
             load_state_dict_if_present(
                 model=agent.value_func,
                 checkpoint_path=critic_ck.file_path,
+                metadata=critic_metadata,
             )
 
         env = environ.CartPoleEnvironment(
@@ -1547,10 +1736,12 @@ def _run_single_repetition(
             save_state_dict_overwrite(
                 model=agent.policy,
                 checkpoint_path=actor_ck.file_path,
+                metadata=actor_metadata,
             )
             save_state_dict_overwrite(
                 model=agent.value_func,
                 checkpoint_path=critic_ck.file_path,
+                metadata=critic_metadata,
             )
 
     return rep_returns, rep_timesteps

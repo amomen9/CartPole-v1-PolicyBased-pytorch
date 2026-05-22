@@ -1906,6 +1906,7 @@ def _run_dqn_one_rep(trial_common: dict[str, Any], run_seed: int, rep_index: int
     from assignment2_repo.DQN import run_dqn_trial_returns
     from Checkpointing import (
         dqn_q_checkpoint_path,
+        resolve_matching_checkpoint_path,
         save_state_dict_overwrite,
     )
 
@@ -1913,9 +1914,23 @@ def _run_dqn_one_rep(trial_common: dict[str, Any], run_seed: int, rep_index: int
         nn_hidden_layer_widths=trial_common["nn_hidden_layer_widths"],
     )
 
+    checkpoint_metadata = {
+        "component": "Q",
+        **{
+            key: value
+            for key, value in trial_common.items()
+            if value is not None
+        },
+    }
+
     pretrained_state_dict = None
-    if use_saved_disk_networks_checkpoints and os.path.isfile(ck.file_path):
-        pretrained_state_dict = torch.load(ck.file_path, map_location="cpu")
+    if use_saved_disk_networks_checkpoints:
+        resolved_ck_path = resolve_matching_checkpoint_path(
+            checkpoint_path=ck.file_path,
+            metadata=checkpoint_metadata,
+        )
+        if resolved_ck_path is not None and os.path.isfile(resolved_ck_path):
+            pretrained_state_dict = torch.load(resolved_ck_path, map_location="cpu")
 
     returns_arr, timesteps_arr, model = run_dqn_trial_returns(
         seed=run_seed,
@@ -1932,6 +1947,7 @@ def _run_dqn_one_rep(trial_common: dict[str, Any], run_seed: int, rep_index: int
         save_state_dict_overwrite(
             model=model,
             checkpoint_path=ck.file_path,
+            metadata=checkpoint_metadata,
         )
 
     return returns_arr, timesteps_arr
