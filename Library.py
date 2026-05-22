@@ -1,16 +1,15 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.pyplot as visplt
-import matplotlib.animation
 import torch
 import torch.nn as nn
-import numpy as np
+from concurrent.futures import ProcessPoolExecutor, as_completed
 import Environment as environ
 import Library as fn
 import os
 import time
 from datetime import datetime
-from Helper import smooth, RUN_TIMESTAMP
+from Helper import smooth, RUN_TIMESTAMP, _create_step_progress_bar
 from scipy.stats import t as t_dist
 
 # Begin Class LearningCurvePlot ##############################################################
@@ -179,210 +178,253 @@ def _latest_checkpoint_path(base_path):
     return candidates[-1]
 
 
-def _evaluate_dqn_checkpoint(job_kwargs, max_eval_episode_length, n_eval_episodes):
-    from assignment2_repo.mylibrary import PolicyNetwork, choose_action
-    from assignment2_repo.Environment import make_env
-    from Checkpointing import dqn_q_checkpoint_path
-
-    nn_hidden_layer_widths = np.asarray(job_kwargs["nn_hidden_layer_widths"], dtype=np.int32)
-    checkpoint_path = _latest_checkpoint_path(
-        dqn_q_checkpoint_path(nn_hidden_layer_widths=nn_hidden_layer_widths).file_path
-    )
-    if checkpoint_path is None:
-        return None
-
-    model = PolicyNetwork(
-        nn_depth=len(nn_hidden_layer_widths) + 2,
-        nn_hidden_layer_widths=nn_hidden_layer_widths,
-    )
-    model.load_state_dict(torch.load(checkpoint_path, map_location="cpu"), strict=True)
-
-    eval_env = make_env(max_episode_length=max_eval_episode_length, render_mode=None)
-    total_returns = []
+def _run_episode_done_step(policy_fn, max_episode_length: int) -> int:
+    env = environ.CartPoleEnvironment(max_episode_length=max_episode_length, render_mode="rgb_array")
     try:
-        for _ in range(int(n_eval_episodes)):
-            obs, _ = eval_env.reset()
-            ep_return = 0.0
-            for _ in range(int(max_eval_episode_length)):
-                action = choose_action(
-                    model,
-                    obs,
-                    exploration_method="epsilon_greedy",
-                    epsilon=0.0,
-                )
-                obs, reward, terminated, truncated, _ = eval_env.step(action)
-                ep_return += float(reward)
-                if terminated or truncated:
-                    break
-            total_returns.append(ep_return)
+        obs, _ = env.reset()
+        done_step = 0
+
+        while done_step < max_episode_length:
+            action = policy_fn(obs)
+            obs, reward, terminated, truncated, _ = env.step(action)
+            done_step += 1
+            if terminated or truncated:
+                break
+
+        return done_step
     finally:
-        eval_env.close()
-
-    return float(np.mean(total_returns))
+        env.close()
 
 
-def _evaluate_pg_checkpoint(algo_upper, job_kwargs, max_eval_episode_length, n_eval_episodes):
-    from Checkpointing import pg_actor_checkpoint_path, pg_critic_checkpoint_path
-    if algo_upper == "REINFORCE":
-        from REINFORCE import REINFORCE_Agent
-        agent = REINFORCE_Agent(
-            actor_hidden_nn=np.asarray(job_kwargs["actor_hidden_nn"], dtype=np.int32),
-            actor_lr=float(job_kwargs["actor_lr"]),
-            gamma=float(job_kwargs["gamma"]),
-        )
-        checkpoint_path = _latest_checkpoint_path(
-            pg_actor_checkpoint_path(
-                algo_type=algo_upper,
-                actor_hidden_nn=job_kwargs["actor_hidden_nn"],
-            ).file_path
-        )
-        if checkpoint_path is None:
-            return None
-        agent.actor.load_state_dict(torch.load(checkpoint_path, map_location="cpu"), strict=True)
-        return float(agent.evaluate(n_eval_episodes=int(n_eval_episodes), max_steps=int(max_eval_episode_length)))
-
-    if algo_upper == "AC":
-        from AC import AC_Agent
-        agent = AC_Agent(
-            actor_hidden_nn=np.asarray(job_kwargs["actor_hidden_nn"], dtype=np.int32),
-            critic_hidden_nn=np.asarray(job_kwargs["critic_hidden_nn"], dtype=np.int32),
-            actor_lr=float(job_kwargs["actor_lr"]),
-            critic_lr=float(job_kwargs["critic_lr"]),
-            gamma=float(job_kwargs["gamma"]),
-        )
-    elif algo_upper == "A2C":
-        from A2C import A2C_Agent
-        agent = A2C_Agent(
-            actor_hidden_nn=np.asarray(job_kwargs["actor_hidden_nn"], dtype=np.int32),
-            critic_hidden_nn=np.asarray(job_kwargs["critic_hidden_nn"], dtype=np.int32),
-            actor_lr=float(job_kwargs["actor_lr"]),
-            critic_lr=float(job_kwargs["critic_lr"]),
-            gamma=float(job_kwargs["gamma"]),
-            TN_step=int(job_kwargs["TN_step"]),
-        )
-    elif algo_upper == "PPO":
-        from PPO import PPO_Agent
-        agent = PPO_Agent(
-            actor_hidden_nn=np.asarray(job_kwargs["actor_hidden_nn"], dtype=np.int32),
-            critic_hidden_nn=np.asarray(job_kwargs["critic_hidden_nn"], dtype=np.int32),
-            actor_lr=float(job_kwargs["actor_lr"]),
-            critic_lr=float(job_kwargs["critic_lr"]),
-            gamma=float(job_kwargs["gamma"]),
-            gae_lambda=float(job_kwargs["gae_lambda"]),
-            clip_eps=float(job_kwargs["clip_eps"]),
-            n_epochs=int(job_kwargs["n_epochs"]),
-        )
-    else:
-        return None
-
-    actor_checkpoint_path = _latest_checkpoint_path(
+def _load_actor_checkpoint_path(algo_type: str, actor_hidden_nn: np.ndarray):
+    from Checkpointing import pg_actor_checkpoint_path
+    return _latest_checkpoint_path(
         pg_actor_checkpoint_path(
-            algo_type=algo_upper,
-            actor_hidden_nn=job_kwargs["actor_hidden_nn"],
+            algo_type=algo_type,
+            actor_hidden_nn=actor_hidden_nn,
         ).file_path
     )
-    critic_checkpoint_path = _latest_checkpoint_path(
-        pg_critic_checkpoint_path(
-            algo_type=algo_upper,
-            critic_hidden_nn=job_kwargs["critic_hidden_nn"],
-        ).file_path
-    )
-    if actor_checkpoint_path is None or critic_checkpoint_path is None:
-        return None
-
-    if algo_upper in ("AC", "A2C", "PPO"):
-        agent.actor.load_state_dict(torch.load(actor_checkpoint_path, map_location="cpu"), strict=True)
-        agent.critic.load_state_dict(torch.load(critic_checkpoint_path, map_location="cpu"), strict=True)
-    return float(agent.evaluate(n_eval_episodes=int(n_eval_episodes), max_steps=int(max_eval_episode_length)))
 
 
-def run_checkpoint_evaluation_pass(
+def _build_actor_checkpoint_model(algo_upper: str, actor_hidden_nn: np.ndarray):
+    algo_upper = algo_upper.upper()
+    if algo_upper in ("REINFORCE", "AC"):
+        return Policy_NN(nn_hidden_layer_widths=actor_hidden_nn)
+    if algo_upper in ("A2C", "PPO"):
+        if algo_upper == "A2C":
+            from A2C import PolicyNetwork
+        else:
+            from PPO import PolicyNetwork
+        return PolicyNetwork(4, 2, actor_hidden_nn, activation=nn.ReLU)
+    raise ValueError(f"Unsupported checkpoint-eval algorithm: {algo_upper}")
+
+
+_ACTOR_CHECKPOINT_MODEL_CACHE: dict[tuple[str, str, tuple[int, ...]], torch.nn.Module] = {}
+
+
+def _load_actor_checkpoint_model(algo_upper: str, checkpoint_path: str, actor_hidden_nn: np.ndarray):
+    model = _build_actor_checkpoint_model(algo_upper, actor_hidden_nn)
+    model.load_state_dict(torch.load(checkpoint_path, map_location="cpu"), strict=True)
+    model.eval()
+    return model
+
+
+def _get_cached_actor_checkpoint_model(algo_upper: str, checkpoint_path: str, actor_hidden_nn: np.ndarray):
+    cache_key = (algo_upper.upper(), checkpoint_path, tuple(int(v) for v in np.asarray(actor_hidden_nn, dtype=np.int32).reshape(-1)))
+    model = _ACTOR_CHECKPOINT_MODEL_CACHE.get(cache_key)
+    if model is None:
+        model = _load_actor_checkpoint_model(algo_upper, checkpoint_path, actor_hidden_nn)
+        _ACTOR_CHECKPOINT_MODEL_CACHE[cache_key] = model
+    return model
+
+
+def _run_actor_checkpoint_episode(
+    algo_upper: str,
+    checkpoint_path: str,
+    actor_hidden_nn: np.ndarray,
+    max_eval_episode_length: int,
+) -> int:
+    model = _get_cached_actor_checkpoint_model(algo_upper, checkpoint_path, actor_hidden_nn)
+    env = environ.CartPoleEnvironment(max_episode_length=max_eval_episode_length, render_mode=None)
+    try:
+        obs, _ = env.reset()
+        done_step = 0
+        while done_step < max_eval_episode_length:
+            with torch.inference_mode():
+                state = torch.as_tensor(obs, dtype=torch.float32)
+                if algo_upper in ("REINFORCE", "AC"):
+                    logit = model(state)
+                    prob = torch.sigmoid(logit).item()
+                    action = int(prob >= 0.5)
+                else:
+                    logits = model(state)
+                    action = int(torch.argmax(logits, dim=-1).item())
+            obs, reward, terminated, truncated, _ = env.step(action)
+            done_step += 1
+            if terminated or truncated:
+                break
+        return done_step
+    finally:
+        env.close()
+
+
+def run_actor_checkpoint_evaluation(
     *,
-    experiments,
-    algo_jobs,
-    use_saved_disk_networks_checkpoints,
     included_algo_checkpoint_eval,
     max_eval_episode_length,
-    n_eval_episodes,
     separate_algorithm_plots,
     show_curve_plots,
+    unused_cpu_cores=0,
 ):
     cfg = included_algo_checkpoint_eval or {}
-    if not use_saved_disk_networks_checkpoints:
-        return
     enabled_algos = [
         algo.upper()
-        for algo in experiments
+        for algo in ("REINFORCE", "AC", "A2C", "PPO")
         if bool((cfg.get(algo.upper()) or {}).get("enabled", False))
     ]
     if not enabled_algos:
         return
 
-    n_episodes = int(cfg.get("n_episodes", n_eval_episodes))
+    n_episodes = int(cfg.get("n_episodes", 1000))
     plots_dir = "plots"
     os.makedirs(plots_dir, exist_ok=True)
 
-    if separate_algorithm_plots:
-        plots = {
-            algo_upper: LearningCurvePlot(title=f"{algo_upper} checkpoint evaluation", subtitle=f"n_eval_episodes={n_episodes}")
-            for algo_upper in enabled_algos
-        }
-        for plot in plots.values():
-            plot.ax.set_xlabel("Setting")
-    else:
-        plots = {
-            "combined": LearningCurvePlot(title="Checkpoint evaluation", subtitle=f"n_eval_episodes={n_episodes}")
-        }
-        plots["combined"].ax.set_xlabel("Setting")
-
+    algo_jobs = []
     for algo_upper in enabled_algos:
-        jobs = algo_jobs.get(algo_upper, [])
-        if not jobs:
+        algo_cfg = cfg.get(algo_upper) or {}
+        actor_hidden_nn = np.asarray(algo_cfg["actor_hidden_nn"], dtype=np.int32)
+        checkpoint_path = _load_actor_checkpoint_path(algo_upper, actor_hidden_nn)
+        if checkpoint_path is None:
+            print(f"[{algo_upper}] No actor checkpoint found on disk; skipping.")
             continue
+        print(f"[{algo_upper}] Loading actor checkpoint: {checkpoint_path}")
+        algo_jobs.append(
+            {
+                "algo_upper": algo_upper,
+                "actor_hidden_nn": actor_hidden_nn,
+                "checkpoint_path": checkpoint_path,
+            }
+        )
 
-        eval_returns = []
-        setting_positions = []
-        curve_labels = []
+    if not algo_jobs:
+        return
 
-        for idx, job in enumerate(jobs, start=1):
-            job_kwargs = job["kwargs"]
-            if algo_upper == "DQN":
-                score = _evaluate_dqn_checkpoint(
-                    job_kwargs,
-                    max_eval_episode_length=max_eval_episode_length,
-                    n_eval_episodes=n_episodes,
+    total_tasks = len(algo_jobs) * n_episodes
+    cpu_count = os.cpu_count() or 1
+    if unused_cpu_cores is None:
+        unused_cpu_cores = 0
+    unused_cpu_cores = int(unused_cpu_cores)
+    if unused_cpu_cores < 0:
+        unused_cpu_cores = 0
+    available_cpus = max(1, cpu_count - unused_cpu_cores)
+    max_workers = min(total_tasks, available_cpus)
+
+    print(
+        f"CPU cores available: {cpu_count} "
+        f"(reserving UNUSED_CPU_CORES={unused_cpu_cores} => using {available_cpus}). "
+        f"Total tasks: {total_tasks} "
+        f"({len(algo_jobs)} algorithm(s) × {n_episodes} episode(s)). "
+        f"Parallel workers: {max_workers}.\n"
+    )
+
+    if separate_algorithm_plots:
+        figure_map = {
+            job["algo_upper"]: plt.subplots(figsize=(10, 6))
+            for job in algo_jobs
+        }
+    else:
+        fig, axis = plt.subplots(figsize=(12, 7))
+        figure_map = {"combined": (fig, axis)}
+
+    results_by_algo = {
+        job["algo_upper"]: np.empty(n_episodes, dtype=np.int32)
+        for job in algo_jobs
+    }
+    eval_numbers = np.arange(1, n_episodes + 1, dtype=np.int32)
+    pbars = {
+        job["algo_upper"]: _create_step_progress_bar(
+            total=n_episodes,
+            desc=f"{job['algo_upper']} checkpoint eval",
+            position=index,
+            leave=True,
+        )
+        for index, job in enumerate(algo_jobs)
+    }
+
+    future_meta = {}
+    futures = []
+    with ProcessPoolExecutor(max_workers=max_workers) as executor:
+        for job in algo_jobs:
+            for eval_index in range(n_episodes):
+                future = executor.submit(
+                    _run_actor_checkpoint_episode,
+                    job["algo_upper"],
+                    job["checkpoint_path"],
+                    job["actor_hidden_nn"],
+                    max_eval_episode_length,
                 )
-            else:
-                score = _evaluate_pg_checkpoint(
-                    algo_upper,
-                    job_kwargs,
-                    max_eval_episode_length=max_eval_episode_length,
-                    n_eval_episodes=n_episodes,
-                )
-            if score is None:
-                continue
-            setting_positions.append(idx)
-            eval_returns.append(score)
-            curve_labels.append(job["curve_label"])
+                future_meta[future] = (job["algo_upper"], eval_index)
+                futures.append(future)
 
-        if not eval_returns:
-            continue
+        try:
+            for future in as_completed(futures):
+                algo_upper, eval_index = future_meta[future]
+                done_step = future.result()
+                results_by_algo[algo_upper][eval_index] = done_step
+                pbars[algo_upper].set_postfix_str(f"done_step={int(done_step)}", refresh=False)
+                pbars[algo_upper].update(1)
+        finally:
+            for pbar in pbars.values():
+                pbar.close()
+            print()
 
+    algo_line_styles = {
+        "REINFORCE": {"color": "#d62728", "marker": "o", "ls": "-"},
+        "AC": {"color": "#1f77b4", "marker": "s", "ls": "--"},
+        "A2C": {"color": "#2ca02c", "marker": "^", "ls": "-."},
+        "PPO": {"color": "#9467bd", "marker": "D", "ls": ":"},
+    }
+
+    for algo_upper, done_steps in results_by_algo.items():
         plot_key = algo_upper if separate_algorithm_plots else "combined"
-        plot_obj = plots[plot_key]
-        for x_pos, y_value, label in zip(setting_positions, eval_returns, curve_labels):
-            plot_obj.ax.plot([x_pos], [y_value], marker="o", linestyle="None", label=label)
+        fig, axis = figure_map[plot_key]
+        style = algo_line_styles.get(algo_upper, {})
+        axis.plot(
+            eval_numbers,
+            done_steps,
+            marker=style.get("marker", "o"),
+            linestyle=style.get("ls", "-"),
+            linewidth=2.0,
+            color=style.get("color", None),
+            label=algo_upper,
+            zorder=5,
+        )
+        axis.set_title(
+            f"{algo_upper} checkpoint evaluation" if separate_algorithm_plots else "Checkpoint evaluation"
+        )
+        axis.set_xlabel("evaluation number")
+        axis.set_ylabel("done step")
+        axis.grid(True, alpha=0.25)
 
-        output_name = f"{algo_upper}_checkpoint_evaluation.png" if separate_algorithm_plots else "checkpoint_evaluation.png"
-        saved_path = plot_obj.save(os.path.join(plots_dir, output_name))
-        print(f"[{algo_upper}] Saved checkpoint evaluation plot to {saved_path}")
+    if separate_algorithm_plots:
+        for algo_upper, (fig, axis) in figure_map.items():
+            if axis.lines:
+                axis.legend()
+                fig.tight_layout()
+                output_path = os.path.join(plots_dir, f"{algo_upper}_checkpoint_evaluation.png")
+                fig.savefig(output_path, dpi=300)
+                print(f"[{algo_upper}] Saved checkpoint evaluation plot to {output_path}")
+    else:
+        fig, axis = figure_map["combined"]
+        if axis.lines:
+            axis.legend()
+            fig.tight_layout()
+            output_path = os.path.join(plots_dir, "checkpoint_evaluation.png")
+            fig.savefig(output_path, dpi=300)
+            print(f"Saved checkpoint evaluation plot to {output_path}")
 
     if show_curve_plots:
-        try:
-            plt.show(block=False)
-            plt.pause(0.001)
-        except Exception as exc:
-            print(f"[plot] Could not display checkpoint evaluation plot(s) non-blocking: {exc}")
+        plt.show()
 
 
 # Begin Class CartPoleAgentPlot ##############################################################
@@ -568,7 +610,6 @@ def run_selected_experiments(
     A2C_config=None,
     DQN_config=None,
     PPO_config=None,
-    included_algo_checkpoint_eval=None,
 ):
     """Orchestrate training, data loading, and plotting for all selected experiments.
 
@@ -1405,17 +1446,6 @@ def run_selected_experiments(
     with open("output.log", "w", encoding="utf-8") as f:
         f.write(f"Total execution time: {total_time:.3f} minutes\n")
     print(f"\nExperiment finished in {total_time:.3f} minutes.")
-
-    run_checkpoint_evaluation_pass(
-        experiments=experiments,
-        algo_jobs=algo_jobs,
-        use_saved_disk_networks_checkpoints=use_saved_disk_networks_checkpoints,
-        included_algo_checkpoint_eval=included_algo_checkpoint_eval,
-        max_eval_episode_length=max_eval_episode_length,
-        n_eval_episodes=n_eval_episodes,
-        separate_algorithm_plots=separate_algorithm_plots,
-        show_curve_plots=show_curve_plots,
-    )
 
     if show_individual_plots or animation_plot or combined_fig_shown:
         plt.show(block=show_curve_plots)
