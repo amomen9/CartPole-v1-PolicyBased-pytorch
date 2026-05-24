@@ -1918,6 +1918,7 @@ def _run_dqn_one_rep(trial_common: dict[str, Any], run_seed: int, rep_index: int
 
     checkpoint_metadata = {
         "component": "Q",
+        "use_saved_disk_networks_checkpoints": bool(use_saved_disk_networks_checkpoints),
         **{
             key: value
             for key, value in trial_common.items()
@@ -1934,10 +1935,6 @@ def _run_dqn_one_rep(trial_common: dict[str, Any], run_seed: int, rep_index: int
         )
         if resolved_ck_path is not None and os.path.isfile(resolved_ck_path):
             pretrained_state_dict = torch.load(resolved_ck_path, map_location="cpu")
-            if rep_index == 0:
-                print(f"[DQN] Loading existing Q-network checkpoint: {resolved_ck_path}")
-        elif rep_index == 0:
-            print(f"[DQN] No matching Q-network checkpoint at: {ck.file_path} (training from scratch)")
 
     returns_arr, timesteps_arr, model = run_dqn_trial_returns(
         seed=run_seed,

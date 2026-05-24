@@ -28,13 +28,9 @@ def experiment():
         "legend_parameters": {              # [plot label, show flag]
             "max_eval_episode_length": [r"EvL: ", False],
         },
+        "policy_evaluation_method": ["softmax"],   # Choose between "softmax" and "argmax"
     }
 
-    max_eval_episode_length = global_config["max_eval_episode_length"]
-    plot_smoothing_window = global_config["plot_smoothing_window"]
-    show_curve_smoothing_windows = global_config["show_curve_smoothing_windows"]
-    separate_algorithm_plots = global_config["separate_algorithm_plots"]
-    show_curve_plots = global_config["show_curve_plots"]
 
     included_algo_checkpoint_eval = {
         "REINFORCE": {
@@ -49,12 +45,26 @@ def experiment():
             "enabled": True,
             "actor_hidden_nn": np.array([64, 64], dtype=np.int32),
         },
+        "DQN": {
+            "enabled": True,
+            "nn_hidden_layer_widths": np.array([128, 128], dtype=np.int32),
+        },
         "PPO": {
             "enabled": True,
             "actor_hidden_nn": np.array([128, 128], dtype=np.int32),
         },
         "n_episodes": 200,
     }
+
+
+
+
+    max_eval_episode_length = global_config["max_eval_episode_length"]
+    plot_smoothing_window = global_config["plot_smoothing_window"]
+    show_curve_smoothing_windows = global_config["show_curve_smoothing_windows"]
+    separate_algorithm_plots = global_config["separate_algorithm_plots"]
+    show_curve_plots = global_config["show_curve_plots"]
+    policy_evaluation_method = global_config["policy_evaluation_method"]
 
     run_actor_checkpoint_evaluation_exhaustive(
         included_algo_checkpoint_eval=included_algo_checkpoint_eval,
@@ -63,6 +73,7 @@ def experiment():
         show_curve_smoothing_windows=show_curve_smoothing_windows,
         separate_algorithm_plots=separate_algorithm_plots,
         show_curve_plots=show_curve_plots,
+        policy_evaluation_method=policy_evaluation_method,
     )
 
 

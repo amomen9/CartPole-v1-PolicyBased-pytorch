@@ -197,6 +197,14 @@ def _run_episode_done_step(policy_fn, max_episode_length: int) -> int:
 
 
 def _load_actor_checkpoint_path(algo_type: str, actor_hidden_nn: np.ndarray):
+    algo_upper = algo_type.upper()
+    if algo_upper == "DQN":
+        from Checkpointing import dqn_q_checkpoint_path
+        return _latest_checkpoint_path(
+            dqn_q_checkpoint_path(
+                nn_hidden_layer_widths=actor_hidden_nn,
+            ).file_path
+        )
     from Checkpointing import pg_actor_checkpoint_path
     return _latest_checkpoint_path(
         pg_actor_checkpoint_path(
@@ -216,6 +224,10 @@ def _build_actor_checkpoint_model(algo_upper: str, actor_hidden_nn: np.ndarray):
         else:
             from PPO import PolicyNetwork
         return PolicyNetwork(4, 2, actor_hidden_nn, activation=nn.ReLU)
+    if algo_upper == "DQN":
+        from assignment2_repo.mylibrary import PolicyNetwork as DQN_QNetwork
+        nn_depth = int(np.asarray(actor_hidden_nn).reshape(-1).size) + 2
+        return DQN_QNetwork(nn_depth=nn_depth, nn_hidden_layer_widths=actor_hidden_nn)
     raise ValueError(f"Unsupported checkpoint-eval algorithm: {algo_upper}")
 
 
@@ -238,11 +250,48 @@ def _get_cached_actor_checkpoint_model(algo_upper: str, checkpoint_path: str, ac
     return model
 
 
+_VALID_POLICY_EVALUATION_METHODS = ("softmax", "argmax")
+
+
+def _normalize_policy_evaluation_methods(policy_evaluation_method) -> list[str]:
+    """Normalize the user-facing 'policy_evaluation_method' config value into a
+    deduplicated list of supported method names ('softmax' / 'argmax').
+
+    Accepts either a single string or any iterable of strings. None / empty
+    falls back to ['softmax'] (the default used by other algorithms).
+    """
+    if policy_evaluation_method is None:
+        return ["softmax"]
+    if isinstance(policy_evaluation_method, str):
+        candidates = [policy_evaluation_method]
+    else:
+        try:
+            candidates = list(policy_evaluation_method)
+        except TypeError:
+            candidates = [policy_evaluation_method]
+    if not candidates:
+        return ["softmax"]
+    seen: set[str] = set()
+    deduped: list[str] = []
+    for method in candidates:
+        method_norm = str(method).strip().lower()
+        if method_norm not in _VALID_POLICY_EVALUATION_METHODS:
+            raise ValueError(
+                "policy_evaluation_method entries must be one of "
+                f"{_VALID_POLICY_EVALUATION_METHODS}, got {method!r}"
+            )
+        if method_norm not in seen:
+            seen.add(method_norm)
+            deduped.append(method_norm)
+    return deduped
+
+
 def _run_actor_checkpoint_episode(
     algo_upper: str,
     checkpoint_path: str,
     actor_hidden_nn: np.ndarray,
     max_eval_episode_length: int,
+    policy_method: str = "softmax",
 ) -> int:
     model = _get_cached_actor_checkpoint_model(algo_upper, checkpoint_path, actor_hidden_nn)
     env = environ.CartPoleEnvironment(max_episode_length=max_eval_episode_length, render_mode=None)
@@ -256,6 +305,14 @@ def _run_actor_checkpoint_episode(
                     logit = model(state)
                     prob = torch.sigmoid(logit).item()
                     action = int(prob >= 0.5)
+                elif algo_upper == "DQN":
+                    q_values = model(state)
+                    if policy_method == "argmax":
+                        action = int(torch.argmax(q_values, dim=-1).item())
+                    else:
+                        probs = torch.softmax(q_values, dim=-1).cpu().numpy().astype(np.float64)
+                        probs = probs / probs.sum()
+                        action = int(np.random.choice(probs.shape[-1], p=probs))
                 else:
                     logits = model(state)
                     action = int(torch.argmax(logits, dim=-1).item())
@@ -275,15 +332,19 @@ def run_actor_checkpoint_evaluation(
     separate_algorithm_plots,
     show_curve_plots,
     unused_cpu_cores=0,
+    policy_evaluation_method=None,
 ):
     cfg = included_algo_checkpoint_eval or {}
     enabled_algos = [
         algo.upper()
-        for algo in ("REINFORCE", "AC", "A2C", "PPO")
+        for algo in ("REINFORCE", "AC", "A2C", "DQN", "PPO")
         if bool((cfg.get(algo.upper()) or {}).get("enabled", False))
     ]
     if not enabled_algos:
         return
+
+    dqn_policy_methods = _normalize_policy_evaluation_methods(policy_evaluation_method)
+    multi_dqn_methods = len(dqn_policy_methods) > 1
 
     n_episodes = int(cfg.get("n_episodes", 1000))
     plots_dir = "plots"
@@ -292,19 +353,43 @@ def run_actor_checkpoint_evaluation(
     algo_jobs = []
     for algo_upper in enabled_algos:
         algo_cfg = cfg.get(algo_upper) or {}
-        actor_hidden_nn = np.asarray(algo_cfg["actor_hidden_nn"], dtype=np.int32)
+        hidden_widths_key = "nn_hidden_layer_widths" if algo_upper == "DQN" else "actor_hidden_nn"
+        actor_hidden_nn = np.asarray(
+            algo_cfg.get(hidden_widths_key, algo_cfg.get("actor_hidden_nn")),
+            dtype=np.int32,
+        )
         checkpoint_path = _load_actor_checkpoint_path(algo_upper, actor_hidden_nn)
         if checkpoint_path is None:
-            print(f"[{algo_upper}] No actor checkpoint found on disk; skipping.")
+            ckpt_label = "Q-network" if algo_upper == "DQN" else "actor"
+            print(f"[{algo_upper}] No {ckpt_label} checkpoint found on disk; skipping.")
             continue
-        print(f"[{algo_upper}] Loading actor checkpoint: {checkpoint_path}")
-        algo_jobs.append(
-            {
-                "algo_upper": algo_upper,
-                "actor_hidden_nn": actor_hidden_nn,
-                "checkpoint_path": checkpoint_path,
-            }
-        )
+        ckpt_label = "Q-network" if algo_upper == "DQN" else "actor"
+        print(f"[{algo_upper}] Loading {ckpt_label} checkpoint: {checkpoint_path}")
+
+        if algo_upper == "DQN":
+            methods_for_algo = dqn_policy_methods
+        else:
+            methods_for_algo = [None]
+        for method in methods_for_algo:
+            if algo_upper == "DQN" and multi_dqn_methods:
+                series_key = f"DQN_{method}"
+                display_label = f"DQN ({method})"
+            elif algo_upper == "DQN":
+                series_key = "DQN"
+                display_label = f"DQN ({method})"
+            else:
+                series_key = algo_upper
+                display_label = algo_upper
+            algo_jobs.append(
+                {
+                    "algo_upper": algo_upper,
+                    "actor_hidden_nn": actor_hidden_nn,
+                    "checkpoint_path": checkpoint_path,
+                    "policy_method": method,
+                    "series_key": series_key,
+                    "display_label": display_label,
+                }
+            )
 
     if not algo_jobs:
         return
@@ -336,15 +421,17 @@ def run_actor_checkpoint_evaluation(
         fig, axis = plt.subplots(figsize=(12, 7))
         figure_map = {"combined": (fig, axis)}
 
-    results_by_algo = {
-        job["algo_upper"]: np.empty(n_episodes, dtype=np.int32)
+    results_by_series = {
+        job["series_key"]: np.empty(n_episodes, dtype=np.int32)
         for job in algo_jobs
     }
+    series_to_label = {job["series_key"]: job["display_label"] for job in algo_jobs}
+    series_to_algo = {job["series_key"]: job["algo_upper"] for job in algo_jobs}
     eval_numbers = np.arange(1, n_episodes + 1, dtype=np.int32)
     pbars = {
-        job["algo_upper"]: _create_step_progress_bar(
+        job["series_key"]: _create_step_progress_bar(
             total=n_episodes,
-            desc=f"{job['algo_upper']} checkpoint eval",
+            desc=f"{job['display_label']} checkpoint eval",
             position=index,
             leave=True,
         )
@@ -362,17 +449,18 @@ def run_actor_checkpoint_evaluation(
                     job["checkpoint_path"],
                     job["actor_hidden_nn"],
                     max_eval_episode_length,
+                    job.get("policy_method") or "softmax",
                 )
-                future_meta[future] = (job["algo_upper"], eval_index)
+                future_meta[future] = (job["series_key"], eval_index)
                 futures.append(future)
 
         try:
             for future in as_completed(futures):
-                algo_upper, eval_index = future_meta[future]
+                series_key, eval_index = future_meta[future]
                 done_step = future.result()
-                results_by_algo[algo_upper][eval_index] = done_step
-                pbars[algo_upper].set_postfix_str(f"done_step={int(done_step)}", refresh=False)
-                pbars[algo_upper].update(1)
+                results_by_series[series_key][eval_index] = done_step
+                pbars[series_key].set_postfix_str(f"done_step={int(done_step)}", refresh=False)
+                pbars[series_key].update(1)
         finally:
             for pbar in pbars.values():
                 pbar.close()
@@ -382,13 +470,23 @@ def run_actor_checkpoint_evaluation(
         "REINFORCE": {"color": "#d62728", "marker": "o", "ls": "-"},
         "AC": {"color": "#1f77b4", "marker": "s", "ls": "--"},
         "A2C": {"color": "#2ca02c", "marker": "^", "ls": "-."},
+        "DQN": {"color": "#ff7f0e", "marker": "x", "ls": (0, (3, 1, 1, 1))},
         "PPO": {"color": "#9467bd", "marker": "D", "ls": ":"},
     }
+    dqn_method_overrides = {
+        "softmax": {"ls": (0, (3, 1, 1, 1))},
+        "argmax": {"ls": (0, (1, 1))},
+    }
 
-    for algo_upper, done_steps in results_by_algo.items():
+    for series_key, done_steps in results_by_series.items():
+        algo_upper = series_to_algo[series_key]
         plot_key = algo_upper if separate_algorithm_plots else "combined"
         fig, axis = figure_map[plot_key]
-        style = algo_line_styles.get(algo_upper, {})
+        style = dict(algo_line_styles.get(algo_upper, {}))
+        if algo_upper == "DQN" and multi_dqn_methods:
+            method_for_series = series_key.split("_", 1)[1] if "_" in series_key else None
+            if method_for_series in dqn_method_overrides:
+                style.update(dqn_method_overrides[method_for_series])
         axis.plot(
             eval_numbers,
             done_steps,
@@ -396,7 +494,7 @@ def run_actor_checkpoint_evaluation(
             linestyle=style.get("ls", "-"),
             linewidth=2.0,
             color=style.get("color", None),
-            label=algo_upper,
+            label=series_to_label[series_key],
             zorder=5,
         )
         axis.set_title(
@@ -436,6 +534,7 @@ def run_actor_checkpoint_evaluation_exhaustive(
     separate_algorithm_plots=False,
     show_curve_plots=False,
     unused_cpu_cores=0,
+    policy_evaluation_method=None,
 ):
     start_time = time.perf_counter()
     start_human = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -445,11 +544,14 @@ def run_actor_checkpoint_evaluation_exhaustive(
     cfg = included_algo_checkpoint_eval or {}
     enabled_algos = [
         algo.upper()
-        for algo in ("REINFORCE", "AC", "A2C", "PPO")
+        for algo in ("REINFORCE", "AC", "A2C", "DQN", "PPO")
         if bool((cfg.get(algo.upper()) or {}).get("enabled", False))
     ]
     if not enabled_algos:
         return
+
+    dqn_policy_methods = _normalize_policy_evaluation_methods(policy_evaluation_method)
+    multi_dqn_methods = len(dqn_policy_methods) > 1
 
     plot_smoothing_windows = np.atleast_1d(
         np.asarray(plot_smoothing_window if plot_smoothing_window is not None else np.array([1]), dtype=np.int32)
@@ -473,19 +575,40 @@ def run_actor_checkpoint_evaluation_exhaustive(
     algo_jobs = []
     for algo_upper in enabled_algos:
         algo_cfg = cfg.get(algo_upper) or {}
-        actor_hidden_nn = np.asarray(algo_cfg["actor_hidden_nn"], dtype=np.int32)
+        hidden_widths_key = "nn_hidden_layer_widths" if algo_upper == "DQN" else "actor_hidden_nn"
+        actor_hidden_nn = np.asarray(
+            algo_cfg.get(hidden_widths_key, algo_cfg.get("actor_hidden_nn")),
+            dtype=np.int32,
+        )
         checkpoint_path = _load_actor_checkpoint_path(algo_upper, actor_hidden_nn)
         if checkpoint_path is None:
-            print(f"[{algo_upper}] No actor checkpoint found on disk; skipping.")
+            ckpt_label = "Q-network" if algo_upper == "DQN" else "actor"
+            print(f"[{algo_upper}] No {ckpt_label} checkpoint found on disk; skipping.")
             continue
-        print(f"[{algo_upper}] Loading actor checkpoint: {checkpoint_path}")
-        algo_jobs.append(
-            {
-                "algo_upper": algo_upper,
-                "actor_hidden_nn": actor_hidden_nn,
-                "checkpoint_path": checkpoint_path,
-            }
-        )
+        ckpt_label = "Q-network" if algo_upper == "DQN" else "actor"
+        print(f"[{algo_upper}] Loading {ckpt_label} checkpoint: {checkpoint_path}")
+
+        methods_for_algo = dqn_policy_methods if algo_upper == "DQN" else [None]
+        for method in methods_for_algo:
+            if algo_upper == "DQN" and multi_dqn_methods:
+                series_key = f"DQN_{method}"
+                display_label = f"DQN ({method})"
+            elif algo_upper == "DQN":
+                series_key = "DQN"
+                display_label = f"DQN ({method})"
+            else:
+                series_key = algo_upper
+                display_label = algo_upper
+            algo_jobs.append(
+                {
+                    "algo_upper": algo_upper,
+                    "actor_hidden_nn": actor_hidden_nn,
+                    "checkpoint_path": checkpoint_path,
+                    "policy_method": method,
+                    "series_key": series_key,
+                    "display_label": display_label,
+                }
+            )
 
     if not algo_jobs:
         return
@@ -508,15 +631,17 @@ def run_actor_checkpoint_evaluation_exhaustive(
         f"Parallel workers: {max_workers}.\n"
     )
 
-    results_by_algo = {
-        job["algo_upper"]: np.empty(n_episodes, dtype=np.int32)
+    results_by_series = {
+        job["series_key"]: np.empty(n_episodes, dtype=np.int32)
         for job in algo_jobs
     }
+    series_to_label = {job["series_key"]: job["display_label"] for job in algo_jobs}
+    series_to_algo = {job["series_key"]: job["algo_upper"] for job in algo_jobs}
     eval_numbers = np.arange(1, n_episodes + 1, dtype=np.int32)
     pbars = {
-        job["algo_upper"]: _create_step_progress_bar(
+        job["series_key"]: _create_step_progress_bar(
             total=n_episodes,
-            desc=f"{job['algo_upper']} checkpoint eval",
+            desc=f"{job['display_label']} checkpoint eval",
             position=index,
             leave=True,
         )
@@ -534,17 +659,18 @@ def run_actor_checkpoint_evaluation_exhaustive(
                     job["checkpoint_path"],
                     job["actor_hidden_nn"],
                     max_eval_episode_length,
+                    job.get("policy_method") or "softmax",
                 )
-                future_meta[future] = (job["algo_upper"], eval_index)
+                future_meta[future] = (job["series_key"], eval_index)
                 futures.append(future)
 
         try:
             for future in as_completed(futures):
-                algo_upper, eval_index = future_meta[future]
+                series_key, eval_index = future_meta[future]
                 done_step = future.result()
-                results_by_algo[algo_upper][eval_index] = done_step
-                pbars[algo_upper].set_postfix_str(f"done_step={int(done_step)}", refresh=False)
-                pbars[algo_upper].update(1)
+                results_by_series[series_key][eval_index] = done_step
+                pbars[series_key].set_postfix_str(f"done_step={int(done_step)}", refresh=False)
+                pbars[series_key].update(1)
         finally:
             for pbar in pbars.values():
                 pbar.close()
@@ -575,32 +701,47 @@ def run_actor_checkpoint_evaluation_exhaustive(
                 }
             )
 
+    algo_color_map = {
+        "REINFORCE": "#d62728",
+        "AC": "#1f77b4",
+        "A2C": "#2ca02c",
+        "DQN": "#ff7f0e",
+        "PPO": "#9467bd",
+    }
+    dqn_method_linestyles = {"softmax": "-", "argmax": (0, (4, 2))}
+
+    def _series_linestyle(series_key: str) -> str | tuple:
+        if multi_dqn_methods and series_to_algo.get(series_key) == "DQN":
+            method = series_key.split("_", 1)[1] if "_" in series_key else None
+            return dqn_method_linestyles.get(method, "-")
+        return "-"
+
     for pc in plot_configs:
         if separate_algorithm_plots:
             algo_upper = pc["algo_upper"]
-            done_steps = results_by_algo[algo_upper]
-            smoothed_steps = _apply_optional_smoothing(np.asarray(done_steps, dtype=np.float32), int(pc["window"]))
-            smoothed_steps = np.minimum(smoothed_steps, float(max_eval_episode_length))
-            pc["plot"].add_curve(eval_numbers, smoothed_steps, label=algo_upper, color={
-                "REINFORCE": "#d62728",
-                "AC": "#1f77b4",
-                "A2C": "#2ca02c",
-                "PPO": "#9467bd",
-            }.get(algo_upper))
-        else:
-            for algo_upper, done_steps in results_by_algo.items():
+            for series_key, done_steps in results_by_series.items():
+                if series_to_algo[series_key] != algo_upper:
+                    continue
                 smoothed_steps = _apply_optional_smoothing(np.asarray(done_steps, dtype=np.float32), int(pc["window"]))
                 smoothed_steps = np.minimum(smoothed_steps, float(max_eval_episode_length))
                 pc["plot"].add_curve(
                     eval_numbers,
                     smoothed_steps,
-                    label=algo_upper,
-                    color={
-                        "REINFORCE": "#d62728",
-                        "AC": "#1f77b4",
-                        "A2C": "#2ca02c",
-                        "PPO": "#9467bd",
-                    }.get(algo_upper),
+                    label=series_to_label[series_key],
+                    ls=_series_linestyle(series_key),
+                    color=algo_color_map.get(algo_upper),
+                )
+        else:
+            for series_key, done_steps in results_by_series.items():
+                algo_upper = series_to_algo[series_key]
+                smoothed_steps = _apply_optional_smoothing(np.asarray(done_steps, dtype=np.float32), int(pc["window"]))
+                smoothed_steps = np.minimum(smoothed_steps, float(max_eval_episode_length))
+                pc["plot"].add_curve(
+                    eval_numbers,
+                    smoothed_steps,
+                    label=series_to_label[series_key],
+                    ls=_series_linestyle(series_key),
+                    color=algo_color_map.get(algo_upper),
                 )
 
     for pc in plot_configs:
@@ -619,19 +760,16 @@ def run_actor_checkpoint_evaluation_exhaustive(
         )
         desired_windows = [int(show_curve_smoothing_windows[0]), int(show_curve_smoothing_windows[1])]
         for ax, w in zip(axes, desired_windows):
-            for algo_upper, done_steps in results_by_algo.items():
+            for series_key, done_steps in results_by_series.items():
+                algo_upper = series_to_algo[series_key]
                 smoothed_steps = _apply_optional_smoothing(np.asarray(done_steps, dtype=np.float32), int(w))
                 smoothed_steps = np.minimum(smoothed_steps, float(max_eval_episode_length))
                 ax.plot(
                     eval_numbers,
                     smoothed_steps,
-                    label=algo_upper,
-                    color={
-                        "REINFORCE": "#d62728",
-                        "AC": "#1f77b4",
-                        "A2C": "#2ca02c",
-                        "PPO": "#9467bd",
-                    }.get(algo_upper),
+                    label=series_to_label[series_key],
+                    color=algo_color_map.get(algo_upper),
+                    linestyle=_series_linestyle(series_key),
                     linewidth=2.0,
                     zorder=5,
                 )
@@ -1411,11 +1549,23 @@ def run_selected_experiments(
         print()
 
         # Report which network checkpoint files will be loaded by the workers.
+        # Emitted before the worker pool starts so the messages are not
+        # interleaved with tqdm progress bars from child processes.
         if use_saved_disk_networks_checkpoints:
+            import glob as _glob
             from Checkpointing import (
+                dqn_q_checkpoint_path,
                 pg_actor_checkpoint_path,
                 pg_critic_checkpoint_path,
             )
+
+            def _any_candidate_exists(base_path: str) -> bool:
+                """True if base_path or any '<stem>_N.pt' sibling exists."""
+                if os.path.isfile(base_path):
+                    return True
+                stem, ext = os.path.splitext(base_path)
+                return bool(_glob.glob(f"{stem}_*{ext}"))
+
             pg_method_to_algo = {
                 "REINFORCE": ("REINFORCE", False),
                 "ac": ("AC", True),
@@ -1426,20 +1576,32 @@ def run_selected_experiments(
             any_reported = False
             for _global_idx, job in pending_settings:
                 method = job["method"]
+                kw = job["kwargs"]
+                if method == "dqn":
+                    dqn_path = dqn_q_checkpoint_path(
+                        nn_hidden_layer_widths=kw["nn_hidden_layer_widths"],
+                    ).file_path
+                    if dqn_path not in reported_paths:
+                        reported_paths.add(dqn_path)
+                        if _any_candidate_exists(dqn_path):
+                            print(f"[DQN] Loading existing Q-network checkpoint: {dqn_path}")
+                        else:
+                            print(f"[DQN] No checkpoint found for DQN to load from disk")
+                        any_reported = True
+                    continue
                 if method not in pg_method_to_algo:
                     continue
                 algo_type, has_critic = pg_method_to_algo[method]
-                kw = job["kwargs"]
                 actor_path = pg_actor_checkpoint_path(
                     algo_type=algo_type,
                     actor_hidden_nn=kw["actor_hidden_nn"],
                 ).file_path
                 if actor_path not in reported_paths:
                     reported_paths.add(actor_path)
-                    if os.path.isfile(actor_path):
+                    if _any_candidate_exists(actor_path):
                         print(f"[{algo_type}] Loading existing actor checkpoint: {actor_path}")
                     else:
-                        print(f"[{algo_type}] No existing actor checkpoint at: {actor_path} (training from scratch)")
+                        print(f"[{algo_type}] No actor checkpoint found for {algo_type} to load from disk")
                     any_reported = True
                 if has_critic:
                     critic_path = pg_critic_checkpoint_path(
@@ -1448,10 +1610,10 @@ def run_selected_experiments(
                     ).file_path
                     if critic_path not in reported_paths:
                         reported_paths.add(critic_path)
-                        if os.path.isfile(critic_path):
+                        if _any_candidate_exists(critic_path):
                             print(f"[{algo_type}] Loading existing critic checkpoint: {critic_path}")
                         else:
-                            print(f"[{algo_type}] No existing critic checkpoint at: {critic_path} (training from scratch)")
+                            print(f"[{algo_type}] No critic checkpoint found for {algo_type} to load from disk")
                         any_reported = True
             if any_reported:
                 print()
@@ -1912,6 +2074,7 @@ def _run_single_repetition(
             "n_eval_episodes": n_eval_episodes,
             "n_timesteps": n_timesteps,
             "eval_interval": eval_interval,
+            "use_saved_disk_networks_checkpoints": bool(use_saved_disk_networks_checkpoints),
         }
         if use_saved_disk_networks_checkpoints:
             load_state_dict_if_present(
@@ -1983,6 +2146,7 @@ def _run_single_repetition(
             "n_eval_episodes": n_eval_episodes,
             "n_timesteps": n_timesteps,
             "eval_interval": eval_interval,
+            "use_saved_disk_networks_checkpoints": bool(use_saved_disk_networks_checkpoints),
         }
         critic_metadata = {
             "algo_type": "AC",
@@ -1998,6 +2162,7 @@ def _run_single_repetition(
             "n_eval_episodes": n_eval_episodes,
             "n_timesteps": n_timesteps,
             "eval_interval": eval_interval,
+            "use_saved_disk_networks_checkpoints": bool(use_saved_disk_networks_checkpoints),
         }
 
         if use_saved_disk_networks_checkpoints:
@@ -2085,6 +2250,7 @@ def _run_single_repetition(
             "n_eval_episodes": n_eval_episodes,
             "n_timesteps": n_timesteps,
             "eval_interval": eval_interval,
+            "use_saved_disk_networks_checkpoints": bool(use_saved_disk_networks_checkpoints),
         }
         critic_metadata = {
             "algo_type": "A2C",
@@ -2101,6 +2267,7 @@ def _run_single_repetition(
             "n_eval_episodes": n_eval_episodes,
             "n_timesteps": n_timesteps,
             "eval_interval": eval_interval,
+            "use_saved_disk_networks_checkpoints": bool(use_saved_disk_networks_checkpoints),
         }
 
         if use_saved_disk_networks_checkpoints:
@@ -2194,6 +2361,7 @@ def _run_single_repetition(
             "n_eval_episodes": n_eval_episodes,
             "n_timesteps": n_timesteps,
             "eval_interval": eval_interval,
+            "use_saved_disk_networks_checkpoints": bool(use_saved_disk_networks_checkpoints),
         }
         critic_metadata = {
             "algo_type": "PPO",
@@ -2213,6 +2381,7 @@ def _run_single_repetition(
             "n_eval_episodes": n_eval_episodes,
             "n_timesteps": n_timesteps,
             "eval_interval": eval_interval,
+            "use_saved_disk_networks_checkpoints": bool(use_saved_disk_networks_checkpoints),
         }
 
         if use_saved_disk_networks_checkpoints:
