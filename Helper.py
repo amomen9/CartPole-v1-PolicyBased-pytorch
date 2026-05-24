@@ -40,16 +40,17 @@ from matplotlib.lines import Line2D
 RUN_TIMESTAMP = datetime.now().strftime("%Y.%m.%d_%H.%M.%S")
 
 
-def _create_step_progress_bar(total, desc, position=None, leave=True):
+def _create_step_progress_bar(total, desc, position=None, leave=True, mininterval=0.1, unit="step"):
     """Create a tqdm progress bar with the shared project formatting."""
 
     tqdm_kwargs = {
         "total": total,
         "desc": desc,
-        "unit": "step",
+        "unit": unit,
         "bar_format": "{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]",
         "dynamic_ncols": True,
         "leave": leave,
+        "mininterval": float(mininterval),
     }
     if position is not None:
         tqdm_kwargs["position"] = int(position)

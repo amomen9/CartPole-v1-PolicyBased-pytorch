@@ -286,6 +286,30 @@ def _normalize_policy_evaluation_methods(policy_evaluation_method) -> list[str]:
     return deduped
 
 
+def _run_actor_checkpoint_episodes_batch(
+    algo_upper: str,
+    checkpoint_path: str,
+    actor_hidden_nn: np.ndarray,
+    max_eval_episode_length: int,
+    policy_method: str,
+    n_episodes_in_batch: int,
+) -> np.ndarray:
+    """Run a batch of independent evaluation episodes sequentially in one worker.
+
+    Submitting one future per episode is fine for hundreds, but at 100k+ episodes
+    the per-submit pickling overhead pins the main process and starves the worker
+    queue. Batching collapses that overhead and keeps the cached model warm across
+    the whole batch.
+    """
+    results = np.empty(n_episodes_in_batch, dtype=np.int32)
+    for i in range(n_episodes_in_batch):
+        results[i] = _run_actor_checkpoint_episode(
+            algo_upper, checkpoint_path, actor_hidden_nn,
+            max_eval_episode_length, policy_method,
+        )
+    return results
+
+
 def _run_actor_checkpoint_episode(
     algo_upper: str,
     checkpoint_path: str,
@@ -436,29 +460,38 @@ def run_actor_checkpoint_evaluation(
         for index, job in enumerate(algo_jobs)
     }
 
+    # Submit per-algo work in chunks so the main process isn't stuck pickling
+    # hundreds of thousands of individual submits. Target ~200 chunks per algo to
+    # keep progress bars responsive while bounding submission overhead.
+    target_chunks_per_algo = max(200, 4 * max_workers)
+    target_chunks_per_algo = min(target_chunks_per_algo, n_episodes)
+    chunk_size = max(1, (n_episodes + target_chunks_per_algo - 1) // target_chunks_per_algo)
+
     future_meta = {}
     futures = []
     with ProcessPoolExecutor(max_workers=max_workers) as executor:
         for job in algo_jobs:
-            for eval_index in range(n_episodes):
+            for episode_start in range(0, n_episodes, chunk_size):
+                episode_count = min(chunk_size, n_episodes - episode_start)
                 future = executor.submit(
-                    _run_actor_checkpoint_episode,
+                    _run_actor_checkpoint_episodes_batch,
                     job["algo_upper"],
                     job["checkpoint_path"],
                     job["actor_hidden_nn"],
                     max_eval_episode_length,
                     job.get("policy_method") or "softmax",
+                    episode_count,
                 )
-                future_meta[future] = (job["series_key"], eval_index)
+                future_meta[future] = (job["series_key"], episode_start, episode_count)
                 futures.append(future)
 
         try:
             for future in as_completed(futures):
-                series_key, eval_index = future_meta[future]
-                done_step = future.result()
-                results_by_series[series_key][eval_index] = done_step
-                pbars[series_key].set_postfix_str(f"done_step={int(done_step)}", refresh=False)
-                pbars[series_key].update(1)
+                series_key, episode_start, episode_count = future_meta[future]
+                batch_results = future.result()
+                results_by_series[series_key][episode_start:episode_start + episode_count] = batch_results
+                pbars[series_key].set_postfix_str(f"done_step={int(batch_results[-1])}", refresh=False)
+                pbars[series_key].update(int(episode_count))
         finally:
             for pbar in pbars.values():
                 pbar.close()
@@ -530,63 +563,44 @@ def _build_checkpoint_eval_summary(
     series_to_label,
     series_to_algo,
     output_dir,
-    last_fraction=0.1,
     max_eval_episode_length=None,
 ):
-    """Emit md/csv/boxplot/mean-CI summary of per-episode done_steps in 'Checkpoint Evaluation Trials'.
+    """Emit md (LaTeX) / csv / boxplot / mean-std summary of per-episode done_steps.
 
-    All files are suffixed with RUN_TIMESTAMP for traceability across runs.
+    Rows are aggregated per algorithm: all values from every series of that algorithm
+    are pooled, and mean/std are computed over the full pool. All files are suffixed
+    with RUN_TIMESTAMP for traceability across runs.
     """
     import csv as _csv
-    from matplotlib.lines import Line2D
 
     os.makedirs(output_dir, exist_ok=True)
 
-    last_fraction = float(last_fraction)
-    last_fraction = min(max(last_fraction, 0.0), 1.0)
-
-    rows_data = []
+    pooled_by_algo: dict[str, list[np.ndarray]] = {}
+    algo_order: list[str] = []
     for series_key, done_steps in results_by_series.items():
         values = np.asarray(done_steps, dtype=np.float64).reshape(-1)
         if values.size == 0:
             continue
-        if last_fraction > 0:
-            n_last = max(1, int(np.ceil(last_fraction * values.size)))
-            last_values = values[-n_last:]
-        else:
-            last_values = np.array([], dtype=np.float64)
+        algo = series_to_algo.get(series_key, series_key)
+        if algo not in pooled_by_algo:
+            pooled_by_algo[algo] = []
+            algo_order.append(algo)
+        pooled_by_algo[algo].append(values)
 
-        mean_all = float(np.mean(values))
-        std_all = float(np.std(values, ddof=0))
-        n_all = int(values.size)
-        mean_last = float(np.mean(last_values)) if last_values.size > 0 else float("nan")
-        std_last = float(np.std(last_values, ddof=0)) if last_values.size > 0 else float("nan")
-        n_last_count = int(last_values.size)
-
+    rows_data = []
+    for algo in algo_order:
+        pooled = np.concatenate(pooled_by_algo[algo])
+        if pooled.size == 0:
+            continue
         rows_data.append({
-            "algorithm": series_to_algo.get(series_key, series_key),
-            "series": series_to_label.get(series_key, series_key),
-            "mean_all": mean_all,
-            "std_all": std_all,
-            "n_all": n_all,
-            "mean_last": mean_last,
-            "std_last": std_last,
-            "n_last": n_last_count,
-            "values": values,
-            "last_values": last_values,
+            "algorithm": algo,
+            "mean": float(np.mean(pooled)),
+            "std": float(np.std(pooled, ddof=0)),
+            "n": int(pooled.size),
+            "values": pooled,
         })
 
-    last_pct = int(round(last_fraction * 100))
-    headers = [
-        "Algorithm",
-        "Series",
-        "Mean (all)",
-        "Std (all)",
-        f"Mean (last {last_pct}%)",
-        f"Std (last {last_pct}%)",
-        "N (all)",
-        "N (last)",
-    ]
+    headers = ["Algorithm", "Mean", "Std"]
 
     def _fmt_num(value, decimals=2):
         if value is None or not np.isfinite(value):
@@ -598,23 +612,13 @@ def _build_checkpoint_eval_summary(
     for row in rows_data:
         text_rows.append([
             row["algorithm"],
-            row["series"],
-            _fmt_num(row["mean_all"]),
-            _fmt_num(row["std_all"]),
-            _fmt_num(row["mean_last"]),
-            _fmt_num(row["std_last"]),
-            f"{row['n_all']:,}",
-            f"{row['n_last']:,}",
+            _fmt_num(row["mean"]),
+            _fmt_num(row["std"]),
         ])
         csv_rows.append([
             row["algorithm"],
-            row["series"],
-            f"{row['mean_all']:.6f}" if np.isfinite(row["mean_all"]) else "",
-            f"{row['std_all']:.6f}" if np.isfinite(row["std_all"]) else "",
-            f"{row['mean_last']:.6f}" if np.isfinite(row["mean_last"]) else "",
-            f"{row['std_last']:.6f}" if np.isfinite(row["std_last"]) else "",
-            str(row["n_all"]),
-            str(row["n_last"]),
+            f"{row['mean']:.6f}" if np.isfinite(row["mean"]) else "",
+            f"{row['std']:.6f}" if np.isfinite(row["std"]) else "",
         ])
 
     if text_rows:
@@ -626,7 +630,7 @@ def _build_checkpoint_eval_summary(
         def _fmt_row(cells):
             out = []
             for i, cell in enumerate(cells):
-                if i <= 1:
+                if i == 0:
                     out.append(cell.ljust(widths[i]))
                 else:
                     out.append(cell.rjust(widths[i]))
@@ -638,8 +642,9 @@ def _build_checkpoint_eval_summary(
     else:
         rendered_text = "(no completed series to summarize)"
 
-    title_stdout = "Checkpoint evaluation summary - mean/std across episodes per series"
-    title_md = "Checkpoint evaluation summary - mean ± std across episodes per series"
+    truncation_int = int(max_eval_episode_length) if max_eval_episode_length is not None else 0
+    truncation_caption = f"{truncation_int:,}"
+    title_stdout = f"Checkpoint evaluation summary - mean/std per algorithm (truncation={truncation_caption})"
 
     def _safe_print(s):
         try:
@@ -653,18 +658,48 @@ def _build_checkpoint_eval_summary(
     _safe_print(rendered_text)
     _safe_print("")
 
+    # ── Markdown (LaTeX table template) ──
     md_path = os.path.join(output_dir, f"checkpoint_eval_summary_{RUN_TIMESTAMP}.md")
-    md_lines = [f"# {title_md}", ""]
     if text_rows:
-        md_lines.append("| " + " | ".join(headers) + " |")
-        md_lines.append("| " + " | ".join(["---", "---", "---:", "---:", "---:", "---:", "---:", "---:"]) + " |")
-        for r in text_rows:
-            md_lines.append("| " + " | ".join(r) + " |")
+        algo_width = max(len(row["algorithm"]) for row in rows_data)
+        mean_strs = [_fmt_num(row["mean"]) for row in rows_data]
+        std_strs = [_fmt_num(row["std"]) for row in rows_data]
+        mean_width = max(len(s) for s in mean_strs)
+        std_width = max(len(s) for s in std_strs)
+        body_lines = []
+        for row, mean_str, std_str in zip(rows_data, mean_strs, std_strs):
+            body_lines.append(
+                f"{row['algorithm'].ljust(algo_width)} & {mean_str.rjust(mean_width)} & {std_str.rjust(std_width)} \\\\"
+            )
+        body = "\n".join(body_lines)
     else:
-        md_lines.append("_(no completed series to summarize)_")
-    with open(md_path, "w", encoding="utf-8") as f:
-        f.write("\n".join(md_lines) + "\n")
+        body = "% (no completed series to summarize)"
 
+    latex_lines = [
+        r"\begin{table}[t]",
+        r"\vskip 0.15in",
+        r"\begin{center}",
+        r"\begin{small}",
+        r"\begin{sc}",
+        f"\\caption{{Statistical factors (truncation={truncation_caption})}}",
+        f"\\label{{tab:results_summary_{truncation_int}}}",
+        r"\begin{tabular}{l r r }",
+        r"\toprule",
+        r"\textbf{Algorithm} & \textbf{Mean}& \textbf{Std}\\",
+        r"\midrule",
+        body,
+        r"\bottomrule",
+        r"\end{tabular}",
+        r"\end{sc}",
+        r"\end{small}",
+        r"\end{center}",
+        r"\vskip -0.1in",
+        r"\end{table}",
+    ]
+    with open(md_path, "w", encoding="utf-8") as f:
+        f.write("\n".join(latex_lines) + "\n")
+
+    # ── CSV ──
     csv_path = os.path.join(output_dir, f"checkpoint_eval_summary_{RUN_TIMESTAMP}.csv")
     with open(csv_path, "w", encoding="utf-8", newline="") as f:
         writer = _csv.writer(f)
@@ -677,98 +712,45 @@ def _build_checkpoint_eval_summary(
 
     if rows_data:
         try:
-            pooled_all_by_algo = {}
-            pooled_last_by_algo = {}
-            for row in rows_data:
-                algo = row["algorithm"]
-                if row["values"].size > 0:
-                    pooled_all_by_algo.setdefault(algo, []).append(row["values"])
-                if row["last_values"].size > 0:
-                    pooled_last_by_algo.setdefault(algo, []).append(row["last_values"])
+            valid_algorithms = [row["algorithm"] for row in rows_data]
+            all_data = [row["values"].tolist() for row in rows_data]
 
-            algorithms = sorted(set(pooled_all_by_algo.keys()) | set(pooled_last_by_algo.keys()))
-            valid_algorithms = []
-            all_data = []
-            last_data = []
-            for algo in algorithms:
-                all_chunks = pooled_all_by_algo.get(algo, [])
-                last_chunks = pooled_last_by_algo.get(algo, [])
-                all_vals = np.concatenate(all_chunks).tolist() if all_chunks else []
-                last_vals = np.concatenate(last_chunks).tolist() if last_chunks else []
-                if not all_vals and not last_vals:
-                    continue
-                valid_algorithms.append(algo)
-                all_data.append(all_vals)
-                last_data.append(last_vals)
+            fig, ax = plt.subplots(figsize=(max(10, 2.0 * len(valid_algorithms)), 6))
+            positions = np.arange(1, len(valid_algorithms) + 1, dtype=float)
+            ax.boxplot(
+                all_data,
+                positions=positions,
+                widths=0.5,
+                vert=True,
+                patch_artist=True,
+                showmeans=True,
+                boxprops=dict(facecolor="#d9d9d9", edgecolor="black", linewidth=1.2),
+                whiskerprops=dict(color="black", linewidth=1.0),
+                capprops=dict(color="black", linewidth=1.0),
+                medianprops=dict(color="black", linewidth=1.4),
+                meanprops=dict(marker="o", markerfacecolor="white", markeredgecolor="black", markersize=4),
+            )
+            ax.set_xticks(positions)
+            ax.set_xticklabels(valid_algorithms)
+            ax.set_ylabel("Done step")
+            ax.set_title(f"Checkpoint evaluation box plot by algorithm (truncation={truncation_caption})")
+            ax.grid(axis="y", linestyle="--", alpha=0.3)
+            fig.tight_layout()
+            boxplot_path = os.path.join(output_dir, f"checkpoint_eval_summary_boxplot_{RUN_TIMESTAMP}.png")
+            fig.savefig(boxplot_path, dpi=300)
+            plt.close(fig)
+            print(f"Saved checkpoint evaluation box plot to: {boxplot_path}")
 
-            if valid_algorithms:
-                fig, ax = plt.subplots(figsize=(max(10, 2.5 * len(valid_algorithms)), 6))
-                positions = np.arange(1, len(valid_algorithms) + 1, dtype=float)
-                offset = 0.18
-
-                if any(all_data):
-                    ax.boxplot(
-                        all_data,
-                        positions=positions - offset,
-                        widths=0.28,
-                        vert=True,
-                        patch_artist=True,
-                        showmeans=True,
-                        boxprops=dict(facecolor="#d9d9d9", edgecolor="black", linewidth=1.2),
-                        whiskerprops=dict(color="black", linewidth=1.0),
-                        capprops=dict(color="black", linewidth=1.0),
-                        medianprops=dict(color="black", linewidth=1.4),
-                        meanprops=dict(marker="o", markerfacecolor="white", markeredgecolor="black", markersize=4),
-                    )
-                if any(last_data):
-                    ax.boxplot(
-                        last_data,
-                        positions=positions + offset,
-                        widths=0.28,
-                        vert=True,
-                        patch_artist=True,
-                        showmeans=True,
-                        boxprops=dict(facecolor="#b3e5ff", edgecolor="black", linewidth=1.2),
-                        whiskerprops=dict(color="black", linewidth=1.0),
-                        capprops=dict(color="black", linewidth=1.0),
-                        medianprops=dict(color="black", linewidth=1.4),
-                        meanprops=dict(marker="o", markerfacecolor="white", markeredgecolor="black", markersize=4),
-                    )
-
-                ax.set_xticks(positions)
-                ax.set_xticklabels(valid_algorithms)
-                ax.set_ylabel("Done step")
-                ax.set_title("Checkpoint evaluation box plot by algorithm")
-                ax.grid(axis="y", linestyle="--", alpha=0.3)
-                ax.legend(
-                    [
-                        Line2D([0], [0], color="#d9d9d9", marker="s", linestyle="none", markeredgecolor="black"),
-                        Line2D([0], [0], color="#b3e5ff", marker="s", linestyle="none", markeredgecolor="black"),
-                    ],
-                    ["All episodes", f"Last {last_pct}% of episodes"],
-                    loc="best",
-                    fontsize=8,
-                )
-                fig.tight_layout()
-                boxplot_path = os.path.join(output_dir, f"checkpoint_eval_summary_boxplot_{RUN_TIMESTAMP}.png")
-                fig.savefig(boxplot_path, dpi=300)
-                plt.close(fig)
-                print(f"Saved checkpoint evaluation box plot to: {boxplot_path}")
-
-            fig, ax = plt.subplots(figsize=(max(10, 1.2 * len(rows_data)), 6))
+            fig, ax = plt.subplots(figsize=(max(10, 1.6 * len(rows_data)), 6))
             x_positions = np.arange(1, len(rows_data) + 1, dtype=float)
             half_width = 0.35
             palette = plt.get_cmap("tab10")
             for idx, (x_pos, row) in enumerate(zip(x_positions, rows_data)):
-                mean_value = float(row["mean_all"])
-                std_value = float(row["std_all"])
-                n_value = int(row["n_all"])
+                mean_value = float(row["mean"])
+                std_value = float(row["std"])
                 if not np.isfinite(mean_value):
                     continue
-                if n_value > 1 and np.isfinite(std_value):
-                    margin = std_value / np.sqrt(max(n_value, 1))
-                else:
-                    margin = 0.0
+                margin = std_value if np.isfinite(std_value) else 0.0
                 lower = mean_value - margin
                 upper = mean_value + margin
                 color = palette(idx % palette.N)
@@ -780,19 +762,19 @@ def _build_checkpoint_eval_summary(
                     alpha=0.2,
                     linewidth=0,
                 )
-                ax.plot([x_pos - half_width, x_pos + half_width], [mean_value, mean_value], color=color, linewidth=1.8, label=row["series"])
+                ax.plot([x_pos - half_width, x_pos + half_width], [mean_value, mean_value], color=color, linewidth=1.8, label=row["algorithm"])
 
             ax.set_xticks(x_positions)
-            ax.set_xticklabels([row["series"] for row in rows_data], rotation=45, ha="right")
+            ax.set_xticklabels([row["algorithm"] for row in rows_data])
             ax.set_ylabel("Done step")
-            ax.set_title("Checkpoint evaluation mean ± SEM by series")
+            ax.set_title(f"Checkpoint evaluation mean ± std by algorithm (truncation={truncation_caption})")
             ax.grid(axis="y", linestyle="--", alpha=0.3)
             ax.legend(loc="best", fontsize=8)
             fig.tight_layout()
-            mean_ci_plot_path = os.path.join(output_dir, f"checkpoint_eval_summary_mean_ci_{RUN_TIMESTAMP}.png")
+            mean_ci_plot_path = os.path.join(output_dir, f"checkpoint_eval_summary_mean_std_{RUN_TIMESTAMP}.png")
             fig.savefig(mean_ci_plot_path, dpi=300)
             plt.close(fig)
-            print(f"Saved checkpoint evaluation mean/SEM plot to: {mean_ci_plot_path}")
+            print(f"Saved checkpoint evaluation mean/std plot to: {mean_ci_plot_path}")
         except Exception as exc:
             print(f"[summary] Failed to render checkpoint evaluation summary plots: {exc}")
 
@@ -806,7 +788,7 @@ def _build_checkpoint_eval_summary(
         "markdown_path": md_path,
         "csv_path": csv_path,
         "boxplot_path": boxplot_path,
-        "mean_ci_plot_path": mean_ci_plot_path,
+        "mean_std_plot_path": mean_ci_plot_path,
         "text": rendered_text,
     }
 
@@ -899,16 +881,9 @@ def run_actor_checkpoint_evaluation_exhaustive(
     if unused_cpu_cores < 0:
         unused_cpu_cores = 0
     available_cpus = max(1, cpu_count - unused_cpu_cores)
-    total_tasks = len(algo_jobs) * n_episodes
-    max_workers = min(total_tasks, available_cpus)
+    max_workers = min(len(algo_jobs) * max(1, min(n_episodes, available_cpus)), available_cpus)
 
-    print(
-        f"CPU cores available: {cpu_count} "
-        f"(reserving UNUSED_CPU_CORES={unused_cpu_cores} => using {available_cpus}). "
-        f"Total tasks: {total_tasks} "
-        f"({len(algo_jobs)} algorithm(s) × {n_episodes} episode(s)). "
-        f"Parallel workers: {max_workers}.\n"
-    )
+    print(f"Running checkpoint evaluation: {len(algo_jobs)} algorithm(s) × {n_episodes} episode(s).\n")
 
     results_by_series = {
         job["series_key"]: np.empty(n_episodes, dtype=np.int32)
@@ -920,36 +895,51 @@ def run_actor_checkpoint_evaluation_exhaustive(
     pbars = {
         job["series_key"]: _create_step_progress_bar(
             total=n_episodes,
-            desc=f"{job['algo_upper']} ({job.get('policy_method') or 'argmax'}) checkpoint eval",
+            desc=(
+                f"{job['algo_upper']} ({job['policy_method']})"
+                if multi_methods else job["algo_upper"]
+            ),
             position=index,
             leave=True,
+            mininterval=0.5,
+            unit="ep",
         )
         for index, job in enumerate(algo_jobs)
     }
+
+    # Chunk episodes per algo. The submission count drives both pickle overhead and
+    # how often the progress bars redraw: too many chunks pins the main process and
+    # spams the terminal, too few starves workers. Aim for a small multiple of
+    # max_workers spread across all algos, giving each algo ~20 progress updates.
+    target_total_chunks = max(2 * max_workers, len(algo_jobs))
+    target_per_algo = max(20, target_total_chunks // max(len(algo_jobs), 1))
+    target_per_algo = min(target_per_algo, n_episodes)
+    chunk_size = max(1, (n_episodes + target_per_algo - 1) // target_per_algo)
 
     future_meta = {}
     futures = []
     with ProcessPoolExecutor(max_workers=max_workers) as executor:
         for job in algo_jobs:
-            for eval_index in range(n_episodes):
+            for episode_start in range(0, n_episodes, chunk_size):
+                episode_count = min(chunk_size, n_episodes - episode_start)
                 future = executor.submit(
-                    _run_actor_checkpoint_episode,
+                    _run_actor_checkpoint_episodes_batch,
                     job["algo_upper"],
                     job["checkpoint_path"],
                     job["actor_hidden_nn"],
                     max_eval_episode_length,
                     job.get("policy_method") or "softmax",
+                    episode_count,
                 )
-                future_meta[future] = (job["series_key"], eval_index)
+                future_meta[future] = (job["series_key"], episode_start, episode_count)
                 futures.append(future)
 
         try:
             for future in as_completed(futures):
-                series_key, eval_index = future_meta[future]
-                done_step = future.result()
-                results_by_series[series_key][eval_index] = done_step
-                pbars[series_key].set_postfix_str(f"done_step={int(done_step)}", refresh=False)
-                pbars[series_key].update(1)
+                series_key, episode_start, episode_count = future_meta[future]
+                batch_results = future.result()
+                results_by_series[series_key][episode_start:episode_start + episode_count] = batch_results
+                pbars[series_key].update(int(episode_count))
         finally:
             for pbar in pbars.values():
                 pbar.close()
@@ -1076,7 +1066,6 @@ def run_actor_checkpoint_evaluation_exhaustive(
             series_to_label=series_to_label,
             series_to_algo=series_to_algo,
             output_dir=output_dir,
-            last_fraction=0.1,
             max_eval_episode_length=max_eval_episode_length,
         )
     except Exception as exc:
