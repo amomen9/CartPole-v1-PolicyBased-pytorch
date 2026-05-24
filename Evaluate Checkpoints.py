@@ -19,7 +19,7 @@ def experiment():
     #################[ Global Parameters ]################
     global_config = {
         "UNUSED_CPU_CORES": 4,             # Number of CPU cores to leave unused when using multiprocessing, for appropriate other applications' performance. Cap degree of parallelism: <#total CPU cores>-UNUSED_CPU_CORES Default: 2.
-        "plot_smoothing_window": [1,21],  # Use multiple values to plot multiple curves. Default: [1, 51, 101, 201, 251, 301]. Set to [1] to skip smoothing.
+        "plot_smoothing_window": [1],  # Use multiple values to plot multiple curves. Default: [1, 51, 101, 201, 251, 301]. Set to [1] to skip smoothing.
         "show_curve_plots": True,          # Show learning curve plot at the end of or during the training.
         "show_curve_smoothing_windows": [1,21],
         "separate_algorithm_plots": False,  # If True, each algorithm gets its own set of plots (one per smoothing window). Each algo's plots are saved to disk and (if show_curve_plots) shown non-blocking as soon as that algo finishes executing, so faster algos surface their plots first. Default: False (one combined plot per smoothing window).
@@ -29,6 +29,7 @@ def experiment():
             "max_eval_episode_length": [r"EvL: ", False],
         },
         "policy_evaluation_method": ["softmax"],   # Choose between "softmax" and "argmax"
+        "make_checkpoint_mapping_lenient": False,
     }
 
 
@@ -53,7 +54,7 @@ def experiment():
             "enabled": True,
             "actor_hidden_nn": np.array([128, 128], dtype=np.int32),
         },
-        "n_episodes": 150,
+        "n_episodes": 100,
     }
 
 

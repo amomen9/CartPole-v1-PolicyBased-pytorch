@@ -204,21 +204,74 @@ def _extract_loose_timesteps(candidate_metadata: dict | None) -> int | None:
     return None
 
 
-def _resolve_loose_checkpoint_path(checkpoint_path: str) -> str | None:
+def _get_train_truncation(metadata: dict | None):
+    """Return the training episode-length field, normalizing across DQN's
+    'max_episode_length' and PG's 'max_train_episode_length'."""
+    if not isinstance(metadata, dict):
+        return None
+    if "max_train_episode_length" in metadata:
+        return metadata["max_train_episode_length"]
+    return metadata.get("max_episode_length")
+
+
+def _candidate_passes_strict_fields(candidate_metadata, target_metadata) -> bool:
+    """Strict-match check enforced under any circumstances (exact or loose):
+    candidate's max_eval_episode_length AND training truncation must equal
+    the target's."""
+    if not isinstance(candidate_metadata, dict) or not isinstance(target_metadata, dict):
+        return False
+    if candidate_metadata.get("max_eval_episode_length") != target_metadata.get("max_eval_episode_length"):
+        return False
+    if _get_train_truncation(candidate_metadata) != _get_train_truncation(target_metadata):
+        return False
+    return True
+
+
+def has_strict_field_candidate(*, checkpoint_path: str, target_metadata: dict) -> bool:
+    """True if at least one candidate sidecar for 'checkpoint_path' matches
+    the strict fields (max_eval_episode_length + training truncation) of
+    'target_metadata'. Used by the up-front orchestrator report to decide
+    whether to announce a load."""
+    if not isinstance(target_metadata, dict):
+        return False
+    target = _normalize_metadata(target_metadata)
+    base_stem = _checkpoint_stem(checkpoint_path)
+    for candidate_path in _iter_candidate_checkpoint_paths(checkpoint_path):
+        index = _checkpoint_index_for_candidate(candidate_path, base_stem)
+        if index < 0:
+            continue
+        metadata_path = _metadata_path_for_checkpoint(candidate_path)
+        try:
+            candidate_metadata = _read_metadata_file(metadata_path)
+        except Exception:
+            continue
+        if _candidate_passes_strict_fields(candidate_metadata, target):
+            return True
+    return False
+
+
+def _resolve_loose_checkpoint_path(checkpoint_path: str, target_metadata: dict | None) -> str | None:
     """
     Two-tier loose lookup among candidates sharing the architecture-signature
-    filename:
+    filename. Strict-field gate (max_eval_episode_length + training truncation)
+    is enforced first; candidates that fail it are discarded regardless of
+    other matches.
+
       1. Prefer candidates whose sidecar has
          use_saved_disk_networks_checkpoints == True (i.e. produced by a
          continuation run): pick the one with the largest n_timesteps
          (fallback n_env_steps for DQN).
-      2. Fall back to all remaining candidates with numeric n_timesteps:
-         pick the one with the largest value.
+      2. Fall back to all remaining strict-passing candidates with numeric
+         n_timesteps: pick the one with the largest value.
     Ties broken by max index then max mtime.
 
-    Candidates without a readable sidecar or a numeric timesteps field are
-    ignored. Returns None if no candidate is selectable.
+    Candidates without a readable sidecar, failing strict fields, or lacking
+    a numeric timesteps field are ignored. Returns None if no candidate is
+    selectable.
     """
+    if not isinstance(target_metadata, dict):
+        return None
+    target = _normalize_metadata(target_metadata)
     base_stem = _checkpoint_stem(checkpoint_path)
     preferred: list[tuple[int, int, float, str]] = []
     fallback: list[tuple[int, int, float, str]] = []
@@ -230,6 +283,8 @@ def _resolve_loose_checkpoint_path(checkpoint_path: str) -> str | None:
         try:
             candidate_metadata = _read_metadata_file(metadata_path)
         except Exception:
+            continue
+        if not _candidate_passes_strict_fields(candidate_metadata, target):
             continue
         timesteps = _extract_loose_timesteps(candidate_metadata)
         if timesteps is None:
@@ -272,7 +327,7 @@ def resolve_matching_checkpoint_path(
     whose sidecar has the largest n_timesteps (fallback n_env_steps).
     """
     if skip_selection_hyperparameter_match:
-        return _resolve_loose_checkpoint_path(checkpoint_path)
+        return _resolve_loose_checkpoint_path(checkpoint_path, metadata)
 
     if metadata is None:
         return checkpoint_path if os.path.isfile(checkpoint_path) else None

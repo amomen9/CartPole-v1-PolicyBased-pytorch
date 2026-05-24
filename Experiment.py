@@ -31,7 +31,7 @@ def experiment():
         "animation_plot": False,            # Show CartPole animation at the end.
         "use_existing_disk_data": False,     # Whether to use existing data (.xlsx files) from disk if exists.
         "checkpoints": {
-            "use_saved_disk_networks_checkpoints": True,
+            "use_saved_disk_networks_checkpoints": False,
             "skip_selection_hyperparameter_match": True,
         },
         # Environment
@@ -61,11 +61,11 @@ def experiment():
     # Select which algorithms to include in the training and plotting using included_algo_learnings.
     # Set value to True to include, False to exclude.
     included_algo_learnings = {
-        "DQN": True,
+        "DQN": False,
         "REINFORCE": False,
         "AC": False,
         "A2C": True,
-        "PPO": True,
+        "PPO": False,
     }
     
     ###############################################################################################

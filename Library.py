@@ -1368,7 +1368,7 @@ def run_selected_experiments(
 
     # ── Separate-plots bookkeeping: precompute extras (so per-algo plots can include them)
     #    and define the per-algo finalize helper that saves + (optionally) shows live.
-    plots_dir = "plots"
+    plots_dir = "Trial Continuation Analysis" if use_saved_disk_networks_checkpoints else "plots"
     os.makedirs(plots_dir, exist_ok=True)
 
     extra_curves_early: list[dict] = []
@@ -1543,19 +1543,31 @@ def run_selected_experiments(
         # Emitted before the worker pool starts so the messages are not
         # interleaved with tqdm progress bars from child processes.
         if use_saved_disk_networks_checkpoints:
-            import glob as _glob
             from Checkpointing import (
                 dqn_q_checkpoint_path,
+                has_strict_field_candidate,
                 pg_actor_checkpoint_path,
                 pg_critic_checkpoint_path,
             )
 
+            # Strict-field gate (max_eval_episode_length + training truncation)
+            # is enforced under any circumstances, so the orchestrator-side
+            # report must check the same gate. "Loading existing" is only
+            # announced when at least one sidecar candidate matches these two
+            # fields against the current run's values. Both PG's
+            # 'max_train_episode_length' and DQN's 'max_episode_length' keys
+            # are populated to the same value for cross-algo compatibility.
+            strict_target = {
+                "max_eval_episode_length": max_eval_episode_length,
+                "max_train_episode_length": max_train_episode_length,
+                "max_episode_length": max_train_episode_length,
+            }
+
             def _any_candidate_exists(base_path: str) -> bool:
-                """True if base_path or any '<stem>_N.pt' sibling exists."""
-                if os.path.isfile(base_path):
-                    return True
-                stem, ext = os.path.splitext(base_path)
-                return bool(_glob.glob(f"{stem}_*{ext}"))
+                return has_strict_field_candidate(
+                    checkpoint_path=base_path,
+                    target_metadata=strict_target,
+                )
 
             pg_method_to_algo = {
                 "REINFORCE": ("REINFORCE", False),
