@@ -52,8 +52,8 @@ class A2C_Agent(BaseAgent):
     def select_action(self, obs):
         """Sample an action from the policy."""
 
-        probs = self.policy(obs)
-        dist = torch.distributions.Categorical(probs)
+        logits = self.policy(obs)
+        dist = torch.distributions.Categorical(logits=logits)
         action = dist.sample()
         return int(action.item()), dist.log_prob(action)
 
@@ -109,8 +109,8 @@ class A2C_Agent(BaseAgent):
         critic_loss.backward()
         self.opt_critic.step()
 
-        probs = self.policy(states_t)
-        dist = torch.distributions.Categorical(probs)
+        logits = self.policy(states_t)
+        dist = torch.distributions.Categorical(logits=logits)
         log_probs = dist.log_prob(actions_t)
         actor_loss = -(advantages.detach() * log_probs).sum()
 
@@ -133,8 +133,8 @@ class A2C_Agent(BaseAgent):
 
             for _ in range(max_steps):
                 with torch.no_grad():
-                    probs = self.policy(obs)
-                    action = int(torch.argmax(probs, dim=-1).item())
+                    logits = self.policy(obs)
+                    action = int(torch.argmax(logits, dim=-1).item())
 
                 obs, reward, terminated, truncated, _ = env.step(action)
                 ep_return += float(reward)
@@ -165,7 +165,7 @@ class PolicyNetwork(nn.Module):
 
     def forward(self, x):
         x = torch.as_tensor(x, dtype=torch.float32)
-        return torch.softmax(self.net(x), dim=-1)
+        return self.net(x)
 
 
 class ValueNetwork(nn.Module):
