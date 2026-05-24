@@ -1128,6 +1128,7 @@ GLOBAL_CONFIG_EXCLUSIONS = frozenset({
     "animation_plot",
     "use_existing_disk_data",
     "use_saved_disk_networks_checkpoints",
+    "checkpoints",
     "format_sheets",
     "formatted_sheets",
     "separate_algorithm_plots",
@@ -1894,7 +1895,8 @@ def _dqn_job_kwargs_to_trial_common(job_kwargs: dict[str, Any], eval_interval: i
 
 def _run_dqn_one_rep(trial_common: dict[str, Any], run_seed: int, rep_index: int, n_repetitions: int,
                      shared_step_counter=None,
-                     use_saved_disk_networks_checkpoints: bool = False):
+                     use_saved_disk_networks_checkpoints: bool = False,
+                     skip_selection_hyperparameter_match: bool = False):
     """Run one DQN repetition. Pickle-safe for ProcessPoolExecutor.
 
     Mirrors the checkpointing behaviour of the policy-gradient algorithms:
@@ -1928,9 +1930,14 @@ def _run_dqn_one_rep(trial_common: dict[str, Any], run_seed: int, rep_index: int
         resolved_ck_path = resolve_matching_checkpoint_path(
             checkpoint_path=ck.file_path,
             metadata=checkpoint_metadata,
+            skip_selection_hyperparameter_match=skip_selection_hyperparameter_match,
         )
         if resolved_ck_path is not None and os.path.isfile(resolved_ck_path):
             pretrained_state_dict = torch.load(resolved_ck_path, map_location="cpu")
+            if rep_index == 0:
+                print(f"[DQN] Loading existing Q-network checkpoint: {resolved_ck_path}")
+        elif rep_index == 0:
+            print(f"[DQN] No matching Q-network checkpoint at: {ck.file_path} (training from scratch)")
 
     returns_arr, timesteps_arr, model = run_dqn_trial_returns(
         seed=run_seed,
@@ -1962,7 +1969,8 @@ def _run_pending_parallel(pending_settings, n_repetitions, n_timesteps, eval_int
     ],
                           unused_cpu_cores: int = 0,
                           on_setting_complete=None,
-                          poll_callback=None):
+                          poll_callback=None,
+                          skip_selection_hyperparameter_match: bool = False):
     """Run all pending (setting × rep) tasks in a single flat ProcessPoolExecutor.
 
     pending_settings: list of (global_idx, job)
@@ -2013,6 +2021,7 @@ def _run_pending_parallel(pending_settings, n_repetitions, n_timesteps, eval_int
                             n_repetitions=n_repetitions,
                             shared_step_counter=step_counters[(sp, r)],
                             use_saved_disk_networks_checkpoints=use_saved_disk_networks_checkpoints,
+                            skip_selection_hyperparameter_match=skip_selection_hyperparameter_match,
                         )
                     else:
                             algo_extra_kwargs: dict[str, Any] = {}
@@ -2048,6 +2057,7 @@ def _run_pending_parallel(pending_settings, n_repetitions, n_timesteps, eval_int
                                 eval_with_env_episode_trials=bool(kw.get("eval_with_env_episode_trials", False)),
                                 n_eval_episodes=int(kw.get("n_eval_episodes", 5)),
                                 use_saved_disk_networks_checkpoints=use_saved_disk_networks_checkpoints,
+                                skip_selection_hyperparameter_match=skip_selection_hyperparameter_match,
                                 **algo_extra_kwargs,
                             )
                     futures[future] = (sp, r)
@@ -3142,6 +3152,19 @@ def build_returns_summary_table(
         _safe_print("=" * len(title_stdout))
         _safe_print(rendered_text)
         _safe_print("")
+
+    # Disk artifacts (md/csv/plots) under 'output_dir' are only produced when
+    # checkpoint reuse is enabled. The stdout summary above still runs either way.
+    if not use_saved_disk_networks_checkpoints:
+        return {
+            "rows": rows_data,
+            "headers": headers,
+            "markdown_path": None,
+            "csv_path": None,
+            "boxplot_path": None,
+            "mean_ci_plot_path": None,
+            "text": rendered_text,
+        }
 
     os.makedirs(output_dir, exist_ok=True)
 

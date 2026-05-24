@@ -864,7 +864,21 @@ def run_selected_experiments(
     curve_confidence_interval = gc.get("curve_confidence_interval", 0.6)
     curve_shaded_area_opacity = gc.get("curve_shaded_area_opacity", 0.05)
     use_existing_disk_data = gc.get("use_existing_disk_data", True)
-    use_saved_disk_networks_checkpoints = bool(gc.get("use_saved_disk_networks_checkpoints", False))
+    # Accept both the legacy flat key and the new nested 'checkpoints' dict form:
+    #   "checkpoints": {
+    #       "use_saved_disk_networks_checkpoints": bool,
+    #       "skip_selection_hyperparameter_match": bool,
+    #   }
+    # When the nested form is used, mirror the bool back into the flat key so
+    # downstream legend/label code that references it by name keeps working.
+    _ckpt_cfg = gc.get("checkpoints")
+    if isinstance(_ckpt_cfg, dict):
+        use_saved_disk_networks_checkpoints = bool(_ckpt_cfg.get("use_saved_disk_networks_checkpoints", False))
+        skip_selection_hyperparameter_match = bool(_ckpt_cfg.get("skip_selection_hyperparameter_match", False))
+        gc.setdefault("use_saved_disk_networks_checkpoints", use_saved_disk_networks_checkpoints)
+    else:
+        use_saved_disk_networks_checkpoints = bool(gc.get("use_saved_disk_networks_checkpoints", False))
+        skip_selection_hyperparameter_match = False
     format_sheets = bool(gc.get("format_sheets", False))
     formatted_sheets = bool(gc.get("formatted_sheets", False))
     n_timesteps = int(gc.get("n_timesteps", 100000))
@@ -1451,6 +1465,7 @@ def run_selected_experiments(
             max_eval_episode_length=max_eval_episode_length,
             base_seed=base_seed,
             use_saved_disk_networks_checkpoints=use_saved_disk_networks_checkpoints,
+            skip_selection_hyperparameter_match=skip_selection_hyperparameter_match,
             setting_results=setting_results,
             unused_cpu_cores=unused_cpu_cores,
             on_setting_complete=_on_setting_complete,
@@ -1842,6 +1857,7 @@ def _run_single_repetition(
     n_actions=2,
     TN_step=10,
     use_saved_disk_networks_checkpoints: bool = False,
+    skip_selection_hyperparameter_match: bool = False,
     eval_with_env_episode_trials: bool = False,
     n_eval_episodes: int = 5,
     # PPO-specific
@@ -1902,6 +1918,7 @@ def _run_single_repetition(
                 model=agent.actor,
                 checkpoint_path=actor_ck.file_path,
                 metadata=actor_metadata,
+                skip_selection_hyperparameter_match=skip_selection_hyperparameter_match,
             )
 
         env = environ.CartPoleEnvironment(
@@ -1988,11 +2005,13 @@ def _run_single_repetition(
                 model=agent.actor,
                 checkpoint_path=actor_ck.file_path,
                 metadata=actor_metadata,
+                skip_selection_hyperparameter_match=skip_selection_hyperparameter_match,
             )
             load_state_dict_if_present(
                 model=agent.critic,
                 checkpoint_path=critic_ck.file_path,
                 metadata=critic_metadata,
+                skip_selection_hyperparameter_match=skip_selection_hyperparameter_match,
             )
 
         env = environ.CartPoleEnvironment(
@@ -2089,11 +2108,13 @@ def _run_single_repetition(
                 model=agent.policy,
                 checkpoint_path=actor_ck.file_path,
                 metadata=actor_metadata,
+                skip_selection_hyperparameter_match=skip_selection_hyperparameter_match,
             )
             load_state_dict_if_present(
                 model=agent.value_func,
                 checkpoint_path=critic_ck.file_path,
                 metadata=critic_metadata,
+                skip_selection_hyperparameter_match=skip_selection_hyperparameter_match,
             )
 
         env = environ.CartPoleEnvironment(
@@ -2199,11 +2220,13 @@ def _run_single_repetition(
                 model=agent.policy,
                 checkpoint_path=actor_ck.file_path,
                 metadata=actor_metadata,
+                skip_selection_hyperparameter_match=skip_selection_hyperparameter_match,
             )
             load_state_dict_if_present(
                 model=agent.value_func,
                 checkpoint_path=critic_ck.file_path,
                 metadata=critic_metadata,
+                skip_selection_hyperparameter_match=skip_selection_hyperparameter_match,
             )
 
         env = environ.CartPoleEnvironment(

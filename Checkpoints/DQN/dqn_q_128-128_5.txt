@@ -1,0 +1,29 @@
+{
+  "component": "Q",
+  "discount_factor": 0.99,
+  "emit_trial_header": false,
+  "epsilon_decay": 1.0,
+  "epsilon_decay_interval": 1,
+  "epsilon_end": 0.05000000074505806,
+  "epsilon_start": 0.05000000074505806,
+  "er_active": true,
+  "er_batch_size": 64,
+  "er_min_replay_size": 2000,
+  "er_replay_buffer_size": 80000,
+  "er_replay_ratio": 1.0,
+  "er_sample_train_frequency": 1,
+  "eval_with_env_episode_trials": true,
+  "exploration_method": "epsilon_greedy",
+  "learning_rate": 0.0010000000474974513,
+  "max_episode_length": 500,
+  "max_eval_episode_length": 500,
+  "n_env_steps": 1000000,
+  "n_eval_episodes": 5,
+  "n_returns_interval": 250,
+  "nn_hidden_layer_widths": [
+    128,
+    128
+  ],
+  "target_network_active": true,
+  "target_network_step": 100
+}

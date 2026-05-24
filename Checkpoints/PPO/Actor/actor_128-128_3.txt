@@ -1,0 +1,20 @@
+{
+  "actor_hidden_nn": [
+    128,
+    128
+  ],
+  "actor_lr": 0.0003000000142492354,
+  "algo_type": "PPO",
+  "clip_eps": 0.20000000298023224,
+  "component": "Actor",
+  "eval_interval": 250,
+  "eval_with_env_episode_trials": true,
+  "gae_lambda": 0.9599999785423279,
+  "gamma": 0.9900000095367432,
+  "max_eval_episode_length": 20000,
+  "max_train_episode_length": 2000,
+  "n_epochs": 20,
+  "n_eval_episodes": 3,
+  "n_timesteps": 1000000,
+  "rollout_steps": 2048
+}
