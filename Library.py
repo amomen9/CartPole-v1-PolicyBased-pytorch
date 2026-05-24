@@ -291,7 +291,7 @@ def _run_actor_checkpoint_episode(
     checkpoint_path: str,
     actor_hidden_nn: np.ndarray,
     max_eval_episode_length: int,
-    policy_method: str = "softmax",
+    policy_method: str = "argmax",
 ) -> int:
     model = _get_cached_actor_checkpoint_model(algo_upper, checkpoint_path, actor_hidden_nn)
     env = environ.CartPoleEnvironment(max_episode_length=max_eval_episode_length, render_mode=None)
@@ -302,9 +302,13 @@ def _run_actor_checkpoint_episode(
             with torch.inference_mode():
                 state = torch.as_tensor(obs, dtype=torch.float32)
                 if algo_upper in ("REINFORCE", "AC"):
+                    # Single-logit network: sigmoid(logit) is P(action=1).
                     logit = model(state)
-                    prob = torch.sigmoid(logit).item()
-                    action = int(prob >= 0.5)
+                    prob_a1 = float(torch.sigmoid(logit).item())
+                    if policy_method == "argmax":
+                        action = int(prob_a1 >= 0.5)
+                    else:  # softmax sample on Bernoulli(prob_a1)
+                        action = int(np.random.random() < prob_a1)
                 elif algo_upper == "DQN":
                     q_values = model(state)
                     if policy_method == "argmax":
@@ -313,9 +317,14 @@ def _run_actor_checkpoint_episode(
                         probs = torch.softmax(q_values, dim=-1).cpu().numpy().astype(np.float64)
                         probs = probs / probs.sum()
                         action = int(np.random.choice(probs.shape[-1], p=probs))
-                else:
+                else:  # A2C, PPO — 2-logit categorical policy
                     logits = model(state)
-                    action = int(torch.argmax(logits, dim=-1).item())
+                    if policy_method == "argmax":
+                        action = int(torch.argmax(logits, dim=-1).item())
+                    else:
+                        probs = torch.softmax(logits, dim=-1).cpu().numpy().astype(np.float64)
+                        probs = probs / probs.sum()
+                        action = int(np.random.choice(probs.shape[-1], p=probs))
             obs, reward, terminated, truncated, _ = env.step(action)
             done_step += 1
             if terminated or truncated:
@@ -343,8 +352,8 @@ def run_actor_checkpoint_evaluation(
     if not enabled_algos:
         return
 
-    dqn_policy_methods = _normalize_policy_evaluation_methods(policy_evaluation_method)
-    multi_dqn_methods = len(dqn_policy_methods) > 1
+    policy_methods = _normalize_policy_evaluation_methods(policy_evaluation_method)
+    multi_methods = len(policy_methods) > 1
 
     n_episodes = int(cfg.get("n_episodes", 1000))
     plots_dir = "plots"
@@ -366,20 +375,9 @@ def run_actor_checkpoint_evaluation(
         ckpt_label = "Q-network" if algo_upper == "DQN" else "actor"
         print(f"[{algo_upper}] Loading {ckpt_label} checkpoint: {checkpoint_path}")
 
-        if algo_upper == "DQN":
-            methods_for_algo = dqn_policy_methods
-        else:
-            methods_for_algo = [None]
-        for method in methods_for_algo:
-            if algo_upper == "DQN" and multi_dqn_methods:
-                series_key = f"DQN_{method}"
-                display_label = f"DQN ({method})"
-            elif algo_upper == "DQN":
-                series_key = "DQN"
-                display_label = f"DQN ({method})"
-            else:
-                series_key = algo_upper
-                display_label = algo_upper
+        for method in policy_methods:
+            series_key = f"{algo_upper}_{method}" if multi_methods else algo_upper
+            display_label = f"{algo_upper} ({method})"
             algo_jobs.append(
                 {
                     "algo_upper": algo_upper,
@@ -431,7 +429,7 @@ def run_actor_checkpoint_evaluation(
     pbars = {
         job["series_key"]: _create_step_progress_bar(
             total=n_episodes,
-            desc=f"{job['display_label']} checkpoint eval",
+            desc=f"{job['algo_upper']} ({job.get('policy_method') or 'argmax'}) checkpoint eval",
             position=index,
             leave=True,
         )
@@ -473,20 +471,21 @@ def run_actor_checkpoint_evaluation(
         "DQN": {"color": "#ff7f0e", "marker": "x", "ls": (0, (3, 1, 1, 1))},
         "PPO": {"color": "#9467bd", "marker": "D", "ls": ":"},
     }
-    dqn_method_overrides = {
-        "softmax": {"ls": (0, (3, 1, 1, 1))},
-        "argmax": {"ls": (0, (1, 1))},
+    method_linestyle_overrides = {
+        "softmax": "-",
+        "argmax": (0, (4, 2)),
     }
+    series_to_method = {job["series_key"]: job["policy_method"] for job in algo_jobs}
 
     for series_key, done_steps in results_by_series.items():
         algo_upper = series_to_algo[series_key]
         plot_key = algo_upper if separate_algorithm_plots else "combined"
         fig, axis = figure_map[plot_key]
         style = dict(algo_line_styles.get(algo_upper, {}))
-        if algo_upper == "DQN" and multi_dqn_methods:
-            method_for_series = series_key.split("_", 1)[1] if "_" in series_key else None
-            if method_for_series in dqn_method_overrides:
-                style.update(dqn_method_overrides[method_for_series])
+        if multi_methods:
+            method_for_series = series_to_method.get(series_key)
+            if method_for_series in method_linestyle_overrides:
+                style["ls"] = method_linestyle_overrides[method_for_series]
         axis.plot(
             eval_numbers,
             done_steps,
@@ -550,8 +549,8 @@ def run_actor_checkpoint_evaluation_exhaustive(
     if not enabled_algos:
         return
 
-    dqn_policy_methods = _normalize_policy_evaluation_methods(policy_evaluation_method)
-    multi_dqn_methods = len(dqn_policy_methods) > 1
+    policy_methods = _normalize_policy_evaluation_methods(policy_evaluation_method)
+    multi_methods = len(policy_methods) > 1
 
     plot_smoothing_windows = np.atleast_1d(
         np.asarray(plot_smoothing_window if plot_smoothing_window is not None else np.array([1]), dtype=np.int32)
@@ -588,17 +587,9 @@ def run_actor_checkpoint_evaluation_exhaustive(
         ckpt_label = "Q-network" if algo_upper == "DQN" else "actor"
         print(f"[{algo_upper}] Loading {ckpt_label} checkpoint: {checkpoint_path}")
 
-        methods_for_algo = dqn_policy_methods if algo_upper == "DQN" else [None]
-        for method in methods_for_algo:
-            if algo_upper == "DQN" and multi_dqn_methods:
-                series_key = f"DQN_{method}"
-                display_label = f"DQN ({method})"
-            elif algo_upper == "DQN":
-                series_key = "DQN"
-                display_label = f"DQN ({method})"
-            else:
-                series_key = algo_upper
-                display_label = algo_upper
+        for method in policy_methods:
+            series_key = f"{algo_upper}_{method}" if multi_methods else algo_upper
+            display_label = f"{algo_upper} ({method})"
             algo_jobs.append(
                 {
                     "algo_upper": algo_upper,
@@ -641,7 +632,7 @@ def run_actor_checkpoint_evaluation_exhaustive(
     pbars = {
         job["series_key"]: _create_step_progress_bar(
             total=n_episodes,
-            desc=f"{job['display_label']} checkpoint eval",
+            desc=f"{job['algo_upper']} ({job.get('policy_method') or 'argmax'}) checkpoint eval",
             position=index,
             leave=True,
         )
@@ -708,12 +699,12 @@ def run_actor_checkpoint_evaluation_exhaustive(
         "DQN": "#ff7f0e",
         "PPO": "#9467bd",
     }
-    dqn_method_linestyles = {"softmax": "-", "argmax": (0, (4, 2))}
+    method_linestyles = {"softmax": "-", "argmax": (0, (4, 2))}
+    series_to_method = {job["series_key"]: job["policy_method"] for job in algo_jobs}
 
     def _series_linestyle(series_key: str) -> str | tuple:
-        if multi_dqn_methods and series_to_algo.get(series_key) == "DQN":
-            method = series_key.split("_", 1)[1] if "_" in series_key else None
-            return dqn_method_linestyles.get(method, "-")
+        if multi_methods:
+            return method_linestyles.get(series_to_method.get(series_key), "-")
         return "-"
 
     for pc in plot_configs:
