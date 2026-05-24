@@ -178,7 +178,10 @@ def _resolve_non_overwriting_path(checkpoint_path: str) -> str:
 
 
 _LOOSE_TIMESTEPS_KEYS = ("n_timesteps", "n_env_steps")
-_EXACT_MATCH_EXCLUDED_KEYS = ("use_saved_disk_networks_checkpoints",)
+_EXACT_MATCH_EXCLUDED_KEYS = (
+    "use_saved_disk_networks_checkpoints",
+    "max_eval_episode_length",
+)
 
 
 def _strip_exact_match_excluded(metadata: dict | None) -> dict | None:
@@ -216,11 +219,8 @@ def _get_train_truncation(metadata: dict | None):
 
 def _candidate_passes_strict_fields(candidate_metadata, target_metadata) -> bool:
     """Strict-match check enforced under any circumstances (exact or loose):
-    candidate's max_eval_episode_length AND training truncation must equal
-    the target's."""
+    candidate's training truncation must equal the target's."""
     if not isinstance(candidate_metadata, dict) or not isinstance(target_metadata, dict):
-        return False
-    if candidate_metadata.get("max_eval_episode_length") != target_metadata.get("max_eval_episode_length"):
         return False
     if _get_train_truncation(candidate_metadata) != _get_train_truncation(target_metadata):
         return False
@@ -229,9 +229,8 @@ def _candidate_passes_strict_fields(candidate_metadata, target_metadata) -> bool
 
 def has_strict_field_candidate(*, checkpoint_path: str, target_metadata: dict) -> bool:
     """True if at least one candidate sidecar for 'checkpoint_path' matches
-    the strict fields (max_eval_episode_length + training truncation) of
-    'target_metadata'. Used by the up-front orchestrator report to decide
-    whether to announce a load."""
+    the strict fields (training truncation) of 'target_metadata'. Used by the
+    up-front orchestrator report to decide whether to announce a load."""
     if not isinstance(target_metadata, dict):
         return False
     target = _normalize_metadata(target_metadata)
@@ -253,9 +252,8 @@ def has_strict_field_candidate(*, checkpoint_path: str, target_metadata: dict) -
 def _resolve_loose_checkpoint_path(checkpoint_path: str, target_metadata: dict | None) -> str | None:
     """
     Two-tier loose lookup among candidates sharing the architecture-signature
-    filename. Strict-field gate (max_eval_episode_length + training truncation)
-    is enforced first; candidates that fail it are discarded regardless of
-    other matches.
+    filename. Strict-field gate (training truncation) is enforced first;
+    candidates that fail it are discarded regardless of other matches.
 
       1. Prefer candidates whose sidecar has
          use_saved_disk_networks_checkpoints == True (i.e. produced by a

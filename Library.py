@@ -524,6 +524,293 @@ def run_actor_checkpoint_evaluation(
         plt.show()
 
 
+def _build_checkpoint_eval_summary(
+    *,
+    results_by_series,
+    series_to_label,
+    series_to_algo,
+    output_dir,
+    last_fraction=0.1,
+    max_eval_episode_length=None,
+):
+    """Emit md/csv/boxplot/mean-CI summary of per-episode done_steps in 'Checkpoint Evaluation Trials'.
+
+    All files are suffixed with RUN_TIMESTAMP for traceability across runs.
+    """
+    import csv as _csv
+    from matplotlib.lines import Line2D
+
+    os.makedirs(output_dir, exist_ok=True)
+
+    last_fraction = float(last_fraction)
+    last_fraction = min(max(last_fraction, 0.0), 1.0)
+
+    rows_data = []
+    for series_key, done_steps in results_by_series.items():
+        values = np.asarray(done_steps, dtype=np.float64).reshape(-1)
+        if values.size == 0:
+            continue
+        if last_fraction > 0:
+            n_last = max(1, int(np.ceil(last_fraction * values.size)))
+            last_values = values[-n_last:]
+        else:
+            last_values = np.array([], dtype=np.float64)
+
+        mean_all = float(np.mean(values))
+        std_all = float(np.std(values, ddof=0))
+        n_all = int(values.size)
+        mean_last = float(np.mean(last_values)) if last_values.size > 0 else float("nan")
+        std_last = float(np.std(last_values, ddof=0)) if last_values.size > 0 else float("nan")
+        n_last_count = int(last_values.size)
+
+        rows_data.append({
+            "algorithm": series_to_algo.get(series_key, series_key),
+            "series": series_to_label.get(series_key, series_key),
+            "mean_all": mean_all,
+            "std_all": std_all,
+            "n_all": n_all,
+            "mean_last": mean_last,
+            "std_last": std_last,
+            "n_last": n_last_count,
+            "values": values,
+            "last_values": last_values,
+        })
+
+    last_pct = int(round(last_fraction * 100))
+    headers = [
+        "Algorithm",
+        "Series",
+        "Mean (all)",
+        "Std (all)",
+        f"Mean (last {last_pct}%)",
+        f"Std (last {last_pct}%)",
+        "N (all)",
+        "N (last)",
+    ]
+
+    def _fmt_num(value, decimals=2):
+        if value is None or not np.isfinite(value):
+            return "n/a"
+        return f"{value:,.{decimals}f}"
+
+    text_rows = []
+    csv_rows = []
+    for row in rows_data:
+        text_rows.append([
+            row["algorithm"],
+            row["series"],
+            _fmt_num(row["mean_all"]),
+            _fmt_num(row["std_all"]),
+            _fmt_num(row["mean_last"]),
+            _fmt_num(row["std_last"]),
+            f"{row['n_all']:,}",
+            f"{row['n_last']:,}",
+        ])
+        csv_rows.append([
+            row["algorithm"],
+            row["series"],
+            f"{row['mean_all']:.6f}" if np.isfinite(row["mean_all"]) else "",
+            f"{row['std_all']:.6f}" if np.isfinite(row["std_all"]) else "",
+            f"{row['mean_last']:.6f}" if np.isfinite(row["mean_last"]) else "",
+            f"{row['std_last']:.6f}" if np.isfinite(row["std_last"]) else "",
+            str(row["n_all"]),
+            str(row["n_last"]),
+        ])
+
+    if text_rows:
+        widths = [len(h) for h in headers]
+        for r in text_rows:
+            for i, cell in enumerate(r):
+                widths[i] = max(widths[i], len(cell))
+
+        def _fmt_row(cells):
+            out = []
+            for i, cell in enumerate(cells):
+                if i <= 1:
+                    out.append(cell.ljust(widths[i]))
+                else:
+                    out.append(cell.rjust(widths[i]))
+            return "  ".join(out)
+
+        sep = "  ".join("-" * w for w in widths)
+        rendered_lines = [_fmt_row(headers), sep] + [_fmt_row(r) for r in text_rows]
+        rendered_text = "\n".join(rendered_lines)
+    else:
+        rendered_text = "(no completed series to summarize)"
+
+    title_stdout = "Checkpoint evaluation summary - mean/std across episodes per series"
+    title_md = "Checkpoint evaluation summary - mean ± std across episodes per series"
+
+    def _safe_print(s):
+        try:
+            print(s)
+        except UnicodeEncodeError:
+            print(s.encode("ascii", errors="replace").decode("ascii"))
+
+    _safe_print("\n" + "=" * len(title_stdout))
+    _safe_print(title_stdout)
+    _safe_print("=" * len(title_stdout))
+    _safe_print(rendered_text)
+    _safe_print("")
+
+    md_path = os.path.join(output_dir, f"checkpoint_eval_summary_{RUN_TIMESTAMP}.md")
+    md_lines = [f"# {title_md}", ""]
+    if text_rows:
+        md_lines.append("| " + " | ".join(headers) + " |")
+        md_lines.append("| " + " | ".join(["---", "---", "---:", "---:", "---:", "---:", "---:", "---:"]) + " |")
+        for r in text_rows:
+            md_lines.append("| " + " | ".join(r) + " |")
+    else:
+        md_lines.append("_(no completed series to summarize)_")
+    with open(md_path, "w", encoding="utf-8") as f:
+        f.write("\n".join(md_lines) + "\n")
+
+    csv_path = os.path.join(output_dir, f"checkpoint_eval_summary_{RUN_TIMESTAMP}.csv")
+    with open(csv_path, "w", encoding="utf-8", newline="") as f:
+        writer = _csv.writer(f)
+        writer.writerow(headers)
+        for r in csv_rows:
+            writer.writerow(r)
+
+    boxplot_path = None
+    mean_ci_plot_path = None
+
+    if rows_data:
+        try:
+            pooled_all_by_algo = {}
+            pooled_last_by_algo = {}
+            for row in rows_data:
+                algo = row["algorithm"]
+                if row["values"].size > 0:
+                    pooled_all_by_algo.setdefault(algo, []).append(row["values"])
+                if row["last_values"].size > 0:
+                    pooled_last_by_algo.setdefault(algo, []).append(row["last_values"])
+
+            algorithms = sorted(set(pooled_all_by_algo.keys()) | set(pooled_last_by_algo.keys()))
+            valid_algorithms = []
+            all_data = []
+            last_data = []
+            for algo in algorithms:
+                all_chunks = pooled_all_by_algo.get(algo, [])
+                last_chunks = pooled_last_by_algo.get(algo, [])
+                all_vals = np.concatenate(all_chunks).tolist() if all_chunks else []
+                last_vals = np.concatenate(last_chunks).tolist() if last_chunks else []
+                if not all_vals and not last_vals:
+                    continue
+                valid_algorithms.append(algo)
+                all_data.append(all_vals)
+                last_data.append(last_vals)
+
+            if valid_algorithms:
+                fig, ax = plt.subplots(figsize=(max(10, 2.5 * len(valid_algorithms)), 6))
+                positions = np.arange(1, len(valid_algorithms) + 1, dtype=float)
+                offset = 0.18
+
+                if any(all_data):
+                    ax.boxplot(
+                        all_data,
+                        positions=positions - offset,
+                        widths=0.28,
+                        vert=True,
+                        patch_artist=True,
+                        showmeans=True,
+                        boxprops=dict(facecolor="#d9d9d9", edgecolor="black", linewidth=1.2),
+                        whiskerprops=dict(color="black", linewidth=1.0),
+                        capprops=dict(color="black", linewidth=1.0),
+                        medianprops=dict(color="black", linewidth=1.4),
+                        meanprops=dict(marker="o", markerfacecolor="white", markeredgecolor="black", markersize=4),
+                    )
+                if any(last_data):
+                    ax.boxplot(
+                        last_data,
+                        positions=positions + offset,
+                        widths=0.28,
+                        vert=True,
+                        patch_artist=True,
+                        showmeans=True,
+                        boxprops=dict(facecolor="#b3e5ff", edgecolor="black", linewidth=1.2),
+                        whiskerprops=dict(color="black", linewidth=1.0),
+                        capprops=dict(color="black", linewidth=1.0),
+                        medianprops=dict(color="black", linewidth=1.4),
+                        meanprops=dict(marker="o", markerfacecolor="white", markeredgecolor="black", markersize=4),
+                    )
+
+                ax.set_xticks(positions)
+                ax.set_xticklabels(valid_algorithms)
+                ax.set_ylabel("Done step")
+                ax.set_title("Checkpoint evaluation box plot by algorithm")
+                ax.grid(axis="y", linestyle="--", alpha=0.3)
+                ax.legend(
+                    [
+                        Line2D([0], [0], color="#d9d9d9", marker="s", linestyle="none", markeredgecolor="black"),
+                        Line2D([0], [0], color="#b3e5ff", marker="s", linestyle="none", markeredgecolor="black"),
+                    ],
+                    ["All episodes", f"Last {last_pct}% of episodes"],
+                    loc="best",
+                    fontsize=8,
+                )
+                fig.tight_layout()
+                boxplot_path = os.path.join(output_dir, f"checkpoint_eval_summary_boxplot_{RUN_TIMESTAMP}.png")
+                fig.savefig(boxplot_path, dpi=300)
+                plt.close(fig)
+                print(f"Saved checkpoint evaluation box plot to: {boxplot_path}")
+
+            fig, ax = plt.subplots(figsize=(max(10, 1.2 * len(rows_data)), 6))
+            x_positions = np.arange(1, len(rows_data) + 1, dtype=float)
+            half_width = 0.35
+            palette = plt.get_cmap("tab10")
+            for idx, (x_pos, row) in enumerate(zip(x_positions, rows_data)):
+                mean_value = float(row["mean_all"])
+                std_value = float(row["std_all"])
+                n_value = int(row["n_all"])
+                if not np.isfinite(mean_value):
+                    continue
+                if n_value > 1 and np.isfinite(std_value):
+                    margin = std_value / np.sqrt(max(n_value, 1))
+                else:
+                    margin = 0.0
+                lower = mean_value - margin
+                upper = mean_value + margin
+                color = palette(idx % palette.N)
+                ax.fill_between(
+                    [x_pos - half_width, x_pos + half_width],
+                    [lower, lower],
+                    [upper, upper],
+                    color=color,
+                    alpha=0.2,
+                    linewidth=0,
+                )
+                ax.plot([x_pos - half_width, x_pos + half_width], [mean_value, mean_value], color=color, linewidth=1.8, label=row["series"])
+
+            ax.set_xticks(x_positions)
+            ax.set_xticklabels([row["series"] for row in rows_data], rotation=45, ha="right")
+            ax.set_ylabel("Done step")
+            ax.set_title("Checkpoint evaluation mean ± SEM by series")
+            ax.grid(axis="y", linestyle="--", alpha=0.3)
+            ax.legend(loc="best", fontsize=8)
+            fig.tight_layout()
+            mean_ci_plot_path = os.path.join(output_dir, f"checkpoint_eval_summary_mean_ci_{RUN_TIMESTAMP}.png")
+            fig.savefig(mean_ci_plot_path, dpi=300)
+            plt.close(fig)
+            print(f"Saved checkpoint evaluation mean/SEM plot to: {mean_ci_plot_path}")
+        except Exception as exc:
+            print(f"[summary] Failed to render checkpoint evaluation summary plots: {exc}")
+
+    print(f"Saved checkpoint evaluation summary to: {md_path}")
+    print(f"Saved checkpoint evaluation summary to: {csv_path}")
+    print()
+
+    return {
+        "rows": rows_data,
+        "headers": headers,
+        "markdown_path": md_path,
+        "csv_path": csv_path,
+        "boxplot_path": boxplot_path,
+        "mean_ci_plot_path": mean_ci_plot_path,
+        "text": rendered_text,
+    }
+
+
 def run_actor_checkpoint_evaluation_exhaustive(
     *,
     included_algo_checkpoint_eval,
@@ -534,6 +821,7 @@ def run_actor_checkpoint_evaluation_exhaustive(
     show_curve_plots=False,
     unused_cpu_cores=0,
     policy_evaluation_method=None,
+    checkpoint_evaluation_plots=True,
 ):
     start_time = time.perf_counter()
     start_human = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -568,8 +856,8 @@ def run_actor_checkpoint_evaluation_exhaustive(
         raise ValueError("show_curve_smoothing_windows must contain at least one value.")
 
     n_episodes = int(cfg.get("n_episodes", 1000))
-    plots_dir = os.path.abspath(os.path.join("plots", "Checkpoint Evaluation Plots"))
-    os.makedirs(plots_dir, exist_ok=True)
+    output_dir = os.path.abspath("Checkpoint Evaluation Trials")
+    os.makedirs(output_dir, exist_ok=True)
 
     algo_jobs = []
     for algo_upper in enabled_algos:
@@ -671,7 +959,7 @@ def run_actor_checkpoint_evaluation_exhaustive(
     plot_configs = []
     if separate_algorithm_plots:
         for algo_upper in enabled_algos:
-            for window in plot_smoothing_windows:
+            for window in show_curve_smoothing_windows:
                 window = int(window)
                 suffix_label = "not smoothed plot" if window <= 1 else "smoothed plot"
                 plot_configs.append(
@@ -682,7 +970,7 @@ def run_actor_checkpoint_evaluation_exhaustive(
                     }
                 )
     else:
-        for window in plot_smoothing_windows:
+        for window in show_curve_smoothing_windows:
             window = int(window)
             suffix_label = "not smoothed plot" if window <= 1 else "smoothed plot"
             plot_configs.append(
@@ -735,51 +1023,72 @@ def run_actor_checkpoint_evaluation_exhaustive(
                     color=algo_color_map.get(algo_upper),
                 )
 
-    for pc in plot_configs:
-        window = int(pc["window"])
-        suffix = f"w{window}-not-smoothed" if window <= 1 else f"w{window}-smoothed"
-        filename = f"{plot_filename_tag}_{suffix}.png"
-        output_path = os.path.abspath(os.path.join(plots_dir, filename))
-        pc["plot"].add_hline(max_eval_episode_length, label="CartPole Optimum")
-        saved_path = pc["plot"].save(output_path)
-        print(f"Saved checkpoint evaluation plot to {saved_path}")
+    if checkpoint_evaluation_plots:
+        for pc in plot_configs:
+            window = int(pc["window"])
+            suffix = f"w{window}-not-smoothed" if window <= 1 else f"w{window}-smoothed"
+            filename = f"{plot_filename_tag}_{suffix}.png"
+            output_path = os.path.abspath(os.path.join(output_dir, filename))
+            pc["plot"].add_hline(max_eval_episode_length, label="CartPole Optimum")
+            saved_path = pc["plot"].save(output_path)
+            print(f"Saved checkpoint evaluation plot to {saved_path}")
 
-    if not separate_algorithm_plots and len(show_curve_smoothing_windows) == 2:
-        combined_fig, axes = plt.subplots(1, 2, figsize=(14, 6))
-        combined_fig.suptitle(
-            f"Twin_{plot_filename_tag} (w={int(show_curve_smoothing_windows[0])} and w={int(show_curve_smoothing_windows[1])})"
+        if not separate_algorithm_plots and len(show_curve_smoothing_windows) == 2:
+            combined_fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+            combined_fig.suptitle(
+                f"Twin_{plot_filename_tag} (w={int(show_curve_smoothing_windows[0])} and w={int(show_curve_smoothing_windows[1])})"
+            )
+            desired_windows = [int(show_curve_smoothing_windows[0]), int(show_curve_smoothing_windows[1])]
+            for ax, w in zip(axes, desired_windows):
+                for series_key, done_steps in results_by_series.items():
+                    algo_upper = series_to_algo[series_key]
+                    smoothed_steps = _apply_optional_smoothing(np.asarray(done_steps, dtype=np.float32), int(w))
+                    smoothed_steps = np.minimum(smoothed_steps, float(max_eval_episode_length))
+                    ax.plot(
+                        eval_numbers,
+                        smoothed_steps,
+                        label=series_to_label[series_key],
+                        color=algo_color_map.get(algo_upper),
+                        linestyle=_series_linestyle(series_key),
+                        linewidth=2.0,
+                        zorder=5,
+                    )
+                ax.axhline(max_eval_episode_length, color="gray", linestyle=":", linewidth=1.5, label="CartPole Optimum")
+                ax.set_title(f"Checkpoint evaluation - {'not smoothed plot' if w <= 1 else 'smoothed plot'}")
+                ax.set_xlabel("evaluation number")
+                ax.set_ylabel("done step")
+                ax.grid(True, alpha=0.25)
+                ax.legend()
+            try:
+                combined_fig.tight_layout()
+                twin_filename = f"{plot_filename_tag}_twin_w{int(show_curve_smoothing_windows[0])}-w{int(show_curve_smoothing_windows[1])}_{RUN_TIMESTAMP}.png"
+                twin_output_path = os.path.abspath(os.path.join(output_dir, twin_filename))
+                combined_fig.savefig(twin_output_path, dpi=300)
+                print(f"Saved checkpoint evaluation twin plot to {twin_output_path}")
+                if show_curve_plots:
+                    plt.show(block=False)
+            except Exception as exc:
+                print(f"[plot] Failed to create combined subplot preview: {exc}")
+
+    try:
+        _build_checkpoint_eval_summary(
+            results_by_series=results_by_series,
+            series_to_label=series_to_label,
+            series_to_algo=series_to_algo,
+            output_dir=output_dir,
+            last_fraction=0.1,
+            max_eval_episode_length=max_eval_episode_length,
         )
-        desired_windows = [int(show_curve_smoothing_windows[0]), int(show_curve_smoothing_windows[1])]
-        for ax, w in zip(axes, desired_windows):
-            for series_key, done_steps in results_by_series.items():
-                algo_upper = series_to_algo[series_key]
-                smoothed_steps = _apply_optional_smoothing(np.asarray(done_steps, dtype=np.float32), int(w))
-                smoothed_steps = np.minimum(smoothed_steps, float(max_eval_episode_length))
-                ax.plot(
-                    eval_numbers,
-                    smoothed_steps,
-                    label=series_to_label[series_key],
-                    color=algo_color_map.get(algo_upper),
-                    linestyle=_series_linestyle(series_key),
-                    linewidth=2.0,
-                    zorder=5,
-                )
-            ax.axhline(max_eval_episode_length, color="gray", linestyle=":", linewidth=1.5, label="CartPole Optimum")
-            ax.set_title(f"Checkpoint evaluation - {'not smoothed plot' if w <= 1 else 'smoothed plot'}")
-            ax.set_xlabel("evaluation number")
-            ax.set_ylabel("done step")
-            ax.grid(True, alpha=0.25)
-            ax.legend()
-        try:
-            combined_fig.tight_layout()
-            plt.show(block=show_curve_plots)
-        except Exception as exc:
-            print(f"[plot] Failed to create combined subplot preview: {exc}")
+    except Exception as exc:
+        print(f"[summary] Failed to build checkpoint evaluation summary: {exc}")
 
     total_time = (time.perf_counter() - start_time) / 60.0
     with open("output.log", "w", encoding="utf-8") as f:
         f.write(f"Total execution time: {total_time:.3f} minutes\n")
     print(f"\nExperiment finished in {total_time:.3f} minutes.")
+
+    if checkpoint_evaluation_plots and show_curve_plots:
+        plt.show(block=True)
 
 # Begin Class CartPoleAgentPlot ##############################################################
 class CartPoleAgentPlot:
@@ -1550,15 +1859,14 @@ def run_selected_experiments(
                 pg_critic_checkpoint_path,
             )
 
-            # Strict-field gate (max_eval_episode_length + training truncation)
-            # is enforced under any circumstances, so the orchestrator-side
-            # report must check the same gate. "Loading existing" is only
-            # announced when at least one sidecar candidate matches these two
-            # fields against the current run's values. Both PG's
-            # 'max_train_episode_length' and DQN's 'max_episode_length' keys
-            # are populated to the same value for cross-algo compatibility.
+            # Strict-field gate (training truncation) is enforced under any
+            # circumstances, so the orchestrator-side report must check the
+            # same gate. "Loading existing" is only announced when at least
+            # one sidecar candidate matches this field against the current
+            # run's value. Both PG's 'max_train_episode_length' and DQN's
+            # 'max_episode_length' keys are populated to the same value for
+            # cross-algo compatibility.
             strict_target = {
-                "max_eval_episode_length": max_eval_episode_length,
                 "max_train_episode_length": max_train_episode_length,
                 "max_episode_length": max_train_episode_length,
             }
