@@ -562,45 +562,49 @@ def _build_checkpoint_eval_summary(
     results_by_series,
     series_to_label,
     series_to_algo,
+    series_to_method=None,
+    multi_methods=False,
     output_dir,
     max_eval_episode_length=None,
 ):
     """Emit md (LaTeX) / csv / boxplot / mean-std summary of per-episode done_steps.
 
-    Rows are aggregated per algorithm: all values from every series of that algorithm
-    are pooled, and mean/std are computed over the full pool. All files are suffixed
-    with RUN_TIMESTAMP for traceability across runs.
+    One row per series: in single-method runs that's one row per algorithm
+    (e.g. "DQN"); in multi-method runs it's one row per (algo, method) pair
+    (e.g. "DQN (softmax)", "DQN (argmax)"). All files are suffixed with
+    RUN_TIMESTAMP for traceability across runs.
     """
     import csv as _csv
 
     os.makedirs(output_dir, exist_ok=True)
+    series_to_method = series_to_method or {}
 
-    pooled_by_algo: dict[str, list[np.ndarray]] = {}
-    algo_order: list[str] = []
+    rows_data = []
     for series_key, done_steps in results_by_series.items():
         values = np.asarray(done_steps, dtype=np.float64).reshape(-1)
         if values.size == 0:
             continue
         algo = series_to_algo.get(series_key, series_key)
-        if algo not in pooled_by_algo:
-            pooled_by_algo[algo] = []
-            algo_order.append(algo)
-        pooled_by_algo[algo].append(values)
-
-    rows_data = []
-    for algo in algo_order:
-        pooled = np.concatenate(pooled_by_algo[algo])
-        if pooled.size == 0:
-            continue
+        method = series_to_method.get(series_key)
+        if multi_methods and method is not None:
+            row_label = f"{algo} ({method})"
+        else:
+            row_label = algo
+        q1, median, q3 = (float(v) for v in np.percentile(values, [25, 50, 75]))
         rows_data.append({
-            "algorithm": algo,
-            "mean": float(np.mean(pooled)),
-            "std": float(np.std(pooled, ddof=0)),
-            "n": int(pooled.size),
-            "values": pooled,
+            "algorithm": row_label,
+            "algo_upper": algo,
+            "policy_method": method,
+            "mean": float(np.mean(values)),
+            "std": float(np.std(values, ddof=0)),
+            "q1": q1,
+            "median": median,
+            "q3": q3,
+            "n": int(values.size),
+            "values": values,
         })
 
-    headers = ["Algorithm", "Mean", "Std"]
+    headers = ["Algorithm", "Mean", "Std", "Q1", "Median", "Q3"]
 
     def _fmt_num(value, decimals=2):
         if value is None or not np.isfinite(value):
@@ -614,11 +618,17 @@ def _build_checkpoint_eval_summary(
             row["algorithm"],
             _fmt_num(row["mean"]),
             _fmt_num(row["std"]),
+            _fmt_num(row["q1"]),
+            _fmt_num(row["median"]),
+            _fmt_num(row["q3"]),
         ])
         csv_rows.append([
             row["algorithm"],
             f"{row['mean']:.6f}" if np.isfinite(row["mean"]) else "",
             f"{row['std']:.6f}" if np.isfinite(row["std"]) else "",
+            f"{row['q1']:.6f}" if np.isfinite(row["q1"]) else "",
+            f"{row['median']:.6f}" if np.isfinite(row["median"]) else "",
+            f"{row['q3']:.6f}" if np.isfinite(row["q3"]) else "",
         ])
 
     if text_rows:
@@ -644,7 +654,7 @@ def _build_checkpoint_eval_summary(
 
     truncation_int = int(max_eval_episode_length) if max_eval_episode_length is not None else 0
     truncation_caption = f"{truncation_int:,}"
-    title_stdout = f"Checkpoint evaluation summary - mean/std per algorithm (truncation={truncation_caption})"
+    title_stdout = f"Checkpoint evaluation summary - mean/std/quartiles per series (truncation={truncation_caption})"
 
     def _safe_print(s):
         try:
@@ -662,15 +672,20 @@ def _build_checkpoint_eval_summary(
     md_path = os.path.join(output_dir, f"checkpoint_eval_summary_{RUN_TIMESTAMP}.md")
     if text_rows:
         algo_width = max(len(row["algorithm"]) for row in rows_data)
-        mean_strs = [_fmt_num(row["mean"]) for row in rows_data]
-        std_strs = [_fmt_num(row["std"]) for row in rows_data]
-        mean_width = max(len(s) for s in mean_strs)
-        std_width = max(len(s) for s in std_strs)
+        num_keys = ("mean", "std", "q1", "median", "q3")
+        num_strs = {k: [_fmt_num(row[k]) for row in rows_data] for k in num_keys}
+        num_widths = {k: max(len(s) for s in num_strs[k]) for k in num_keys}
         body_lines = []
-        for row, mean_str, std_str in zip(rows_data, mean_strs, std_strs):
-            body_lines.append(
-                f"{row['algorithm'].ljust(algo_width)} & {mean_str.rjust(mean_width)} & {std_str.rjust(std_width)} \\\\"
-            )
+        for i, row in enumerate(rows_data):
+            cells = [
+                row["algorithm"].ljust(algo_width),
+                num_strs["mean"][i].rjust(num_widths["mean"]),
+                num_strs["std"][i].rjust(num_widths["std"]),
+                num_strs["q1"][i].rjust(num_widths["q1"]),
+                num_strs["median"][i].rjust(num_widths["median"]),
+                num_strs["q3"][i].rjust(num_widths["q3"]),
+            ]
+            body_lines.append(" & ".join(cells) + r" \\")
         body = "\n".join(body_lines)
     else:
         body = "% (no completed series to summarize)"
@@ -683,9 +698,9 @@ def _build_checkpoint_eval_summary(
         r"\begin{sc}",
         f"\\caption{{Statistical factors (truncation={truncation_caption})}}",
         f"\\label{{tab:results_summary_{truncation_int}}}",
-        r"\begin{tabular}{l r r }",
+        r"\begin{tabular}{l r r r r r }",
         r"\toprule",
-        r"\textbf{Algorithm} & \textbf{Mean}& \textbf{Std}\\",
+        r"\textbf{Algorithm} & \textbf{Mean}& \textbf{Std}& \textbf{Q1}& \textbf{Median}& \textbf{Q3}\\",
         r"\midrule",
         body,
         r"\bottomrule",
@@ -733,7 +748,7 @@ def _build_checkpoint_eval_summary(
             ax.set_xticks(positions)
             ax.set_xticklabels(valid_algorithms)
             ax.set_ylabel("Done step")
-            ax.set_title(f"Checkpoint evaluation box plot by algorithm (truncation={truncation_caption})")
+            ax.set_title(f"Checkpoint evaluation box plot (truncation={truncation_caption})")
             ax.grid(axis="y", linestyle="--", alpha=0.3)
             fig.tight_layout()
             boxplot_path = os.path.join(output_dir, f"checkpoint_eval_summary_boxplot_{RUN_TIMESTAMP}.png")
@@ -767,7 +782,7 @@ def _build_checkpoint_eval_summary(
             ax.set_xticks(x_positions)
             ax.set_xticklabels([row["algorithm"] for row in rows_data])
             ax.set_ylabel("Done step")
-            ax.set_title(f"Checkpoint evaluation mean ± std by algorithm (truncation={truncation_caption})")
+            ax.set_title(f"Checkpoint evaluation mean ± std (truncation={truncation_caption})")
             ax.grid(axis="y", linestyle="--", alpha=0.3)
             ax.legend(loc="best", fontsize=8)
             fig.tight_layout()
@@ -804,6 +819,7 @@ def run_actor_checkpoint_evaluation_exhaustive(
     unused_cpu_cores=0,
     policy_evaluation_method=None,
     checkpoint_evaluation_plots=True,
+    checkpoint_evaluation_analysis=True,
 ):
     start_time = time.perf_counter()
     start_human = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -946,29 +962,52 @@ def run_actor_checkpoint_evaluation_exhaustive(
             print()
 
     plot_filename_tag = "-".join(enabled_algos)
+    series_to_method = {job["series_key"]: job["policy_method"] for job in algo_jobs}
+
+    # When multiple policy methods are active, render a separate set of curve
+    # plots per method (so each plot contains one curve per algo, all using the
+    # same evaluation policy). Single-method runs keep one combined plot.
+    method_groups = policy_methods if multi_methods else [None]
+
+    def _curve_label(series_key: str, method_filter: str | None) -> str:
+        algo_upper = series_to_algo[series_key]
+        if method_filter is None and multi_methods:
+            return series_to_label[series_key]
+        return algo_upper
+
     plot_configs = []
     if separate_algorithm_plots:
         for algo_upper in enabled_algos:
+            for method_filter in method_groups:
+                for window in show_curve_smoothing_windows:
+                    window = int(window)
+                    suffix_label = "not smoothed plot" if window <= 1 else "smoothed plot"
+                    title_prefix = (
+                        f"{algo_upper} ({method_filter})" if method_filter is not None else algo_upper
+                    )
+                    plot_configs.append(
+                        {
+                            "algo_upper": algo_upper,
+                            "policy_method": method_filter,
+                            "window": window,
+                            "plot": LearningCurvePlot(title=f"{title_prefix} checkpoint evaluation - {suffix_label}"),
+                        }
+                    )
+    else:
+        for method_filter in method_groups:
             for window in show_curve_smoothing_windows:
                 window = int(window)
                 suffix_label = "not smoothed plot" if window <= 1 else "smoothed plot"
+                title_prefix = (
+                    f"Checkpoint evaluation ({method_filter})" if method_filter is not None else "Checkpoint evaluation"
+                )
                 plot_configs.append(
                     {
-                        "algo_upper": algo_upper,
+                        "policy_method": method_filter,
                         "window": window,
-                        "plot": LearningCurvePlot(title=f"{algo_upper} checkpoint evaluation - {suffix_label}"),
+                        "plot": LearningCurvePlot(title=f"{title_prefix} - {suffix_label}"),
                     }
                 )
-    else:
-        for window in show_curve_smoothing_windows:
-            window = int(window)
-            suffix_label = "not smoothed plot" if window <= 1 else "smoothed plot"
-            plot_configs.append(
-                {
-                    "window": window,
-                    "plot": LearningCurvePlot(title=f"Checkpoint evaluation - {suffix_label}"),
-                }
-            )
 
     algo_color_map = {
         "REINFORCE": "#d62728",
@@ -977,99 +1016,104 @@ def run_actor_checkpoint_evaluation_exhaustive(
         "DQN": "#ff7f0e",
         "PPO": "#9467bd",
     }
-    method_linestyles = {"softmax": "-", "argmax": (0, (4, 2))}
-    series_to_method = {job["series_key"]: job["policy_method"] for job in algo_jobs}
-
-    def _series_linestyle(series_key: str) -> str | tuple:
-        if multi_methods:
-            return method_linestyles.get(series_to_method.get(series_key), "-")
-        return "-"
 
     for pc in plot_configs:
-        if separate_algorithm_plots:
-            algo_upper = pc["algo_upper"]
-            for series_key, done_steps in results_by_series.items():
-                if series_to_algo[series_key] != algo_upper:
-                    continue
-                smoothed_steps = _apply_optional_smoothing(np.asarray(done_steps, dtype=np.float32), int(pc["window"]))
-                smoothed_steps = np.minimum(smoothed_steps, float(max_eval_episode_length))
-                pc["plot"].add_curve(
-                    eval_numbers,
-                    smoothed_steps,
-                    label=series_to_label[series_key],
-                    ls=_series_linestyle(series_key),
-                    color=algo_color_map.get(algo_upper),
-                )
-        else:
-            for series_key, done_steps in results_by_series.items():
-                algo_upper = series_to_algo[series_key]
-                smoothed_steps = _apply_optional_smoothing(np.asarray(done_steps, dtype=np.float32), int(pc["window"]))
-                smoothed_steps = np.minimum(smoothed_steps, float(max_eval_episode_length))
-                pc["plot"].add_curve(
-                    eval_numbers,
-                    smoothed_steps,
-                    label=series_to_label[series_key],
-                    ls=_series_linestyle(series_key),
-                    color=algo_color_map.get(algo_upper),
-                )
+        method_filter = pc.get("policy_method")
+        algo_filter = pc.get("algo_upper") if separate_algorithm_plots else None
+        for series_key, done_steps in results_by_series.items():
+            if method_filter is not None and series_to_method.get(series_key) != method_filter:
+                continue
+            algo_upper = series_to_algo[series_key]
+            if algo_filter is not None and algo_upper != algo_filter:
+                continue
+            smoothed_steps = _apply_optional_smoothing(np.asarray(done_steps, dtype=np.float32), int(pc["window"]))
+            smoothed_steps = np.minimum(smoothed_steps, float(max_eval_episode_length))
+            pc["plot"].add_curve(
+                eval_numbers,
+                smoothed_steps,
+                label=_curve_label(series_key, method_filter),
+                ls="-",
+                color=algo_color_map.get(algo_upper),
+            )
 
     if checkpoint_evaluation_plots:
         for pc in plot_configs:
             window = int(pc["window"])
             suffix = f"w{window}-not-smoothed" if window <= 1 else f"w{window}-smoothed"
-            filename = f"{plot_filename_tag}_{suffix}.png"
+            method_filter = pc.get("policy_method")
+            name_parts = [plot_filename_tag]
+            if separate_algorithm_plots:
+                name_parts = [pc["algo_upper"]]
+            if method_filter is not None:
+                name_parts.append(method_filter)
+            name_parts.append(suffix)
+            filename = "_".join(name_parts) + ".png"
             output_path = os.path.abspath(os.path.join(output_dir, filename))
             pc["plot"].add_hline(max_eval_episode_length, label="CartPole Optimum")
             saved_path = pc["plot"].save(output_path)
             print(f"Saved checkpoint evaluation plot to {saved_path}")
 
         if not separate_algorithm_plots and len(show_curve_smoothing_windows) == 2:
-            combined_fig, axes = plt.subplots(1, 2, figsize=(14, 6))
-            combined_fig.suptitle(
-                f"Twin_{plot_filename_tag} (w={int(show_curve_smoothing_windows[0])} and w={int(show_curve_smoothing_windows[1])})"
-            )
             desired_windows = [int(show_curve_smoothing_windows[0]), int(show_curve_smoothing_windows[1])]
-            for ax, w in zip(axes, desired_windows):
-                for series_key, done_steps in results_by_series.items():
-                    algo_upper = series_to_algo[series_key]
-                    smoothed_steps = _apply_optional_smoothing(np.asarray(done_steps, dtype=np.float32), int(w))
-                    smoothed_steps = np.minimum(smoothed_steps, float(max_eval_episode_length))
-                    ax.plot(
-                        eval_numbers,
-                        smoothed_steps,
-                        label=series_to_label[series_key],
-                        color=algo_color_map.get(algo_upper),
-                        linestyle=_series_linestyle(series_key),
-                        linewidth=2.0,
-                        zorder=5,
-                    )
-                ax.axhline(max_eval_episode_length, color="gray", linestyle=":", linewidth=1.5, label="CartPole Optimum")
-                ax.set_title(f"Checkpoint evaluation - {'not smoothed plot' if w <= 1 else 'smoothed plot'}")
-                ax.set_xlabel("evaluation number")
-                ax.set_ylabel("done step")
-                ax.grid(True, alpha=0.25)
-                ax.legend()
-            try:
-                combined_fig.tight_layout()
-                twin_filename = f"{plot_filename_tag}_twin_w{int(show_curve_smoothing_windows[0])}-w{int(show_curve_smoothing_windows[1])}_{RUN_TIMESTAMP}.png"
-                twin_output_path = os.path.abspath(os.path.join(output_dir, twin_filename))
-                combined_fig.savefig(twin_output_path, dpi=300)
-                print(f"Saved checkpoint evaluation twin plot to {twin_output_path}")
-                if show_curve_plots:
-                    plt.show(block=False)
-            except Exception as exc:
-                print(f"[plot] Failed to create combined subplot preview: {exc}")
+            for method_filter in method_groups:
+                combined_fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+                suptitle_method = f" [{method_filter}]" if method_filter is not None else ""
+                combined_fig.suptitle(
+                    f"Twin_{plot_filename_tag}{suptitle_method} (w={desired_windows[0]} and w={desired_windows[1]})"
+                )
+                for ax, w in zip(axes, desired_windows):
+                    for series_key, done_steps in results_by_series.items():
+                        if method_filter is not None and series_to_method.get(series_key) != method_filter:
+                            continue
+                        algo_upper = series_to_algo[series_key]
+                        smoothed_steps = _apply_optional_smoothing(np.asarray(done_steps, dtype=np.float32), int(w))
+                        smoothed_steps = np.minimum(smoothed_steps, float(max_eval_episode_length))
+                        ax.plot(
+                            eval_numbers,
+                            smoothed_steps,
+                            label=_curve_label(series_key, method_filter),
+                            color=algo_color_map.get(algo_upper),
+                            linestyle="-",
+                            linewidth=2.0,
+                            zorder=5,
+                        )
+                    ax.axhline(max_eval_episode_length, color="gray", linestyle=":", linewidth=1.5, label="CartPole Optimum")
+                    sub_title = f"Checkpoint evaluation - {'not smoothed plot' if w <= 1 else 'smoothed plot'}"
+                    if method_filter is not None:
+                        sub_title = f"Checkpoint evaluation ({method_filter}) - {'not smoothed plot' if w <= 1 else 'smoothed plot'}"
+                    ax.set_title(sub_title)
+                    ax.set_xlabel("evaluation number")
+                    ax.set_ylabel("done step")
+                    ax.grid(True, alpha=0.25)
+                    ax.legend()
+                try:
+                    combined_fig.tight_layout()
+                    twin_parts = [plot_filename_tag]
+                    if method_filter is not None:
+                        twin_parts.append(method_filter)
+                    twin_parts.append(f"twin_w{desired_windows[0]}-w{desired_windows[1]}_{RUN_TIMESTAMP}")
+                    twin_filename = "_".join(twin_parts) + ".png"
+                    twin_output_path = os.path.abspath(os.path.join(output_dir, twin_filename))
+                    combined_fig.savefig(twin_output_path, dpi=300)
+                    print(f"Saved checkpoint evaluation twin plot to {twin_output_path}")
+                    if show_curve_plots:
+                        plt.show(block=False)
+                except Exception as exc:
+                    print(f"[plot] Failed to create combined subplot preview: {exc}")
 
-    try:
-        _build_checkpoint_eval_summary(
-            results_by_series=results_by_series,
-            series_to_label=series_to_label,
-            series_to_algo=series_to_algo,
-            output_dir=output_dir,
-            max_eval_episode_length=max_eval_episode_length,
-        )
-    except Exception as exc:
-        print(f"[summary] Failed to build checkpoint evaluation summary: {exc}")
+    if checkpoint_evaluation_analysis:
+        try:
+            _build_checkpoint_eval_summary(
+                results_by_series=results_by_series,
+                series_to_label=series_to_label,
+                series_to_algo=series_to_algo,
+                series_to_method=series_to_method,
+                multi_methods=multi_methods,
+                output_dir=output_dir,
+                max_eval_episode_length=max_eval_episode_length,
+            )
+        except Exception as exc:
+            print(f"[summary] Failed to build checkpoint evaluation summary: {exc}")
 
     total_time = (time.perf_counter() - start_time) / 60.0
     with open("output.log", "w", encoding="utf-8") as f:

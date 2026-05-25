@@ -61,6 +61,9 @@ def experiment():
 
 
 
+
+    if included_algo_checkpoint_eval["n_episodes"] > 200:
+        global_config["checkpoint_evaluation_plots"] = False
     max_eval_episode_length = global_config["max_eval_episode_length"]
     plot_smoothing_window = global_config["plot_smoothing_window"]
     show_curve_smoothing_windows = global_config["show_curve_smoothing_windows"]
