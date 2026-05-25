@@ -566,6 +566,9 @@ def _build_checkpoint_eval_summary(
     multi_methods=False,
     output_dir,
     max_eval_episode_length=None,
+    curves_confidence_interval=None,
+    n_episodes=None,
+    title_suffix="",
 ):
     """Emit md (LaTeX) / csv / boxplot / mean-std summary of per-episode done_steps.
 
@@ -604,7 +607,8 @@ def _build_checkpoint_eval_summary(
             "values": values,
         })
 
-    headers = ["Algorithm", "Mean", "Std", "Q1", "Median", "Q3"]
+    headers = ["Algorithm", "# Observations", "Mean", "Std", "Q1", "Median", "Q3"]
+    n_obs_str = f"{int(n_episodes):,}" if n_episodes is not None else ""
 
     def _fmt_num(value, decimals=2):
         if value is None or not np.isfinite(value):
@@ -616,6 +620,7 @@ def _build_checkpoint_eval_summary(
     for row in rows_data:
         text_rows.append([
             row["algorithm"],
+            n_obs_str,
             _fmt_num(row["mean"]),
             _fmt_num(row["std"]),
             _fmt_num(row["q1"]),
@@ -624,6 +629,7 @@ def _build_checkpoint_eval_summary(
         ])
         csv_rows.append([
             row["algorithm"],
+            str(int(n_episodes)) if n_episodes is not None else "",
             f"{row['mean']:.6f}" if np.isfinite(row["mean"]) else "",
             f"{row['std']:.6f}" if np.isfinite(row["std"]) else "",
             f"{row['q1']:.6f}" if np.isfinite(row["q1"]) else "",
@@ -668,10 +674,11 @@ def _build_checkpoint_eval_summary(
     _safe_print(rendered_text)
     _safe_print("")
 
-    # ── Markdown (LaTeX table template) ──
-    md_path = os.path.join(output_dir, f"checkpoint_eval_summary_{RUN_TIMESTAMP}.md")
+    # ── LaTeX table template (saved as .txt so renderers don't try to parse it) ──
+    md_path = os.path.join(output_dir, f"checkpoint_eval_summary_{RUN_TIMESTAMP}.txt")
     if text_rows:
         algo_width = max(len(row["algorithm"]) for row in rows_data)
+        obs_width = max(len(n_obs_str), len("# Observations"))
         num_keys = ("mean", "std", "q1", "median", "q3")
         num_strs = {k: [_fmt_num(row[k]) for row in rows_data] for k in num_keys}
         num_widths = {k: max(len(s) for s in num_strs[k]) for k in num_keys}
@@ -679,6 +686,7 @@ def _build_checkpoint_eval_summary(
         for i, row in enumerate(rows_data):
             cells = [
                 row["algorithm"].ljust(algo_width),
+                n_obs_str.rjust(obs_width),
                 num_strs["mean"][i].rjust(num_widths["mean"]),
                 num_strs["std"][i].rjust(num_widths["std"]),
                 num_strs["q1"][i].rjust(num_widths["q1"]),
@@ -698,9 +706,9 @@ def _build_checkpoint_eval_summary(
         r"\begin{sc}",
         f"\\caption{{Statistical factors (truncation={truncation_caption})}}",
         f"\\label{{tab:results_summary_{truncation_int}}}",
-        r"\begin{tabular}{l r r r r r }",
+        r"\begin{tabular}{l r r r r r r }",
         r"\toprule",
-        r"\textbf{Algorithm} & \textbf{Mean}& \textbf{Std}& \textbf{Q1}& \textbf{Median}& \textbf{Q3}\\",
+        r"\textbf{Algorithm} & \textbf{\# Observations}& \textbf{Mean}& \textbf{Std}& \textbf{Q1}& \textbf{Median}& \textbf{Q3}\\",
         r"\midrule",
         body,
         r"\bottomrule",
@@ -748,13 +756,30 @@ def _build_checkpoint_eval_summary(
             ax.set_xticks(positions)
             ax.set_xticklabels(valid_algorithms)
             ax.set_ylabel("Done step")
-            ax.set_title(f"Checkpoint evaluation box plot (truncation={truncation_caption})")
+            ax.set_title(
+                f"Checkpoint evaluation box plot (truncation={truncation_caption}){title_suffix}",
+                multialignment="center",
+            )
             ax.grid(axis="y", linestyle="--", alpha=0.3)
             fig.tight_layout()
             boxplot_path = os.path.join(output_dir, f"checkpoint_eval_summary_boxplot_{RUN_TIMESTAMP}.png")
             fig.savefig(boxplot_path, dpi=300)
             plt.close(fig)
             print(f"Saved checkpoint evaluation box plot to: {boxplot_path}")
+
+            # Confidence band: when curves_confidence_interval is None we keep
+            # the original mean ± 1σ shading (≈ 68.27% under normality) and
+            # leave the CI line out of the title; otherwise we scale the band
+            # by the z-score matching the requested central probability.
+            if curves_confidence_interval is None:
+                ci_scale = 1.0
+                ci_title_suffix = ""
+            else:
+                from scipy.stats import norm as _norm
+                ci_fraction = float(curves_confidence_interval) / 100.0
+                ci_fraction = min(max(ci_fraction, 0.0), 0.999999)
+                ci_scale = float(_norm.ppf((1.0 + ci_fraction) / 2.0))
+                ci_title_suffix = f"\nCI: {curves_confidence_interval}%"
 
             fig, ax = plt.subplots(figsize=(max(10, 1.6 * len(rows_data)), 6))
             x_positions = np.arange(1, len(rows_data) + 1, dtype=float)
@@ -765,7 +790,7 @@ def _build_checkpoint_eval_summary(
                 std_value = float(row["std"])
                 if not np.isfinite(mean_value):
                     continue
-                margin = std_value if np.isfinite(std_value) else 0.0
+                margin = ci_scale * (std_value if np.isfinite(std_value) else 0.0)
                 lower = mean_value - margin
                 upper = mean_value + margin
                 color = palette(idx % palette.N)
@@ -782,7 +807,10 @@ def _build_checkpoint_eval_summary(
             ax.set_xticks(x_positions)
             ax.set_xticklabels([row["algorithm"] for row in rows_data])
             ax.set_ylabel("Done step")
-            ax.set_title(f"Checkpoint evaluation mean ± std (truncation={truncation_caption})")
+            ax.set_title(
+                f"Checkpoint evaluation mean ± std (truncation={truncation_caption}){ci_title_suffix}{title_suffix}",
+                multialignment="center",
+            )
             ax.grid(axis="y", linestyle="--", alpha=0.3)
             ax.legend(loc="best", fontsize=8)
             fig.tight_layout()
@@ -800,7 +828,7 @@ def _build_checkpoint_eval_summary(
     return {
         "rows": rows_data,
         "headers": headers,
-        "markdown_path": md_path,
+        "latex_path": md_path,
         "csv_path": csv_path,
         "boxplot_path": boxplot_path,
         "mean_std_plot_path": mean_ci_plot_path,
@@ -812,6 +840,7 @@ def run_actor_checkpoint_evaluation_exhaustive(
     *,
     included_algo_checkpoint_eval,
     max_eval_episode_length,
+    n_episodes,
     plot_smoothing_window=None,
     show_curve_smoothing_windows=None,
     separate_algorithm_plots=False,
@@ -820,6 +849,8 @@ def run_actor_checkpoint_evaluation_exhaustive(
     policy_evaluation_method=None,
     checkpoint_evaluation_plots=True,
     checkpoint_evaluation_analysis=True,
+    curves_confidence_interval=None,
+    plot_parameters=None,
 ):
     start_time = time.perf_counter()
     start_human = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -853,9 +884,15 @@ def run_actor_checkpoint_evaluation_exhaustive(
     if show_curve_smoothing_windows.size < 1:
         raise ValueError("show_curve_smoothing_windows must contain at least one value.")
 
-    n_episodes = int(cfg.get("n_episodes", 1000))
+    n_episodes = int(n_episodes)
     output_dir = os.path.abspath("Checkpoint Evaluation Trials")
     os.makedirs(output_dir, exist_ok=True)
+
+    # Optional centered title suffix: "\n#episodes: <n>" when enabled via
+    # plot_parameters; empty string otherwise (so titles look exactly as before).
+    plot_parameters = plot_parameters or {}
+    show_n_episodes_in_title = bool(plot_parameters.get("n_episodes", False))
+    title_suffix = f"\n#episodes: {n_episodes:,}" if show_n_episodes_in_title else ""
 
     algo_jobs = []
     for algo_upper in enabled_algos:
@@ -990,7 +1027,7 @@ def run_actor_checkpoint_evaluation_exhaustive(
                             "algo_upper": algo_upper,
                             "policy_method": method_filter,
                             "window": window,
-                            "plot": LearningCurvePlot(title=f"{title_prefix} checkpoint evaluation - {suffix_label}"),
+                            "plot": LearningCurvePlot(title=f"{title_prefix} checkpoint evaluation - {suffix_label}{title_suffix}"),
                         }
                     )
     else:
@@ -1005,7 +1042,7 @@ def run_actor_checkpoint_evaluation_exhaustive(
                     {
                         "policy_method": method_filter,
                         "window": window,
-                        "plot": LearningCurvePlot(title=f"{title_prefix} - {suffix_label}"),
+                        "plot": LearningCurvePlot(title=f"{title_prefix} - {suffix_label}{title_suffix}"),
                     }
                 )
 
@@ -1059,7 +1096,8 @@ def run_actor_checkpoint_evaluation_exhaustive(
                 combined_fig, axes = plt.subplots(1, 2, figsize=(14, 6))
                 suptitle_method = f" [{method_filter}]" if method_filter is not None else ""
                 combined_fig.suptitle(
-                    f"Twin_{plot_filename_tag}{suptitle_method} (w={desired_windows[0]} and w={desired_windows[1]})"
+                    f"Twin_{plot_filename_tag}{suptitle_method} (w={desired_windows[0]} and w={desired_windows[1]}){title_suffix}",
+                    multialignment="center",
                 )
                 for ax, w in zip(axes, desired_windows):
                     for series_key, done_steps in results_by_series.items():
@@ -1111,6 +1149,9 @@ def run_actor_checkpoint_evaluation_exhaustive(
                 multi_methods=multi_methods,
                 output_dir=output_dir,
                 max_eval_episode_length=max_eval_episode_length,
+                curves_confidence_interval=curves_confidence_interval,
+                n_episodes=n_episodes,
+                title_suffix=title_suffix,
             )
         except Exception as exc:
             print(f"[summary] Failed to build checkpoint evaluation summary: {exc}")

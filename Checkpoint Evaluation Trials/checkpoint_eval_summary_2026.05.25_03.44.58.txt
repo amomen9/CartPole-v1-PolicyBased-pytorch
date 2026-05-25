@@ -1,0 +1,24 @@
+\begin{table}[t]
+\vskip 0.15in
+\begin{center}
+\begin{small}
+\begin{sc}
+\caption{Statistical factors (truncation=500)}
+\label{tab:results_summary_500}
+\begin{tabular}{l r r r r r r }
+\toprule
+\textbf{Algorithm} & \textbf{\# Observations}& \textbf{Mean}& \textbf{Std}& \textbf{Q1}& \textbf{Median}& \textbf{Q3}\\
+\midrule
+A2C (softmax) &          1,000 & 499.72 &  6.15 & 500.00 & 500.00 & 500.00 \\
+A2C (argmax)  &          1,000 & 500.00 &  0.00 & 500.00 & 500.00 & 500.00 \\
+DQN (softmax) &          1,000 & 496.52 & 33.50 & 500.00 & 500.00 & 500.00 \\
+DQN (argmax)  &          1,000 & 500.00 &  0.00 & 500.00 & 500.00 & 500.00 \\
+PPO (softmax) &          1,000 & 498.09 & 25.69 & 500.00 & 500.00 & 500.00 \\
+PPO (argmax)  &          1,000 & 500.00 &  0.00 & 500.00 & 500.00 & 500.00 \\
+\bottomrule
+\end{tabular}
+\end{sc}
+\end{small}
+\end{center}
+\vskip -0.1in
+\end{table}
