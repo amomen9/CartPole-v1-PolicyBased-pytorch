@@ -24,7 +24,6 @@
 
 % If accepted, instead use the following line for the camera-ready submission:
 \usepackage[accepted]{icml2025}
-\setcitestyle{numbers,square}
 
 % For theorems and such
 \usepackage{amsmath}
@@ -63,7 +62,7 @@
 \begin{document}
 
 \twocolumn[
-\icmltitle{Proximal Policy Optimisation with Generalised Advantage Estimation applied to CartPole}
+\icmltitle{Proximal Policy Optimisation (PPO) applied to CartPole}
 
 \icmlsetsymbol{equal}{*}
 
@@ -83,31 +82,31 @@
 \printAffiliationsAndNotice{}
 
 \begin{abstract}
-This report studies Proximal Policy Optimisation (PPO), a state-of-the-art on-policy actor-critic algorithm, applied to the CartPole environment. We motivate and derive the \textbf{clipped surrogate policy} loss and the value loss, and we relate them to the vanilla policy gradient used in \textbf{REINFORCE}, \textbf{AC} and \textbf{A2C}. We implement the \textbf{PPO-clipped algorithm} strengthened with \textbf{Generalised Advantage Estimation (GAE)}, as well, as our advantage estimator. Then the resulting learning curves are compared against the baseline given in Assignment 2, DQN, AC and A2C and we observe how PPO with GAE performs trying to attain the CartPole optimum  across repetitions of the studied methods.
+This report studies Proximal Policy Optimisation (\textbf{PPO}), a state-of-the-art on-policy actor-critic algorithm, applied to the CartPole environment. We motivate and derive the clipped surrogate policy loss and the value loss, and we relate them to the vanilla policy gradient used in \textbf{REINFORCE}, \textbf{AC} and \textbf{A2C}. We implement PPO-clipped strengthened with \textbf{Generalised Advantage Estimation (GAE)} as our advantage estimator. The resulting learning curves are compared against the baseline given in Assignment 2, DQN, AC and A2C, and we observe how PPO with GAE performs in attaining the CartPole optimum across repetitions of the studied methods.
 \end{abstract}
 
 \section{Introduction}\label{sec:introduction}
 
-In previous assignments we covered the main building blocks of deep reinforcement learning: a \textbf{pure value-based method} (\textbf{DQN}), a \textbf{pure policy-gradient method} (\textbf{REINFORCE}) and two \textbf{hybrid actor-critic methods} (\textbf{AC} and \textbf{A2C}). While these algorithms cleanly illustrate the trade-off between bias and variance in policy-gradient estimation, none of them is state-of-the-art. In particular, vanilla policy-gradient updates suffer from two practical issues: 
+In previous assignments we covered the main building blocks of deep reinforcement learning: a pure value-based method (\textbf{DQN}), a pure policy-gradient method (\textbf{REINFORCE}) and two hybrid actor-critic methods (\textbf{AC} and \textbf{A2C}). While these algorithms cleanly illustrate the trade-off between bias and variance in policy-gradient estimation, none of them is state-of-the-art. In particular, vanilla policy-gradient updates suffer from two practical issues:
 \begin{enumerate}
-    \item each interaction with the environment is used for exactly one gradient step, which is \textbf{sample-inefficient}, 
-    \item Unbounded importance weights produced by larger step sizes destabilise training. 
+    \item each interaction with the environment is used for exactly one gradient step, which is sample-inefficient,
+    \item unbounded importance weights produced by larger step sizes destabilise training.
 \end{enumerate}
-\textbf{Proximal Policy Optimisation} (PPO) addresses both issues by reusing each batch of on-policy data for several gradient epochs (by Sutton \& Barto's definition of off-policy, running off-policy for K batches, but according to the common definition it is on-policy, because it reuses still fresh samples and is not similar to \textbf{Experience Replay} we had before which uses arbitrarily old samples) and by \textbf{clipping} the \textbf{importance sampling ratio} so that the new policy never strays too far from the policy that collected the data.
-In addition to the base PPO algorithm, we also have used \textbf{Generalised Advantage Estimation (GAE)} \cite{schulman2016gae} extension for the \textbf{advantage estimator}. There are other extensions such as adding entropy but are not studied in this report. \autoref{sec:theory} introduces the relevant equations, derives the clipped objective from the policy-gradient objective used in A2C, and presents the algorithm pseudocode. \autoref{sec:experiments} describes the environment and experimental design. The learning curves are reported in \autoref{sec:results} and analysed in \autoref{sec:discussion}. We conclude in \autoref{sec:conclusion}.
+\textbf{Proximal Policy Optimisation} (PPO) addresses both issues by reusing each batch of on-policy data for several gradient epochs (by Sutton \& Barto's definition of off-policy, running off-policy for $K$ batches, but according to the common definition it is on-policy, because it reuses still fresh samples and is not similar to the Experience Replay we had before which uses arbitrarily old samples) and by clipping the importance sampling ratio so that the new policy never strays too far from the policy that collected the data.
+In addition to the base PPO algorithm, we also use the \textbf{Generalised Advantage Estimation (GAE)} \cite{schulman2016gae} extension for the advantage estimator. Other extensions such as an entropy bonus exist but are not studied in this report. \autoref{sec:theory} introduces the relevant equations, derives the clipped objective from the policy-gradient objective used in A2C, and presents the algorithm pseudocode. \autoref{sec:experiments} describes the environment and experimental design. The learning curves are reported in \autoref{sec:results} and analysed in \autoref{sec:discussion}. We conclude in \autoref{sec:conclusion}.
 
 \section{Theory}\label{sec:theory}
 
 \subsection{From policy gradient to PPO}\label{sec:theory:pg}
 
-A stochastic policy $\pi_\theta(a|s)$ assigns a probability to each action $a$ in state $s$ given parameters $\theta\in\mathbb{R}^{d}$. The objective is the expected discounted return $J(\theta)=\mathbb{E}_{\tau\sim\pi_\theta}\!\left[\sum_{t=0}^{H-1}\gamma^t r_t\right]$ where $\gamma\in[0,1]$ is the discount factor and $\tau=\{s_0,a_0,r_0,\dots,s_N\}$ is a trajectory of $N$ sampled from $\pi_\theta$. The policy-gradient theorem expresses its gradient as
+A stochastic policy $\pi_\theta(a|s)$ assigns a probability to each action $a$ in state $s$ given parameters $\theta\in\mathbb{R}^{d}$. The objective is the expected discounted return $J(\theta)=\mathbb{E}_{\tau\sim\pi_\theta}\!\left[\sum_{t=0}^{H-1}\gamma^t r_t\right]$ where $\gamma\in[0,1]$ is the discount factor and $\tau=\{s_0,a_0,r_0,\dots,s_N\}$ is a trajectory of $N$ steps sampled from $\pi_\theta$. The policy-gradient theorem expresses its gradient as
 \begin{equation}
     \nabla_\theta J(\theta) = \mathbb{E}_{\tau\sim\pi_\theta}\!\left[\sum_{t=0}^{N-1} \hat A_t \nabla_\theta \log\pi_\theta(a_t|s_t)\right],
     \label{eq:pg}
 \end{equation}
 where $\hat A_t$ is an advantage estimator of action $a_t$ in state $s_t$. REINFORCE uses the Monte-Carlo return $\hat A_t=\hat Q(s_t,a_t)$; AC additionally subtracts a baseline; A2C uses the $n$-step advantage $\hat A_n(s_t,a_t)=\hat Q_n(s_t,a_t)-V_\varphi(s_t)$ where $V_\varphi$ is the critic estimated by parameters $\varphi$.
 
-PPO retains \cref{eq:pg} but does \emph{not} apply the resulting update in a single gradient step. Instead, a batch of on-policy transitions is reused for $K$ epochs (rewarding us with more sampling efficiency). Because the policy changes between epochs, the data are off-policy with respect to $\pi_\theta$. PPO compensates with an importance \textbf{ratio}
+PPO retains \cref{eq:pg} but does \emph{not} apply the resulting update in a single gradient step. Instead, a batch of on-policy transitions is reused for $K$ epochs (rewarding us with more sampling efficiency). Because the policy changes between epochs, the data are off-policy with respect to $\pi_\theta$. PPO compensates with an importance ratio
 \begin{equation}
     r_t(\theta) = \frac{\pi_\theta(a_t|s_t)}{\pi_{\theta_{\mathrm{old}}}(a_t|s_t)},
     \label{eq:ratio}
@@ -122,9 +121,9 @@ A large $r_t(\theta)$ together with a positive $\hat A_t$ can cause arbitrarily 
     \!L^{\mathrm{CLIP}}\!(\theta)\! =\! \mathbb{E}_t\!\left[\min\!\big(r_t(\theta)\hat A_t,\,\mathrm{clip}(r_t(\theta),1\!-\!\epsilon,1\!+\!\epsilon)\hat A_t\big)\right]\!\!,
     \label{eq:clip}
 \end{equation}
-where $\epsilon\in(0,1)$ is the clipping range. The $\min$ ensures that the gradient vanishes (is clipped) once the ratio leaves $[1-\epsilon,1+\epsilon]$ in the direction that would otherwise improve the surrogate, so the new policy is bound to stay within a small neighbourhood of $\pi_{\theta_{\mathrm{old}}}$. The actor parameters are updated by gradient ascent (or descent) on \cref{eq:clip}.
+where $\epsilon\in(0,1)$ is the clipping range. The $\min$ ensures that the gradient vanishes once the ratio leaves $[1-\epsilon,1+\epsilon]$ in the direction that would otherwise improve the surrogate, so the new policy is bound to stay within a small neighbourhood of $\pi_{\theta_{\mathrm{old}}}$. The actor parameters are updated by gradient ascent on \cref{eq:clip}.
 
-The expectations in \cref{eq:cpi}--\cref{eq:clip} are estimated from a fixed-length \emph{rollout buffer} of $T$ on-policy transitions $\{(s_t,a_t,r_t)\}_{t=0}^{T-1}$ collected by $\pi_{\theta_{\mathrm{old}}}$ before each update; the buffer may span several episodes when an episode is shorter than $T$, or be \textbf{truncated} mid-episode when it is longer. The rollout length $T$ (written in the code as rollout\_steps) is a hyperparameter and trades two opposing effects: larger $T$ lowers the variance of the empirical advantages and of the ratio statistics (bias favor), but it also lets the policy drift further from $\pi_{\theta_{\mathrm{old}}}$ over the $K$ epochs of updates, increasing the importance-sampling bias that the clipping in \cref{eq:clip} must absorb.
+The expectations in \cref{eq:cpi}--\cref{eq:clip} are estimated from a fixed-length \emph{rollout buffer} of $T$ on-policy transitions $\{(s_t,a_t,r_t)\}_{t=0}^{T-1}$ collected by $\pi_{\theta_{\mathrm{old}}}$ before each update; the buffer may span several episodes when an episode is shorter than $T$, or be truncated mid-episode when it is longer. The rollout length $T$ (written in the code as rollout\_steps) is a hyperparameter and trades two opposing effects: larger $T$ lowers the variance of the empirical advantages and of the ratio statistics (bias favor), but it also lets the policy drift further from $\pi_{\theta_{\mathrm{old}}}$ over the $K$ epochs of updates, increasing the importance-sampling bias that the clipping in \cref{eq:clip} must absorb.
 
 The number of epochs $K$ is what makes the clipping in \cref{eq:clip} effective: At $K=1$ a single gradient step keeps $r_t(\theta)$ inside $[1-\epsilon,1+\epsilon]$, leaving the $\min$ and $\mathrm{clip}$ in \cref{eq:clip} as ineffective, so the surrogate is in expectation \cref{eq:cpi} and PPO degenerates to A2C-with-GAE on a fixed rollout. Choosing $K>1$ therefore trades sample efficiency against the divergence between $\pi_\theta$ and $\pi_{\theta_{\mathrm{old}}}$: each additional epoch extracts more gradient signal from the same $T$ transitions, but it also pushes more samples to the clip boundary where their gradient vanishes, so for sufficiently large $K$ the policy stops improving even though gradient steps are still being taken.
 
@@ -137,7 +136,7 @@ Actor and critic are optimised independently with learning rates $\alpha$ and $\
 
 \subsection{Generalised Advantage Estimation}\label{sec:theory:gae}
 
-A2C estimates the advantage at depth $n$ as $\hat A_n(s_t,a_t)=\hat Q_n(s_t,a_t)-V_\varphi(s_t)$. The choice of $n$ trades \textbf{bias} against \textbf{variance}: small $n$ is low-variance (like \textbf{TD(0)} that we had) but \textbf{high-bias}, large $n$ is the \textbf{converse}. GAE \cite{schulman2016gae} interpolates between all depths with a single hyperparameter $\lambda\in[0,1]$. With the TD-residual $\delta_t = r_t + \gamma V_\varphi(s_{t+1}) - V_\varphi(s_t)$, the GAE advantage is the exponentially-weighted sum (geometric sum)
+A2C estimates the advantage at depth $n$ as $\hat A_n(s_t,a_t)=\hat Q_n(s_t,a_t)-V_\varphi(s_t)$. The choice of $n$ trades \textbf{bias} against \textbf{variance}: small $n$ is low-variance (like TD(0) that we had) but high-bias, large $n$ is the converse. GAE \cite{schulman2016gae} interpolates between all depths with a single hyperparameter $\lambda\in[0,1]$. With the TD-residual $\delta_t = r_t + \gamma V_\varphi(s_{t+1}) - V_\varphi(s_t)$, the GAE advantage is the exponentially-weighted sum (geometric sum)
 {\setlength{\abovedisplayskip}{6pt}%
 \setlength{\belowdisplayskip}{15pt}%
 \setlength{\abovedisplayshortskip}{6pt}%
@@ -150,7 +149,7 @@ $\lambda=0$ reduces to the one-step TD(0) advantage; $\lambda=1$ reduces to the 
 
 \subsection{Algorithm and relation to AC/A2C}\label{sec:theory:alg}
 
-\autoref{alg:PPO} collects the components above. Compared to A2C (\autoref{alg:A2C-ref}), the structural differences are (i) PPO collects a fixed rollout of $T$ steps that may span several episodes before updating, whereas A2C updates per episode (or per $n$-step) \textbf{once}; (ii) PPO uses GAE (in my report) \cref{eq:gae} rather than an $n$-step advantage; (iii) PPO performs $K$ full-batch gradient passes over the same rollout, replacing the unbounded log-probability gradient by the clipped ratio surrogate \cref{eq:clip}. These three changes turn the on-policy actor-critic update into a sample-efficient, stable update at modest implementation cost.
+\autoref{alg:PPO} collects the components above. Compared to A2C (\autoref{alg:A2C-ref}), the structural differences are (i) PPO collects a fixed rollout of $T$ steps that may span several episodes before updating, whereas A2C performs a single update per episode (or per $n$-step rollout); (ii) PPO uses GAE \cref{eq:gae} rather than an $n$-step advantage; (iii) PPO performs $K$ full-batch gradient passes over the same rollout, replacing the unbounded log-probability gradient by the clipped ratio surrogate \cref{eq:clip}. These three changes turn the on-policy actor-critic update into a sample-efficient, stable update at modest implementation cost.
 
 \begingroup
 \setlength{\intextsep}{30pt}
@@ -206,20 +205,20 @@ We use the CartPole-v1 environment again.
 We implement PPO-clipped following \autoref{alg:PPO}. The actor and critic are independent fully-connected networks. The implementation contains exactly one addition beyond the basic PPO policy-gradient method, and it is part of the algorithm \autoref{alg:PPO}:
 
 \begin{itemize}
-    \item \textbf{Generalised Advantage Estimation} (\cref{eq:gae}) is used to compute $\hat A_t$ from the rollout. Our implementation iterates backwards through the buffer with the standard recurrence $\hat A_t = \delta_t + \gamma\lambda\,(1-d_t)\,\hat A_{t+1}$, where $d_t$ is the\textbf{ terminal flag}, so that the bootstrap from $V_\varphi$ is \textbf{zeroed} at the end of an episode.
+    \item \textbf{Generalised Advantage Estimation} (\cref{eq:gae}) is used to compute $\hat A_t$ from the rollout. Our implementation iterates backwards through the buffer with the standard recurrence $\hat A_t = \delta_t + \gamma\lambda\,(1-d_t)\,\hat A_{t+1}$, where $d_t$ is the terminal flag, so that the bootstrap from $V_\varphi$ is zeroed at the end of an episode.
 \end{itemize}
 
 Each of the $K$ inner epochs is a single full-batch gradient step on the entire rollout.
 
 \subsection{Experimental setup}\label{sec:experiments:setup}
 
-Each configuration is trained for \textbf{$10^{6}$ environment steps} (n\_timesteps). \textbf{Returns} are recorded every \textbf{$250$ steps} (eval\_interval). Each learning curve is averaged over \textbf{5 (n\_repetitions)} independent seeds; we report the mean and a Student-$t$ confidence band around it for the curves. We have reduced the confidence interval for the curves to \textbf{80\% for a better and distinguishable visual demonstration} and for confidence intervals of the multiple curves to \textbf{less overlap}. Curves shown in the main text are smoothed with a suitable smoothing window. As in Assignments 2 and 3, \textbf{learning rate} and network widths were tuned first; the other HP were then varied around reasonable defaults. The optimal setting used in \autoref{fig:main_result} is:
-\textbf{ $\alpha=3\!\times\!10^{-4}$, $\beta=10^{-2}$, $\gamma=0.99$, $\lambda=0.95$, $\epsilon=0.1$, rollout $T=512$, $K=30$} \textbf{epochs}, two hidden layers of \textbf{$128$ units} in the actor network and two \textbf{512-unit} hidden layers in the critic network. 
-We choose $T$ as a power of 2 by convention and compliance, inherited from the original PPO implementation (by Schulman): my algorithm does not require it, but powers of \textbf{2} align rollout and mini-batch (that is not implemented in this report) tensors with the multiples of $32$ used by GPU tensor cores, which is the standard deep-learning batching convention.
+Each configuration is trained for $10^{6}$ environment steps (n\_timesteps). Returns are recorded every $250$ steps (eval\_interval). Each learning curve is averaged over \textbf{5} independent seeds (n\_repetitions); we report the mean and a Student-$t$ confidence band around it. We use an \textbf{80\%} confidence band rather than the more standard $95\%$ to keep multiple overlapping curves visually distinguishable. Curves shown in the main text are smoothed with a suitable smoothing window. As in Assignments 2 and 3, the \textbf{learning rate} and network widths were tuned first; the other HP were then varied around reasonable defaults. The optimal setting used in \autoref{fig:main_result} is:
+\textbf{$\alpha=3\!\times\!10^{-4}$, $\beta=10^{-2}$, $\gamma=0.99$, $\lambda=0.95$, $\epsilon=0.1$, rollout $T=512$, $K=30$ epochs}, two hidden layers of $128$ units in the actor network and two $512$-unit hidden layers in the critic network.
+We choose $T$ as a power of $2$ by convention, inherited from the original PPO implementation (Schulman): the algorithm does not require it, but powers of $2$ align rollout and mini-batch (the latter is not implemented in this report) tensors with the multiples of $32$ used by GPU tensor cores, which is the standard deep-learning batching convention.
 
 \section{Results}\label{sec:results}
 
-\autoref{fig:main_result} compares \textbf{PPO} against the \textbf{baseline} provided with assignment 2, \textbf{DQN}, and \textbf{A2C} from Assignment 3.
+\autoref{fig:main_result} compares \textbf{PPO} against the baseline provided with Assignment 2, \textbf{DQN}, and \textbf{A2C} from Assignment 3.
 
 \begingroup
 \setlength{\intextsep}{15pt}
@@ -229,7 +228,7 @@ We choose $T$ as a power of 2 by convention and compliance, inherited from the o
     \centering
     \includegraphics[width=0.99\linewidth]{DQN-A2C-PPO_w101-smoothed_2026.05.19_21.44.53.png}
     \vspace{-0.3cm}
-    \caption{Learning curves on CartPole-v1. \textbf{PPO with GAE (this work)} compared to \textbf{A2C}, \textbf{DQN} and the \textbf{baseline}. PPO \textbf{tuned} HP in \autoref{sec:experiments:setup}; DQN and A2C \textbf{tuned} HP in the appendix \autoref{sec:appendix:hpo2and3} for brevity.}
+    \caption{Learning curves on CartPole-v1. \textbf{PPO with GAE} (this work) compared to A2C, DQN and the baseline. Tuned PPO HP in \autoref{sec:experiments:setup}; tuned DQN and A2C HP in the appendix \autoref{sec:appendix:hpo2and3} for brevity.}
     \label{fig:main_result}
 \end{figure}
 \endgroup
@@ -242,7 +241,7 @@ We choose $T$ as a power of 2 by convention and compliance, inherited from the o
     \centering
     \includegraphics[width=0.99\linewidth]{PPO_w201-smoothed_alpha_2026.05.18_10.07.20.png}
     \vspace{-0.3cm}
-    \caption{Effect of the "\textbf{actor learning rate $\alpha$}" on \textbf{PPO with GAE} in CartPole-v1. Too-large learning rates cause the clipped surrogate to saturate at $\pm\epsilon$ and the policy stops improving}
+    \caption{Effect of the \textbf{actor learning rate $\alpha$} on PPO with GAE in CartPole-v1. Too-large learning rates cause the clipped surrogate to saturate at $\pm\epsilon$ and the policy stops improving.}
     \label{fig:hp_lr}
 \end{figure}
 \endgroup
@@ -253,7 +252,7 @@ We choose $T$ as a power of 2 by convention and compliance, inherited from the o
     \centering
     \includegraphics[width=0.99\linewidth]{PPO_w351-smoothed_Lambda_2026.05.19_15.42.25.png}
     \vspace{-0.3cm}
-    \caption{Effect of the "\textbf{GAE parameter $\lambda$}" on \textbf{PPO with GAE} in CartPole-v1. $\lambda=1$ recovers the \textbf{Monte-Carlo} advantage as in AC; $\lambda=0$ recovers the one-step \textbf{TD(0)} advantage. Tested values are \{0 ,0.8 ,0.95 ,1\}. Other HP in \autoref{sec:experiments:setup}.}
+    \caption{Effect of the \textbf{GAE parameter $\lambda$} on PPO with GAE in CartPole-v1. $\lambda=1$ recovers the Monte-Carlo advantage as in AC; $\lambda=0$ recovers the one-step TD(0) advantage. Tested values are $\{0, 0.8, 0.95, 1\}$. Other HP in \autoref{sec:experiments:setup}.}
     \label{fig:hp_lambda}
 \end{figure}
 \endgroup
@@ -261,27 +260,28 @@ We choose $T$ as a power of 2 by convention and compliance, inherited from the o
 \section{Discussion}\label{sec:discussion}
 
 \paragraph{Comparison with AC, A2C and DQN.}
-\autoref{fig:main_result} shows that \textbf{PPO with GAE} reaches the optimum return of $500$ in fewer environment interactions and with a substantially narrower confidence band than \textbf{A2C} and \textbf{DQN} both. Two factors plausibly drive the variance improvement over A2C: \textbf{rollout reuse reduces gradient variance per environment step}, and the \textbf{clipped surrogate prevents the destructive large updates} that we observed as mild dips in the A2C curve in Assignment 3 before it converges. The behavior over DQN is consistent with what we already observed for the policy-gradient family in Assignment 3 - the on-policy character \textbf{better matches} the structure of CartPole's bounded, low-dimensional state space.
+\autoref{fig:main_result} shows that \textbf{PPO with GAE} reaches the optimum return of $500$ in fewer environment interactions and with a substantially narrower confidence band than both A2C and DQN. Two factors plausibly drive the variance improvement over A2C: rollout reuse reduces gradient variance per environment step, and the clipped surrogate prevents the destructive large updates that we observed as mild dips in the A2C curve in Assignment 3 before it converges. The behavior over DQN is consistent with what we already observed for the policy-gradient family in Assignment 3 -- the on-policy character better matches the structure of CartPole's bounded, low-dimensional state space.
 
 \paragraph{Hyperparameter sensitivity.}
-The optimal hyperparameter configurations of all of the algorithms are on \textbf{Experiment.py} of the assignment.
-During every hyperparameter sweeping trial, only the hyperparameter that is mentioned on the plot's legend has been sweeped for an optimal value and other hyperparameters have been kept \textbf{static} for better recognition.
-The \textbf{learning rate} is by far the most important hyperparameter (\autoref{fig:hp_lr}). Consequently, although the sweep values are relatively close, the curve deviations are considerable. This is in line with the general intuition that learning rates dominate in RL. The GAE parameter $\lambda$ (\autoref{fig:hp_lambda}) shows the expected bias-variance pattern: $\lambda=1$ inherits the high variance of the Monte-Carlo advantage which has the highest curve instability, while $\lambda=0$ inherits the high bias of the one-step TD(0) advantage; values around $0.96$ are a good compromise on CartPole. The clipping range $\epsilon$ is far less sensitive, which mirrors the original PPO ablation.
+The optimal hyperparameter configurations of all the algorithms are in \texttt{Experiment.py} of the assignment.
+During every hyperparameter sweep, only the hyperparameter named in the plot's legend was varied; all other hyperparameters were held fixed for clearer comparison.
+The \textbf{learning rate} is by far the most important hyperparameter (\autoref{fig:hp_lr}). Consequently, although the sweep values are relatively close, the curve deviations are considerable. This is in line with the general intuition that learning rates dominate in RL. The GAE parameter $\lambda$ (\autoref{fig:hp_lambda}) shows the expected bias-variance pattern: $\lambda=1$ inherits the high variance of the Monte-Carlo advantage and shows the highest curve instability, while $\lambda=0$ inherits the high bias of the one-step TD(0) advantage; values around $0.95$ are a good compromise on CartPole. The clipping range $\epsilon$ is far less sensitive, which mirrors the original PPO ablation.
 
 \paragraph{Weaknesses and challenges.}
-Our setup has several limitations. 
+Our setup has several limitations.
 \begin{enumerate}
-    \item Five seeds are sufficient to detect large effects but are too few to \textbf{resolve overlapping confidence intervals}, e.g.\ when comparing $\lambda=0.9$ and $\lambda=0.95$. \item with respect to the generalization of PPO algorithm's applications, another limitation is the one that CartPole environment inherently imposes itself. \textbf{CartPole is generally solved by very small networks}, just like our experiments in this course; conclusions about $\epsilon$ or $\lambda$ may not be transferable to higher-dimensional and \textbf{more sophisticated environments}. Other environments also might require different tuned hyperparameters.
-    \item  By not having additional common \textbf{engineering tricks}, we cannot claim that our numbers represent the best achievable PPO performance on this domain.
-
+    \item Five seeds are sufficient to detect large effects but are too few to resolve overlapping confidence intervals, e.g.\ when comparing $\lambda=0.9$ and $\lambda=0.95$.
+    \item With respect to the generalisation of the PPO algorithm's applications, another limitation is the one that the CartPole environment inherently imposes. CartPole is generally solved by very small networks, just as in our experiments in this course; conclusions about $\epsilon$ or $\lambda$ may not be transferable to higher-dimensional and more sophisticated environments. Other environments may also require different tuned hyperparameters.
+    \item By not employing additional common engineering tricks, we cannot claim that our numbers represent the best achievable PPO performance on this domain.
 \end{enumerate}
 
 \section{Conclusion}\label{sec:conclusion}
 
-We implemented\textbf{ PPO-clipped with GAE} and compared it on CartPole against the \textbf{baseline}, \textbf{DQN}, and \textbf{A2C}. The clipped surrogate and rollout reuse together explain the \textbf{empirical advantage} of PPO over A2C, while GAE controls the \textbf{bias-variance} trade-off without introducing additional hyperparameters. \textbf{Reflecting on the assignments}, we observed a \textbf{consistent progression}: value-only DQN, policy-only REINFORCE, advantage-based A2C, and finally PPO with GAE, each step trading additional algorithmic complexity for measurable empirical gains. 
+We implemented \textbf{PPO-clipped with GAE} and compared it on CartPole against the baseline, DQN, and A2C. The clipped surrogate and rollout reuse together explain the empirical advantage of PPO over A2C, while GAE controls the bias--variance trade-off without introducing additional hyperparameters. Reflecting on the assignments, we observed a consistent progression: value-only DQN, policy-only REINFORCE, advantage-based A2C, and finally PPO with GAE, each step trading additional algorithmic complexity for measurable empirical gains.
 \subsection{Future work}
 \begin{itemize}
-    \item Re-introducing the \textbf{engineering tricks} we have not employed (entropy bonus, value clipping, normalisation, gradient clipping) one at a time to quantify their individual contributions,
+    \item Rectify the tiny fluctuations of PPO on the convergence line (which might be resolved by the next step)
+    \item Re-introducing the engineering tricks we have not employed (entropy bonus, value clipping, normalisation, gradient clipping) one at a time to quantify their individual contributions,
     \item Moving to a continuous-control and more complex benchmark where PPO's advantage over A2C is expected to be larger.
     \item Solving other form of problems with the algorithms that we have learned, as a means for real-world problem solutions.
 \end{itemize}
@@ -295,7 +295,7 @@ We implemented\textbf{ PPO-clipped with GAE} and compared it on CartPole against
 \appendix{}
 
 \section{Shared (global) hyperparameters}
-\\
+
 Repetitions per config $= 5$, total timesteps $= 10^{6}$, max train/eval episode length $= 500$, evaluation interval $= 250$ steps, evaluation episodes per checkpoint $= 5$.
 
 
@@ -355,14 +355,14 @@ We provide the remaining hyperparameter sweeps. Each curve is averaged over five
     \centering
     \includegraphics[width=0.99\columnwidth]{PPO_w251-smoothed_Gamma_2026.05.18_22.14.17.png}
     \vspace{-0.3cm}
-    \caption{Effect of the "\textbf{\gamma}" parameter on PPO with GAE in CartPole-v1. All other hyperparameters fixed to the values in \autoref{sec:experiments:setup}. Mean of five repetitions, shaded $80\%$ confidence intervals, smoothed.}
+    \caption{Effect of the $\gamma$ parameter on PPO with GAE in CartPole-v1. All other hyperparameters fixed to the values in \autoref{sec:experiments:setup}. Mean of five repetitions, shaded $80\%$ confidence intervals, smoothed.}
     \label{fig:hp_gamma}
 \end{figure}
 
 
 \section{Tuned hyperparamenters from Assignment 2 and 3}\label{sec:appendix:hpo2and3}
 
-Here are the hyperparameters that were used and reported in assingments 2 and 3:
+Here are the hyperparameters that were used and reported in Assignments 2 and 3:
 \textbf{DQN} \\
 $\gamma = 0.99$, $\alpha = 10^{-3}$, NN widths $= [128, 128]$, exploration $=$ $\epsilon$-greedy, $\epsilon = 0.05$, target network active (step $= 100$), experience replay active (buffer size $= 80{,}000$, batch size $= 64$, min replay size $= 2{,}000$, train frequency $= 1$, replay ratio $= 1.0$).
 
@@ -375,8 +375,158 @@ $\gamma = 0.99$, actor $\alpha = 10^{-3}$, actor hidden layers $= [64, 64]$, cri
 \textbf{A2C} \\
 $\gamma = 0.99$, actor $\alpha = 10^{-4}$, actor hidden layers $= [64, 64]$, critic $\beta = 10^{-2}$, critic hidden layers $= [128, 128]$, bootstrap step $n = 10$.
 
-\subsection{Extra work}
+\section{Extra Notes}
 
-After the $10^6$ training was complete, I save the checkpoints and ran $10^6$ timesteps through the experiments again using those checkpoint at the start point to see how \textbf{stable} the training ended up to be. Stability cannot be checked with the first training, because at the beginning it obviously starts at very low returns, and this skews the mean and standard deviation (This check is for being \textbf{stable}\textbf{/convergent}, not necessarily the quality of the training or global optimality)  
+\subsection{CartPole survival above 500}
+Our algorithms have been trained with a \textbf{truncation} of \textbf{500} agent steps. In the CartPole problem we try to maximise survival time (the pole must remain vertical), but many algorithms hit the $500$ cap and their additional survival, had they continued running, is clipped. In other words, the algorithm is trained to help the agent survive for $500$ steps, but it is capable of doing so for much longer.
+An intuition arises here as to whether a policy that can survive much more than some threshold is even more reliable at that threshold (since policies are typically rolled out stochastically), though this requires further study.
+We must keep in mind that there are \textbf{two truncation values} that must not be confused: one applies during \textbf{policy training} and improvement, the other applies to \textbf{policy evaluation} runs. The former retains its original value of $500$, but the latter is increased in the experiments described in this section.
+The following curves reveal several interesting facts:
+\begin{itemize}
+    \item For different truncation values, different \textbf{hyperparameter optimisation} is needed.
+    \item Some algorithms might appear to perform worse at $500$, but at higher values they would surpass others.
+    \item This makes hyperparameter tuning even harder when more than one evaluation horizon must be considered for the same problem.
+\end{itemize}
+\begin{figure}
+    \centering
+    \includegraphics[width=0.99\columnwidth]{DQN-A2C-PPO_w351-smoothed_2026.05.22_17.37.04.png}
+    \caption{CHP=False indicates that network checkpoints are not loaded to start training. Training truncation = $500$; evaluation truncation = \textbf{20{,}000}.}
+    \label{fig:algos_20000}
+\end{figure}
+
+\subsection{Using trained networks}
+Learning curves only show how efficient the training procedure is. Eventually we need to use our trained estimator functions for real-world deployment (or for mild on-site fine-tuning).
+For \textbf{Actor-Critic} algorithms, only the \textbf{Actor} is needed at inference, because the \textbf{Critic} was designed to adjust the Actor which ultimately defines our policy (if training is to continue later, the Critic estimator should also be retained). For \textbf{DQN}, there is no explicit policy estimator, but the learned Q-value estimator can be used to derive an action from the estimated Q values via a function such as \textbf{softmax} or \textbf{argmax}. For tabular methods, this derivation can be done using the Value Table.
+
+At the end of training, we keep the checkpoint files of the estimators. The purpose is to \textbf{run the agent} through the environment using only the checkpoint (no further training) and observe how well the estimators perform -- which depends on the algorithm and its chosen hyperparameters, such as the network architectures.
+
+The networks output \textbf{logits}. These logits can be converted to probabilities via \textbf{softmax} (or sigmoid for binary outputs), or the probability step can be discarded entirely and \textbf{argmax} taken over the logits. We provide plots and analyses for both approaches to compare yet another aspect of checkpoint evaluation.
+
+These plots are intended only for visual intuition; the accurate statistical analysis follows them.
+
+\subsubsection{Visual Intuition}
+
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.99\columnwidth]{A2C-DQN-PPO_w1-not-smoothed_2026.05.25_01.12.34.png}
+    \vspace{-0.3cm}
+    \caption{For the ordinary \textbf{500}-step CartPole truncation scenario, the trained estimator function is used to independently run the agent \textbf{200} times with \textbf{softmax} policy action selection.}
+    \label{fig:CHP_eval_softmax_500}
+\end{figure}
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.99\columnwidth]{A2C-DQN-PPO_argmax_w1-not-smoothed_2026.05.25_02.50.44.png}
+    \caption{For the ordinary \textbf{500}-step CartPole truncation scenario, the trained estimator function is used to independently run the agent \textbf{200} times with \textbf{argmax} policy action selection. As expected, all algorithms scored perfectly with argmax, since the better action always had the higher probability.}
+    \label{fig:CHP_eval_argmax_500}
+\end{figure}
+We use the same checkpoints for an environment with truncation $20{,}000$. Only $30$ runs are illustrated, and \textbf{DQN is omitted from these two figures} to keep the A2C--PPO comparison visually distinguishable; including DQN compresses the A2C and PPO curves into an unreadable band. DQN is included in the statistical analysis (tables and box-plots) below.
+\begin{figure}
+    \centering
+    \includegraphics[width=0.99\columnwidth]{A2C-PPO_w1-not-smoothed_2026.05.24_23.17.11.png}
+    \caption{For the extended \textbf{20{,}000}-step CartPole truncation scenario, the trained estimator function is used to independently run the agent \textbf{30} times with \textbf{softmax} policy action selection.}
+    \label{fig:CHP_eval_softmax_20000}
+\end{figure}
+
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.99\columnwidth]{A2C-PPO_w1-not-smoothed_2026.05.24_23.17.02.png}
+    \caption{For the extended \textbf{20{,}000}-step CartPole truncation scenario, the trained estimator function is used to independently run the agent \textbf{30} times with \textbf{argmax} policy action selection. DQN and PPO score perfectly; A2C, in contrast, shows a clear failure mode on a subset of initial states (see \autoref{tab:results_summary_20000} and the discussion below).}
+    \label{fig:CHP_eval_argmax_20000}
+\end{figure}
+\subsubsection{Statistical Analysis}
+\textbf{Lines and confidence bands:}
+\begin{figure}
+    \centering
+    \includegraphics[width=0.99\columnwidth]{checkpoint_eval_summary_mean_std_2026.05.25_04.44.43.png}
+    \caption{Mean of returns over \textbf{1{,}000} evaluation runs (truncation $=500$). Shaded bands show $\pm 1\sigma$ around the mean -- i.e.\ the dispersion of individual runs, \emph{not} a confidence interval on the mean (which at $N=1{,}000$ is much narrower).}
+    \label{fig:algo_mean_std_500}
+\end{figure}
+\begin{figure}
+    \centering
+    \includegraphics[width=0.99\columnwidth]{checkpoint_eval_summary_mean_std_2026.05.25_04.21.59.png}
+    \caption{Mean of returns over \textbf{1{,}000} evaluation runs (truncation $=20{,}000$). Shaded bands show $\pm 1\sigma$ around the mean -- i.e.\ the dispersion of individual runs, \emph{not} a confidence interval on the mean.}
+    \label{fig:algo_mean_std_20000}
+\end{figure}
+\textbf{Box-plots:}
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.99\columnwidth]{checkpoint_eval_summary_boxplot_2026.05.25_04.44.43.png}
+    \caption{Returns over \textbf{1{,}000} evaluation runs (truncation $=500$). Because more than $75\%$ of runs hit the cap, Q1 through the maximum all sit at $500$ and the boxes collapse to a line; only the lower-tail failures (whiskers and outliers) are visible. Among the visible failures under softmax, \textbf{A2C} drops below $500$ less frequently than PPO or DQN.}
+    \label{fig:boxplot_500}
+\end{figure}
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.99\columnwidth]{checkpoint_eval_summary_boxplot_2026.05.25_04.21.59.png}
+    \caption{Returns over \textbf{1{,}000} evaluation runs (truncation $=20{,}000$). At the extended horizon the ranking flips: \textbf{A2C} no longer dominates -- its distribution is the widest and lowest, whereas PPO and DQN saturate near the cap.}
+    \label{fig:box_plot_20000}
+\end{figure}
+\textbf{Tables:}
+
+
+\begin{table}[t]
+\vskip 0.15in
+\centering
+\begin{small}
+\begin{sc}
+\caption{Statistical factors (truncation=500)}
+\label{tab:results_summary_500}
+\begin{tabular}{l r r r }
+\toprule
+\textbf{Algorithm} & \textbf{Mean} & \textbf{Std} & \textbf{Med}\\
+\midrule
+A2C (softmax) & 499.72 & 6.15  & 500.00 \\
+A2C (argmax)  & 500.00 & 0.00  & 500.00 \\
+DQN (softmax) & 496.52 & 33.50 & 500.00 \\
+DQN (argmax)  & 500.00 & 0.00  & 500.00 \\
+PPO (softmax) & 498.09 & 25.69 & 500.00 \\
+PPO (argmax)  & 500.00 & 0.00  & 500.00 \\
+\bottomrule
+\end{tabular}
+\end{sc}
+\end{small}
+\vskip -0.1in
+\end{table}
+
+\begin{table}[t]
+\vskip 0.15in
+\centering
+\begin{small}
+\begin{sc}
+\caption{Statistical factors (truncation=20,000)}
+\label{tab:results_summary_20000}
+\begin{tabular}{l r r r}
+\toprule
+\textbf{Algorithm} & \textbf{Mean} & \textbf{Std} & \textbf{Med}\\
+\midrule
+A2C (softmax) & 14,602.82 & 6,659.33 & 19,888.50 \\
+A2C (argmax)  & 10,295.33 & 8,061.69 & 7,143.00  \\
+DQN (softmax) & 15,491.74 & 6,254.39 & 20,000.00 \\
+DQN (argmax)  & 20,000.00 & 0.00     & 20,000.00 \\
+PPO (softmax) & 17,357.76 & 5,434.52 & 20,000.00 \\
+PPO (argmax)  & 20,000.00 & 0.00     & 20,000.00 \\
+\bottomrule
+\end{tabular}
+\end{sc}
+\end{small}
+\vskip -0.1in
+\end{table}
+
+
+Tables \ref{tab:results_summary_500} and \ref{tab:results_summary_20000} report the statistical summary of environment runs across different algorithms and truncation values of $500$ and $20{,}000$. They convey both the average survival and the run-to-run stability of each algorithm.
+
+\textbf{A2C's anomalous argmax variance.}
+In Table~\ref{tab:results_summary_20000}, A2C under argmax shows $\sigma = 8{,}061.69$ while DQN and PPO show $\sigma = 0$. The same effect is visible in \autoref{fig:CHP_eval_argmax_20000}. Since argmax is a deterministic function of the network output, the only source of variation across runs is CartPole's randomised initial state (each of the four state components is drawn uniformly on \texttt{env.reset()}). The DQN and PPO greedy policies balance the pole to the $20{,}000$-step cap on \emph{every} initial state; A2C's greedy policy, in contrast, \textbf{succeeds on a subset of initial states and collapses early on the rest}, producing a \emph{bimodal} distribution of episode lengths -- the overall median of $7{,}143$ steps sits inside the lower mode -- and hence the large $\sigma$. The earlier $500$-step truncation hid this defect: a marginally robust policy that would fall after $\sim\!600$ steps is indistinguishable from a fully robust one once both are truncated at $500$.
+
+Thus, the argmax bimodality identified above is an intrinsic robustness gap of the \emph{learned} policy rather than an evaluation artefact, and would require training-time interventions (e.g.\ longer training, regularisation, or averaging over more seeds -- engineering tricks that state-of-the-art implementations employ).
+
+This is one reason that some algorithms appear to perform worse at $500$ yet \textbf{surpass others at higher truncation values}: we see that A2C performed better than PPO at $500$, whereas at $20{,}000$ PPO is better than A2C.
+
+\paragraph{Limitation.} All evaluation results in this section characterise a \emph{single} trained checkpoint per algorithm; training-seed variance is not assessed and may dominate the effects shown. A multi-seed evaluation would be needed to claim algorithm-level (rather than checkpoint-level) rankings with confidence.
+
 
 \end{document}

@@ -1,9 +1,0 @@
-.venv/
-.vscode/
-tempCodeRunner*
-__pycache__/
-.ipynb_checkpoints
-output_Q_learning.py.log
-tmp_verify_*
-project_info_*
-temp_*
