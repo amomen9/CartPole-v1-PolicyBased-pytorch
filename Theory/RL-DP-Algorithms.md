@@ -205,8 +205,8 @@
 
 **Model-Free Methods**
 
-&emsp;[On-Policy vs Off-Policy Algorithms](#on-off-policy-intro)  
-&emsp;[Full Episodes vs Step-wise Updates](#full-episodes-intro)
+&emsp;&emsp;[On-Policy vs Off-Policy Algorithms](#on-off-policy-intro)  
+&emsp;&emsp;[Full Episodes vs Step-wise Updates](#full-episodes-intro)
 
 <details><summary>&emsp;&emsp;&emsp;1. Monte Carlo (First-Visit, On-Policy)</summary>
 
@@ -238,7 +238,7 @@
 
 </details>
 
-&emsp;**Deep RL — Value-Based**
+&emsp;&emsp;**Deep RL — Value-Based**
 
 <details><summary>&emsp;&emsp;&emsp;1. DQN Naive (Deep Q-Network, no tricks)</summary>
 
@@ -258,11 +258,11 @@
 
 </details>
 
-&emsp;**Deep RL — Policy Gradient Methods**
+&emsp;&emsp;**Deep RL — Policy Gradient Methods**
 
-&emsp;&emsp;[What Is the Vanilla Policy Gradient Loss?](#vanilla-pg-loss)
+&emsp;&emsp;&emsp;&emsp;[What Is the Vanilla Policy Gradient Loss?](#vanilla-pg-loss)
 
-&emsp;&emsp;*Vanilla Policy Gradient*
+&emsp;&emsp;&emsp;&emsp;<strong>*Vanilla Policy Gradient Methods:*</strong>
 
 <details><summary>&emsp;&emsp;&emsp;1. REINFORCE (Monte Carlo Policy Gradient)</summary>
 
@@ -288,7 +288,7 @@
 
 </details>
 
-&emsp;&emsp;*Advanced Policy Optimization*
+&emsp;&emsp;&emsp;&emsp;<strong>*Advanced Policy Optimization Methods:*</strong>
 
 <details><summary>&emsp;&emsp;&emsp;1. DDPG (Deep Deterministic Policy Gradient)</summary>
 
