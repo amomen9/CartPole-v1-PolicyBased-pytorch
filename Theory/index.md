@@ -179,140 +179,139 @@
 
 **Model-Based Methods**
 
-> > > <details><summary>1. Value Iteration</summary>
-> > >
-> > > &nbsp;&nbsp;&middot; [Introduction](#intro-1-1) &nbsp;· [Algorithm](#value-iteration) &nbsp;· [Engineering Tricks](#tricks-1-1) &nbsp;· [Pseudocode](#pseudo-1-1)
-> > >
-> > > </details>
-> > >
-> > > <details><summary>2. Policy Iteration</summary>
-> > >
-> > > &nbsp;&nbsp;&middot; [Introduction](#intro-1-2) &nbsp;· [Algorithm](#policy-iteration) &nbsp;· [Engineering Tricks](#tricks-1-2) &nbsp;· [Pseudocode](#pseudo-1-2)
-> > >
-> > > </details>
-> > >
-> > > <details><summary>3. Held-Karp (Bottom-Up / Tabulation)</summary>
-> > >
-> > > &nbsp;&nbsp;&middot; [Introduction](#intro-1-3) &nbsp;· [Algorithm](#held-karp-bottom-up) &nbsp;· [Engineering Tricks](#tricks-1-3) &nbsp;· [Pseudocode](#pseudo-1-3)
-> > >
-> > > </details>
-> > >
-> > > <details><summary>4. Held-Karp (Top-Down / Memoisation)</summary>
-> > >
-> > > &nbsp;&nbsp;&middot; [Introduction](#intro-1-4) &nbsp;· [Algorithm](#held-karp-top-down) &nbsp;· [Engineering Tricks](#tricks-1-4) &nbsp;· [Pseudocode](#pseudo-1-4)
-> > >
-> > > </details>
+<details><summary>&emsp;&emsp;&emsp;1. Value Iteration</summary>
+
+&emsp;&emsp;&emsp;&nbsp;&nbsp;&middot; [Introduction](#intro-1-1) &nbsp;&middot; [Algorithm](#value-iteration) &nbsp;&middot; [Engineering Tricks](#tricks-1-1) &nbsp;&middot; [Pseudocode](#pseudo-1-1)
+
+</details>
+
+<details><summary>&emsp;&emsp;&emsp;2. Policy Iteration</summary>
+
+&emsp;&emsp;&emsp;&nbsp;&nbsp;&middot; [Introduction](#intro-1-2) &nbsp;&middot; [Algorithm](#policy-iteration) &nbsp;&middot; [Engineering Tricks](#tricks-1-2) &nbsp;&middot; [Pseudocode](#pseudo-1-2)
+
+</details>
+
+<details><summary>&emsp;&emsp;&emsp;3. Held-Karp (Bottom-Up / Tabulation)</summary>
+
+&emsp;&emsp;&emsp;&nbsp;&nbsp;&middot; [Introduction](#intro-1-3) &nbsp;&middot; [Algorithm](#held-karp-bottom-up) &nbsp;&middot; [Engineering Tricks](#tricks-1-3) &nbsp;&middot; [Pseudocode](#pseudo-1-3)
+
+</details>
+
+<details><summary>&emsp;&emsp;&emsp;4. Held-Karp (Top-Down / Memoisation)</summary>
+
+&emsp;&emsp;&emsp;&nbsp;&nbsp;&middot; [Introduction](#intro-1-4) &nbsp;&middot; [Algorithm](#held-karp-top-down) &nbsp;&middot; [Engineering Tricks](#tricks-1-4) &nbsp;&middot; [Pseudocode](#pseudo-1-4)
+
+</details>
 
 **Model-Free Methods**
 
-> [On-Policy vs Off-Policy Algorithms](#on-off-policy-intro)
->
-> [Full Episodes vs Step-wise Updates](#full-episodes-intro)
+&emsp;[On-Policy vs Off-Policy Algorithms](#on-off-policy-intro)  
+&emsp;[Full Episodes vs Step-wise Updates](#full-episodes-intro)
 
-> > > <details><summary>1. Monte Carlo (First-Visit, On-Policy)</summary>
-> > >
-> > > &nbsp;&nbsp;&middot; [Introduction](#intro-2-1) &nbsp;· [Algorithm](#monte-carlo-first-visit) &nbsp;· [Engineering Tricks](#tricks-2-1) &nbsp;· [Pseudocode](#pseudo-2-1)
-> > >
-> > > </details>
-> > >
-> > > <details><summary>2. Temporal Difference — TD(0)</summary>
-> > >
-> > > &nbsp;&nbsp;&middot; [Introduction](#intro-2-2) &nbsp;· [Algorithm](#td-0) &nbsp;· [Engineering Tricks](#tricks-2-2) &nbsp;· [Pseudocode](#pseudo-2-2)
-> > >
-> > > </details>
-> > >
-> > > <details><summary>3. n-Step TD</summary>
-> > >
-> > > &nbsp;&nbsp;&middot; [Introduction](#intro-2-3) &nbsp;· [Algorithm](#n-step-td) &nbsp;· [Engineering Tricks](#tricks-2-3) &nbsp;· [Pseudocode](#pseudo-2-3)
-> > >
-> > > </details>
-> > >
-> > > <details><summary>4. SARSA (State-Action-Reward-State-Action)</summary>
-> > >
-> > > &nbsp;&nbsp;&middot; [Introduction](#intro-2-4) &nbsp;· [Algorithm](#sarsa) &nbsp;· [Engineering Tricks](#tricks-2-4) &nbsp;· [Pseudocode](#pseudo-2-4)
-> > >
-> > > </details>
-> > >
-> > > <details><summary>5. Q-Learning</summary>
-> > >
-> > > &nbsp;&nbsp;&middot; [Introduction](#intro-2-5) &nbsp;· [Algorithm](#q-learning) &nbsp;· [Engineering Tricks](#tricks-2-5) &nbsp;· [Pseudocode](#pseudo-2-5)
-> > >
-> > > </details>
+<details><summary>&emsp;&emsp;&emsp;1. Monte Carlo (First-Visit, On-Policy)</summary>
 
-> <strong>Deep RL — Value-Based</strong>
+&emsp;&emsp;&emsp;&nbsp;&nbsp;&middot; [Introduction](#intro-2-1) &nbsp;&middot; [Algorithm](#monte-carlo-first-visit) &nbsp;&middot; [Engineering Tricks](#tricks-2-1) &nbsp;&middot; [Pseudocode](#pseudo-2-1)
 
-> > > <details><summary>1. DQN Naive (Deep Q-Network, no tricks)</summary>
-> > >
-> > > &nbsp;&nbsp;&middot; [Introduction](#intro-3-1) &nbsp;· [Algorithm](#dqn-naive) &nbsp;· [Engineering Tricks](#tricks-3-1) &nbsp;· [Pseudocode](#pseudo-3-1)
-> > >
-> > > </details>
-> > >
-> > > <details><summary>2. DQN + Target Network (DQN+TN)</summary>
-> > >
-> > > &nbsp;&nbsp;&middot; [Introduction](#intro-3-2) &nbsp;· [Algorithm](#dqn-target-network) &nbsp;· [Engineering Tricks](#tricks-3-2) &nbsp;· [Pseudocode](#pseudo-3-2)
-> > >
-> > > </details>
-> > >
-> > > <details><summary>3. DQN + Experience Replay (DQN+ER)</summary>
-> > >
-> > > &nbsp;&nbsp;&middot; [Introduction](#intro-3-3) &nbsp;· [Algorithm](#dqn-experience-replay) &nbsp;· [Engineering Tricks](#tricks-3-3) &nbsp;· [Pseudocode](#pseudo-3-3)
-> > >
-> > > </details>
+</details>
 
-> <strong>Deep RL — Policy Gradient Methods</strong>
+<details><summary>&emsp;&emsp;&emsp;2. Temporal Difference — TD(0)</summary>
 
-> > [What Is the Vanilla Policy Gradient Loss?](#vanilla-pg-loss)
-> >
-> > <strong><em>Vanilla Policy Gradient</em></strong>
+&emsp;&emsp;&emsp;&nbsp;&nbsp;&middot; [Introduction](#intro-2-2) &nbsp;&middot; [Algorithm](#td-0) &nbsp;&middot; [Engineering Tricks](#tricks-2-2) &nbsp;&middot; [Pseudocode](#pseudo-2-2)
 
-> > > <details><summary>1. REINFORCE (Monte Carlo Policy Gradient)</summary>
-> > >
-> > > &nbsp;&nbsp;&middot; [Introduction](#intro-4-1) &nbsp;· [Algorithm](#reinforce) &nbsp;· [Engineering Tricks](#tricks-4-1) &nbsp;· [Pseudocode](#pseudo-4-1)
-> > >
-> > > </details>
-> > >
-> > > <details><summary>2. Actor-Critic (AC)</summary>
-> > >
-> > > &nbsp;&nbsp;&middot; [Introduction](#intro-4-2) &nbsp;· [Algorithm](#actor-critic) &nbsp;· [Engineering Tricks](#tricks-4-2) &nbsp;· [Pseudocode](#pseudo-4-2)
-> > >
-> > > </details>
-> > >
-> > > <details><summary>3. A2C (Advantage Actor-Critic)</summary>
-> > >
-> > > &nbsp;&nbsp;&middot; [Introduction](#intro-4-3) &nbsp;· [Algorithm](#a2c) &nbsp;· [Engineering Tricks](#tricks-4-3) &nbsp;· [Pseudocode](#pseudo-4-3)
-> > >
-> > > </details>
-> > >
-> > > <details><summary>4. A3C (Asynchronous Advantage Actor-Critic)</summary>
-> > >
-> > > &nbsp;&nbsp;&middot; [Introduction](#intro-4-4) &nbsp;· [Algorithm](#a3c) &nbsp;· [Engineering Tricks](#tricks-4-4) &nbsp;· [Pseudocode](#pseudo-4-4)
-> > >
-> > > </details>
+</details>
 
-> > <strong><em>Advanced Policy Optimization</em></strong>
+<details><summary>&emsp;&emsp;&emsp;3. n-Step TD</summary>
 
-> > > <details><summary>1. DDPG (Deep Deterministic Policy Gradient)</summary>
-> > >
-> > > &nbsp;&nbsp;&middot; [Introduction](#intro-4-5) &nbsp;· [Algorithm](#ddpg) &nbsp;· [Engineering Tricks](#tricks-4-5) &nbsp;· [Pseudocode](#pseudo-4-5)
-> > >
-> > > </details>
-> > >
-> > > <details><summary>2. SAC (Soft Actor-Critic)</summary>
-> > >
-> > > &nbsp;&nbsp;&middot; [Introduction](#intro-4-6) &nbsp;· [Algorithm](#sac) &nbsp;· [Engineering Tricks](#tricks-4-6) &nbsp;· [Pseudocode](#pseudo-4-6)
-> > >
-> > > </details>
-> > >
-> > > <details><summary>3. PPO (Proximal Policy Optimization)</summary>
-> > >
-> > > &nbsp;&nbsp;&middot; [Introduction](#intro-4-7) &nbsp;· [Algorithm](#ppo) &nbsp;· [Engineering Tricks](#tricks-4-7) &nbsp;· [Pseudocode](#pseudo-4-7)
-> > >
-> > > </details>
-> > >
-> > > <details><summary>4. CQL (Conservative Q-Learning)</summary>
-> > >
-> > > &nbsp;&nbsp;&middot; [Introduction](#intro-4-8) &nbsp;· [Algorithm](#cql) &nbsp;· [Engineering Tricks](#tricks-4-8) &nbsp;· [Pseudocode](#pseudo-4-8)
-> > >
-> > > </details>
+&emsp;&emsp;&emsp;&nbsp;&nbsp;&middot; [Introduction](#intro-2-3) &nbsp;&middot; [Algorithm](#n-step-td) &nbsp;&middot; [Engineering Tricks](#tricks-2-3) &nbsp;&middot; [Pseudocode](#pseudo-2-3)
+
+</details>
+
+<details><summary>&emsp;&emsp;&emsp;4. SARSA (State-Action-Reward-State-Action)</summary>
+
+&emsp;&emsp;&emsp;&nbsp;&nbsp;&middot; [Introduction](#intro-2-4) &nbsp;&middot; [Algorithm](#sarsa) &nbsp;&middot; [Engineering Tricks](#tricks-2-4) &nbsp;&middot; [Pseudocode](#pseudo-2-4)
+
+</details>
+
+<details><summary>&emsp;&emsp;&emsp;5. Q-Learning</summary>
+
+&emsp;&emsp;&emsp;&nbsp;&nbsp;&middot; [Introduction](#intro-2-5) &nbsp;&middot; [Algorithm](#q-learning) &nbsp;&middot; [Engineering Tricks](#tricks-2-5) &nbsp;&middot; [Pseudocode](#pseudo-2-5)
+
+</details>
+
+&emsp;**Deep RL — Value-Based**
+
+<details><summary>&emsp;&emsp;&emsp;1. DQN Naive (Deep Q-Network, no tricks)</summary>
+
+&emsp;&emsp;&emsp;&nbsp;&nbsp;&middot; [Introduction](#intro-3-1) &nbsp;&middot; [Algorithm](#dqn-naive) &nbsp;&middot; [Engineering Tricks](#tricks-3-1) &nbsp;&middot; [Pseudocode](#pseudo-3-1)
+
+</details>
+
+<details><summary>&emsp;&emsp;&emsp;2. DQN + Target Network (DQN+TN)</summary>
+
+&emsp;&emsp;&emsp;&nbsp;&nbsp;&middot; [Introduction](#intro-3-2) &nbsp;&middot; [Algorithm](#dqn-target-network) &nbsp;&middot; [Engineering Tricks](#tricks-3-2) &nbsp;&middot; [Pseudocode](#pseudo-3-2)
+
+</details>
+
+<details><summary>&emsp;&emsp;&emsp;3. DQN + Experience Replay (DQN+ER)</summary>
+
+&emsp;&emsp;&emsp;&nbsp;&nbsp;&middot; [Introduction](#intro-3-3) &nbsp;&middot; [Algorithm](#dqn-experience-replay) &nbsp;&middot; [Engineering Tricks](#tricks-3-3) &nbsp;&middot; [Pseudocode](#pseudo-3-3)
+
+</details>
+
+&emsp;**Deep RL — Policy Gradient Methods**
+
+&emsp;&emsp;[What Is the Vanilla Policy Gradient Loss?](#vanilla-pg-loss)
+
+&emsp;&emsp;*Vanilla Policy Gradient*
+
+<details><summary>&emsp;&emsp;&emsp;1. REINFORCE (Monte Carlo Policy Gradient)</summary>
+
+&emsp;&emsp;&emsp;&nbsp;&nbsp;&middot; [Introduction](#intro-4-1) &nbsp;&middot; [Algorithm](#reinforce) &nbsp;&middot; [Engineering Tricks](#tricks-4-1) &nbsp;&middot; [Pseudocode](#pseudo-4-1)
+
+</details>
+
+<details><summary>&emsp;&emsp;&emsp;2. Actor-Critic (AC)</summary>
+
+&emsp;&emsp;&emsp;&nbsp;&nbsp;&middot; [Introduction](#intro-4-2) &nbsp;&middot; [Algorithm](#actor-critic) &nbsp;&middot; [Engineering Tricks](#tricks-4-2) &nbsp;&middot; [Pseudocode](#pseudo-4-2)
+
+</details>
+
+<details><summary>&emsp;&emsp;&emsp;3. A2C (Advantage Actor-Critic)</summary>
+
+&emsp;&emsp;&emsp;&nbsp;&nbsp;&middot; [Introduction](#intro-4-3) &nbsp;&middot; [Algorithm](#a2c) &nbsp;&middot; [Engineering Tricks](#tricks-4-3) &nbsp;&middot; [Pseudocode](#pseudo-4-3)
+
+</details>
+
+<details><summary>&emsp;&emsp;&emsp;4. A3C (Asynchronous Advantage Actor-Critic)</summary>
+
+&emsp;&emsp;&emsp;&nbsp;&nbsp;&middot; [Introduction](#intro-4-4) &nbsp;&middot; [Algorithm](#a3c) &nbsp;&middot; [Engineering Tricks](#tricks-4-4) &nbsp;&middot; [Pseudocode](#pseudo-4-4)
+
+</details>
+
+&emsp;&emsp;*Advanced Policy Optimization*
+
+<details><summary>&emsp;&emsp;&emsp;1. DDPG (Deep Deterministic Policy Gradient)</summary>
+
+&emsp;&emsp;&emsp;&nbsp;&nbsp;&middot; [Introduction](#intro-4-5) &nbsp;&middot; [Algorithm](#ddpg) &nbsp;&middot; [Engineering Tricks](#tricks-4-5) &nbsp;&middot; [Pseudocode](#pseudo-4-5)
+
+</details>
+
+<details><summary>&emsp;&emsp;&emsp;2. SAC (Soft Actor-Critic)</summary>
+
+&emsp;&emsp;&emsp;&nbsp;&nbsp;&middot; [Introduction](#intro-4-6) &nbsp;&middot; [Algorithm](#sac) &nbsp;&middot; [Engineering Tricks](#tricks-4-6) &nbsp;&middot; [Pseudocode](#pseudo-4-6)
+
+</details>
+
+<details><summary>&emsp;&emsp;&emsp;3. PPO (Proximal Policy Optimization)</summary>
+
+&emsp;&emsp;&emsp;&nbsp;&nbsp;&middot; [Introduction](#intro-4-7) &nbsp;&middot; [Algorithm](#ppo) &nbsp;&middot; [Engineering Tricks](#tricks-4-7) &nbsp;&middot; [Pseudocode](#pseudo-4-7)
+
+</details>
+
+<details><summary>&emsp;&emsp;&emsp;4. CQL (Conservative Q-Learning)</summary>
+
+&emsp;&emsp;&emsp;&nbsp;&nbsp;&middot; [Introduction](#intro-4-8) &nbsp;&middot; [Algorithm](#cql) &nbsp;&middot; [Engineering Tricks](#tricks-4-8) &nbsp;&middot; [Pseudocode](#pseudo-4-8)
+
+</details>
 
 <div style="page-break-after: always; break-after: page;"></div>
