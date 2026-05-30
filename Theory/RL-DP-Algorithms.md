@@ -692,6 +692,24 @@ Under this practical definition, PPO and A2C are on-policy because the data is e
 
 Under this practical definition, PPO and A2C are on-policy because the data is essentially fresh and the policies are kept close. DQN and SAC are off-policy because they reuse data from policies arbitrarily far in the past.
 
+#### Summary Off-policy/On-policy table:
+
+|Algorithm|Off-policy|On-policy|Reason|
+|---|---|---|---|
+|Monte Carlo control|✔|✔|Standard MC control learns from episodes of the policy being improved; an off-policy variant exists via importance sampling.<br>**Mostly known for:** On-policy|
+|SARSA|✘|✔|TD target uses the next action actually taken by the current policy ($Q(s',a')$).|
+|Expected SARSA|✔|✔|Target averages $Q(s',\cdot)$ over the target policy; on-policy when target = behavior, off-policy when they differ (greedy target ⇒ Q-learning).<br>**Mostly known for:** On-policy|
+|$n$-step SARSA|✘|✔|Multi-step return bootstrapped from actions taken by the current policy.|
+|Q-learning|✔|✘|Target uses $\max_{a'} Q(s',a')$ (greedy $\pi$), independent of the exploratory behavior policy $\mu$.|
+|DQN|✔|✘|Q-learning with a replay buffer — learns the greedy policy from arbitrarily old transitions.|
+|REINFORCE|✘|✔|Policy gradient estimated from trajectories sampled by the current policy.|
+|A2C / A3C|✘|✔|Actor-critic updates computed from fresh rollouts of the current policy.|
+|TRPO|✔|✔|Uses importance sampling within a trust region, so technically off-policy, but data is fresh and kept near-policy.<br>**Mostly known for:** On-policy|
+|PPO|✔|✔|With $K>1$ epochs it reuses data via a clipped importance ratio (technically off-policy), but keeps $\pi$ close to $\pi_{\text{old}}$.<br>**Mostly known for:** On-policy|
+|DDPG|✔|✘|Deterministic policy gradient trained off a replay buffer.|
+|TD3|✔|✘|DDPG with twin critics and target-policy smoothing; still replay-buffer based.|
+|SAC|✔|✘|Maximum-entropy actor-critic trained from a replay buffer.|
+
 ✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦
 
 <div style="page-break-after: always; break-after: page;"></div>
