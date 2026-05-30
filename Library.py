@@ -2555,9 +2555,9 @@ def _run_single_repetition(
     if method == "REINFORCE":
         from REINFORCE import REINFORCE_Agent, run_reinforce
         from Checkpointing import (
-            load_state_dict_if_present,
+            load_checkpoint_for_continuation,
             pg_actor_checkpoint_path,
-            save_state_dict_overwrite,
+            save_continuation_or_new,
         )
 
         agent = REINFORCE_Agent(
@@ -2592,8 +2592,10 @@ def _run_single_repetition(
             "eval_interval": eval_interval,
             "use_saved_disk_networks_checkpoints": bool(use_saved_disk_networks_checkpoints),
         }
+        actor_loaded_path = None
+        actor_loaded_timesteps = None
         if use_saved_disk_networks_checkpoints:
-            load_state_dict_if_present(
+            actor_loaded_path, actor_loaded_timesteps = load_checkpoint_for_continuation(
                 model=agent.actor,
                 checkpoint_path=actor_ck.file_path,
                 metadata=actor_metadata,
@@ -2619,19 +2621,22 @@ def _run_single_repetition(
         )
 
         if rep_index == 0:
-            save_state_dict_overwrite(
+            save_continuation_or_new(
                 model=agent.actor,
                 checkpoint_path=actor_ck.file_path,
                 metadata=actor_metadata,
+                loaded_path=actor_loaded_path,
+                loaded_timesteps=actor_loaded_timesteps,
+                n_timesteps=n_timesteps,
             )
 
     elif method == "ac":
         from AC import AC_Agent, run_ac
         from Checkpointing import (
-            load_state_dict_if_present,
+            load_checkpoint_for_continuation,
             pg_actor_checkpoint_path,
             pg_critic_checkpoint_path,
-            save_state_dict_overwrite,
+            save_continuation_or_new,
         )
 
         agent = AC_Agent(
@@ -2690,14 +2695,18 @@ def _run_single_repetition(
             "use_saved_disk_networks_checkpoints": bool(use_saved_disk_networks_checkpoints),
         }
 
+        actor_loaded_path = None
+        actor_loaded_timesteps = None
+        critic_loaded_path = None
+        critic_loaded_timesteps = None
         if use_saved_disk_networks_checkpoints:
-            load_state_dict_if_present(
+            actor_loaded_path, actor_loaded_timesteps = load_checkpoint_for_continuation(
                 model=agent.actor,
                 checkpoint_path=actor_ck.file_path,
                 metadata=actor_metadata,
                 skip_selection_hyperparameter_match=skip_selection_hyperparameter_match,
             )
-            load_state_dict_if_present(
+            critic_loaded_path, critic_loaded_timesteps = load_checkpoint_for_continuation(
                 model=agent.critic,
                 checkpoint_path=critic_ck.file_path,
                 metadata=critic_metadata,
@@ -2723,24 +2732,30 @@ def _run_single_repetition(
         )
 
         if rep_index == 0:
-            save_state_dict_overwrite(
+            save_continuation_or_new(
                 model=agent.actor,
                 checkpoint_path=actor_ck.file_path,
                 metadata=actor_metadata,
+                loaded_path=actor_loaded_path,
+                loaded_timesteps=actor_loaded_timesteps,
+                n_timesteps=n_timesteps,
             )
-            save_state_dict_overwrite(
+            save_continuation_or_new(
                 model=agent.critic,
                 checkpoint_path=critic_ck.file_path,
                 metadata=critic_metadata,
+                loaded_path=critic_loaded_path,
+                loaded_timesteps=critic_loaded_timesteps,
+                n_timesteps=n_timesteps,
             )
 
     elif method == "a2c":
         from A2C import A2C_Agent, run_a2c
         from Checkpointing import (
-            load_state_dict_if_present,
+            load_checkpoint_for_continuation,
             pg_actor_checkpoint_path,
             pg_critic_checkpoint_path,
-            save_state_dict_overwrite,
+            save_continuation_or_new,
         )
 
         agent = A2C_Agent(
@@ -2806,14 +2821,18 @@ def _run_single_repetition(
             "use_saved_disk_networks_checkpoints": bool(use_saved_disk_networks_checkpoints),
         }
 
+        actor_loaded_path = None
+        actor_loaded_timesteps = None
+        critic_loaded_path = None
+        critic_loaded_timesteps = None
         if use_saved_disk_networks_checkpoints:
-            load_state_dict_if_present(
+            actor_loaded_path, actor_loaded_timesteps = load_checkpoint_for_continuation(
                 model=agent.policy,
                 checkpoint_path=actor_ck.file_path,
                 metadata=actor_metadata,
                 skip_selection_hyperparameter_match=skip_selection_hyperparameter_match,
             )
-            load_state_dict_if_present(
+            critic_loaded_path, critic_loaded_timesteps = load_checkpoint_for_continuation(
                 model=agent.value_func,
                 checkpoint_path=critic_ck.file_path,
                 metadata=critic_metadata,
@@ -2840,24 +2859,30 @@ def _run_single_repetition(
         )
 
         if rep_index == 0:
-            save_state_dict_overwrite(
+            save_continuation_or_new(
                 model=agent.policy,
                 checkpoint_path=actor_ck.file_path,
                 metadata=actor_metadata,
+                loaded_path=actor_loaded_path,
+                loaded_timesteps=actor_loaded_timesteps,
+                n_timesteps=n_timesteps,
             )
-            save_state_dict_overwrite(
+            save_continuation_or_new(
                 model=agent.value_func,
                 checkpoint_path=critic_ck.file_path,
                 metadata=critic_metadata,
+                loaded_path=critic_loaded_path,
+                loaded_timesteps=critic_loaded_timesteps,
+                n_timesteps=n_timesteps,
             )
 
     elif method == "ppo":
         from PPO import PPO_Agent, run_ppo
         from Checkpointing import (
-            load_state_dict_if_present,
+            load_checkpoint_for_continuation,
             pg_actor_checkpoint_path,
             pg_critic_checkpoint_path,
-            save_state_dict_overwrite,
+            save_continuation_or_new,
         )
 
         agent = PPO_Agent(
@@ -2932,14 +2957,18 @@ def _run_single_repetition(
             "use_saved_disk_networks_checkpoints": bool(use_saved_disk_networks_checkpoints),
         }
 
+        actor_loaded_path = None
+        actor_loaded_timesteps = None
+        critic_loaded_path = None
+        critic_loaded_timesteps = None
         if use_saved_disk_networks_checkpoints:
-            load_state_dict_if_present(
+            actor_loaded_path, actor_loaded_timesteps = load_checkpoint_for_continuation(
                 model=agent.policy,
                 checkpoint_path=actor_ck.file_path,
                 metadata=actor_metadata,
                 skip_selection_hyperparameter_match=skip_selection_hyperparameter_match,
             )
-            load_state_dict_if_present(
+            critic_loaded_path, critic_loaded_timesteps = load_checkpoint_for_continuation(
                 model=agent.value_func,
                 checkpoint_path=critic_ck.file_path,
                 metadata=critic_metadata,
@@ -2967,15 +2996,21 @@ def _run_single_repetition(
         )
 
         if rep_index == 0:
-            save_state_dict_overwrite(
+            save_continuation_or_new(
                 model=agent.policy,
                 checkpoint_path=actor_ck.file_path,
                 metadata=actor_metadata,
+                loaded_path=actor_loaded_path,
+                loaded_timesteps=actor_loaded_timesteps,
+                n_timesteps=n_timesteps,
             )
-            save_state_dict_overwrite(
+            save_continuation_or_new(
                 model=agent.value_func,
                 checkpoint_path=critic_ck.file_path,
                 metadata=critic_metadata,
+                loaded_path=critic_loaded_path,
+                loaded_timesteps=critic_loaded_timesteps,
+                n_timesteps=n_timesteps,
             )
 
     return rep_returns, rep_timesteps

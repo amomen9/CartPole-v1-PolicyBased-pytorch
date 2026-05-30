@@ -378,6 +378,21 @@ def load_state_dict_if_present(
     return True
 
 
+def _atomic_save_state_dict(model: torch.nn.Module, output_path: str, metadata: dict | None) -> None:
+    """Atomically write 'model.state_dict()' to 'output_path' (overwriting any
+    existing file there) and, if provided, its metadata sidecar."""
+    dir_name = os.path.dirname(output_path)
+    if dir_name:
+        os.makedirs(dir_name, exist_ok=True)
+
+    tmp_path = output_path + f".tmp_{os.getpid()}"
+    torch.save(model.state_dict(), tmp_path)
+    os.replace(tmp_path, output_path)
+
+    if metadata is not None:
+        _write_metadata_file(_metadata_path_for_checkpoint(output_path), metadata)
+
+
 def save_state_dict_overwrite(*, model: torch.nn.Module, checkpoint_path: str, metadata: dict | None = None) -> None:
     """
     Save a checkpoint without overwriting older checkpoints.
@@ -386,13 +401,89 @@ def save_state_dict_overwrite(*, model: torch.nn.Module, checkpoint_path: str, m
     '<stem>_1.pt', '<stem>_2.pt', ... and a matching '<stem>_N.txt'
     metadata sidecar is written beside it.
     """
-    dir_name = os.path.dirname(checkpoint_path)
-    os.makedirs(dir_name, exist_ok=True)
+    output_path = _resolve_non_overwriting_path(checkpoint_path)
+    _atomic_save_state_dict(model, output_path, metadata)
+
+
+def _timesteps_key_for_metadata(metadata: dict | None) -> str:
+    """Return the timesteps-like metadata key in use ('n_timesteps' for the
+    policy-gradient algos, 'n_env_steps' for DQN), defaulting to 'n_timesteps'."""
+    if isinstance(metadata, dict):
+        for key in _LOOSE_TIMESTEPS_KEYS:
+            if key in metadata:
+                return key
+    return _LOOSE_TIMESTEPS_KEYS[0]
+
+
+def read_checkpoint_timesteps(checkpoint_path: str) -> int | None:
+    """Read the recorded training timesteps ('n_timesteps' or 'n_env_steps')
+    from a checkpoint's sidecar. Returns None if the sidecar is missing,
+    unreadable, or has no timesteps field."""
+    try:
+        metadata = _read_metadata_file(_metadata_path_for_checkpoint(checkpoint_path))
+    except Exception:
+        return None
+    return _extract_loose_timesteps(metadata)
+
+
+def load_checkpoint_for_continuation(
+    *,
+    model: torch.nn.Module,
+    checkpoint_path: str,
+    metadata: dict | None = None,
+    skip_selection_hyperparameter_match: bool = False,
+) -> tuple[str | None, int | None]:
+    """
+    Resolve and load the matching checkpoint into 'model', remembering which
+    file was loaded so the caller can later overwrite that same file.
+
+    Returns '(resolved_path, loaded_timesteps)':
+      - resolved_path: the checkpoint file actually loaded, or None if no match.
+      - loaded_timesteps: the timesteps recorded in that file's sidecar, or None.
+    """
+    resolved_path = resolve_matching_checkpoint_path(
+        checkpoint_path=checkpoint_path,
+        metadata=metadata,
+        skip_selection_hyperparameter_match=skip_selection_hyperparameter_match,
+    )
+    if resolved_path is None or not os.path.isfile(resolved_path):
+        return None, None
+    loaded_timesteps = read_checkpoint_timesteps(resolved_path)
+    state = torch.load(resolved_path, map_location="cpu")
+    model.load_state_dict(state, strict=True)
+    return resolved_path, loaded_timesteps
+
+
+def save_continuation_or_new(
+    *,
+    model: torch.nn.Module,
+    checkpoint_path: str,
+    metadata: dict | None = None,
+    loaded_path: str | None = None,
+    loaded_timesteps: int | None = None,
+    n_timesteps: int | None = None,
+) -> str:
+    """
+    Persist 'model' after a training repetition.
+
+    If 'loaded_path' is given (training continued from a loaded checkpoint),
+    that exact file is overwritten in place and its recorded timesteps are set
+    to the cumulative total ('loaded_timesteps + n_timesteps'), e.g.
+    1000 (loaded) + 250 (new) = 1250.
+
+    Otherwise this falls back to :func:`save_state_dict_overwrite`, writing a
+    fresh, non-destructive '<stem>_N.pt'.
+
+    Returns the path that was written.
+    """
+    if loaded_path is not None:
+        out_metadata = dict(metadata) if isinstance(metadata, dict) else metadata
+        if isinstance(out_metadata, dict) and n_timesteps is not None:
+            base = loaded_timesteps if loaded_timesteps is not None else 0
+            out_metadata[_timesteps_key_for_metadata(out_metadata)] = int(base) + int(n_timesteps)
+        _atomic_save_state_dict(model, loaded_path, out_metadata)
+        return loaded_path
 
     output_path = _resolve_non_overwriting_path(checkpoint_path)
-    tmp_path = output_path + f".tmp_{os.getpid()}"
-    torch.save(model.state_dict(), tmp_path)
-    os.replace(tmp_path, output_path)
-
-    if metadata is not None:
-        _write_metadata_file(_metadata_path_for_checkpoint(output_path), metadata)
+    _atomic_save_state_dict(model, output_path, metadata)
+    return output_path

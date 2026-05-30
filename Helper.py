@@ -1973,15 +1973,18 @@ def _run_dqn_one_rep(trial_common: dict[str, Any], run_seed: int, rep_index: int
 
     Mirrors the checkpointing behaviour of the policy-gradient algorithms:
     optionally pre-loads the Q-network from disk before training, and on the
-    first repetition ('rep_index == 0') persists the trained Q-network to
-    disk via :func:`Checkpointing.save_state_dict_overwrite`.
+    first repetition ('rep_index == 0') persists the trained Q-network to disk
+    via :func:`Checkpointing.save_continuation_or_new`. When training continued
+    from a loaded checkpoint, that same file is overwritten in place with its
+    recorded timesteps bumped by this run's 'n_env_steps' (cumulative).
     """
     import torch
     from assignment2_repo.DQN import run_dqn_trial_returns
     from Checkpointing import (
         dqn_q_checkpoint_path,
+        read_checkpoint_timesteps,
         resolve_matching_checkpoint_path,
-        save_state_dict_overwrite,
+        save_continuation_or_new,
     )
 
     ck = dqn_q_checkpoint_path(
@@ -1999,6 +2002,8 @@ def _run_dqn_one_rep(trial_common: dict[str, Any], run_seed: int, rep_index: int
     }
 
     pretrained_state_dict = None
+    loaded_ck_path = None
+    loaded_ck_timesteps = None
     if use_saved_disk_networks_checkpoints:
         resolved_ck_path = resolve_matching_checkpoint_path(
             checkpoint_path=ck.file_path,
@@ -2007,6 +2012,8 @@ def _run_dqn_one_rep(trial_common: dict[str, Any], run_seed: int, rep_index: int
         )
         if resolved_ck_path is not None and os.path.isfile(resolved_ck_path):
             pretrained_state_dict = torch.load(resolved_ck_path, map_location="cpu")
+            loaded_ck_path = resolved_ck_path
+            loaded_ck_timesteps = read_checkpoint_timesteps(resolved_ck_path)
 
     returns_arr, timesteps_arr, model = run_dqn_trial_returns(
         seed=run_seed,
@@ -2020,10 +2027,13 @@ def _run_dqn_one_rep(trial_common: dict[str, Any], run_seed: int, rep_index: int
     )
 
     if rep_index == 0:
-        save_state_dict_overwrite(
+        save_continuation_or_new(
             model=model,
             checkpoint_path=ck.file_path,
             metadata=checkpoint_metadata,
+            loaded_path=loaded_ck_path,
+            loaded_timesteps=loaded_ck_timesteps,
+            n_timesteps=trial_common.get("n_env_steps"),
         )
 
     return returns_arr, timesteps_arr

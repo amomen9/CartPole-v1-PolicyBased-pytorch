@@ -38,7 +38,7 @@ def experiment():
         "max_train_episode_length": 500, #500        # Episode truncation step. Default: 500.
         "base_seed": 42,                    # Base seed for CartPole environment and agent initialization. Each repetition will use a different seed derived from this base seed (e.g., base_seed + repetition_index).
         # Agent
-        "n_timesteps": 1e6, #1e6,              # Total number of training timesteps. Default: 1000000.
+        "n_timesteps": 5e5, #1e6,              # Total number of training timesteps. Default: 1000000.
         "max_eval_episode_length": 20000, #500        # Episode truncation step. Default: 500.
         "eval_interval": 250,
         "eval_with_env_episode_trials": True, # Default: True. Set to False to use the fast proxy full episode return value from training (last_episode_return) for evaluation instead of running separate greedy environment episode trials via agent.evaluate(). Note: setting to False will speed up training and plotting, but will not provide true evaluation curves. Setting to True will provide true evaluation curves but will significantly increase training time due to the need to run separate evaluation episodes at each eval_interval.
@@ -83,8 +83,8 @@ def experiment():
         "clip_eps": [0.1],                # 0.1  # PPO clipping epsilon which controls the clipping range for the probability ratio in the PPO surrogate objective. Default: 0.2.
         "n_epochs": [30],                 # 15   # of optimisation epochs per rollout which controls how many times we reuse each collected rollout batch of data to update the policy. Default: 10. Set to 1 to skip PPO epoch trials and only do one epoch per rollout.
         "rollout_steps": [512],          # 1024 # of env steps per rollout (PPO buffer size) which controls how many steps of data we collect in each rollout before we perform policy updates. Default: 2048. Set to a large number (e.g., 1e6) to skip rollout length trials and effectively use the entire episode as one rollout.
-        # -- Engineering tricks (sweepable lists; optimal defaults) --
-        "entropy_coef": [0.01],
+        # -- Additional Engineering Tricks (sweepable lists; optimal defaults) --
+        "entropy_coef": [0.01],         
         "max_grad_norm": [0.5],
         "adam_eps": [1e-5],
         "anneal_lr": [True],
@@ -174,7 +174,7 @@ def experiment():
         "gamma": [0.99],                # list of discount factors to sweep
         "actor_lr": [1e-3],            # actor learning rate(s) to sweep
         "actor_hidden_nn": [[128, 128]],   # list of NN architectures to sweep
-        # -- Engineering tricks (sweepable lists; optimal defaults) --
+        # -- Additional Engineering Tricks (sweepable lists; optimal defaults) --
         "entropy_coef": [0.01],
         "max_grad_norm": [0.5],
         "adam_eps": [1e-5],
@@ -205,7 +205,7 @@ def experiment():
         "critic_lr": [1e-3],                  # critic learning rate(s) to sweep
         "critic_hidden_nn": [[128, 128]],      # critic NN architectures to sweep
         "TN_step": [10],                      # list of n-step returns to sweep (Target Network). Default: [10]. Set to [1] to skip n-step return trials.
-        # -- Engineering tricks (sweepable lists; optimal defaults) --
+        # -- Additional Engineering Tricks (sweepable lists; optimal defaults) --
         "entropy_coef": [0.01],
         "max_grad_norm": [0.5],
         "adam_eps": [1e-5],
@@ -243,7 +243,7 @@ def experiment():
         "critic_lr": [0.01],        # value function learning rate(s) to sweep
         "critic_hidden_nn": [[128, 128]],  # list of NN architectures to sweep for value function network
         "TN_step": [10],                 # list of n-step returns to sweep (Target Network). Default: [10]. Set to [1] to skip n-step return trials.
-        # -- Engineering tricks (sweepable lists; optimal defaults) --
+        # -- Additional Engineering Tricks (sweepable lists; optimal defaults) --
         "entropy_coef": [0.01],
         "max_grad_norm": [0.5],
         "adam_eps": [1e-5],
