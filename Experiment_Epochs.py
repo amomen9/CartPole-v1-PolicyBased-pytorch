@@ -111,7 +111,22 @@ def experiment():
         "gamma": [0.99],                # list of discount factors to sweep
         "actor_lr": [1e-3],            # actor learning rate(s) to sweep
         "actor_hidden_nn": [[128, 128]],   # list of NN architectures to sweep
+        # -- Engineering tricks (sweepable lists; optimal defaults) --
+        "entropy_coef": [0.01],
+        "max_grad_norm": [0.5],
+        "adam_eps": [1e-5],
+        "anneal_lr": [True],
+        "orthogonal_init": [True],
+        "normalize_advantages": [True],
+        "normalize_obs": [False],
         "legend_parameters": {          # [plot label, show flag]
+            "entropy_coef": [r"H: ", False],
+            "max_grad_norm": [r"gclip: ", False],
+            "adam_eps": [r"AdamEps: ", False],
+            "anneal_lr": [r"anneal: ", False],
+            "orthogonal_init": [r"ortho: ", False],
+            "normalize_advantages": [r"normA: ", False],
+            "normalize_obs": [r"normObs: ", False],
             "gamma": [r"$\gamma$: ", True],
             "actor_lr": [r"Actor $\alpha$: ", True],
             "actor_hidden_nn": [r"Actor NN: ", True],
@@ -127,7 +142,26 @@ def experiment():
         "critic_lr": [1e-3],                  # critic learning rate(s) to sweep
         "critic_hidden_nn": [[128, 128]],      # critic NN architectures to sweep
         "TN_step": [10],                      # list of n-step returns to sweep (Target Network). Default: [10]. Set to [1] to skip n-step return trials.
+        # -- Engineering tricks (sweepable lists; optimal defaults) --
+        "entropy_coef": [0.01],
+        "max_grad_norm": [0.5],
+        "adam_eps": [1e-5],
+        "anneal_lr": [True],
+        "orthogonal_init": [True],
+        "normalize_advantages": [True],
+        "normalize_obs": [False],
+        "value_loss_coef": [0.5],
+        "use_advantage": [True],
         "legend_parameters": {                 # [plot label, show flag]
+            "entropy_coef": [r"H: ", False],
+            "max_grad_norm": [r"gclip: ", False],
+            "adam_eps": [r"AdamEps: ", False],
+            "anneal_lr": [r"anneal: ", False],
+            "orthogonal_init": [r"ortho: ", False],
+            "normalize_advantages": [r"normA: ", False],
+            "normalize_obs": [r"normObs: ", False],
+            "value_loss_coef": [r"cV: ", False],
+            "use_advantage": [r"adv: ", False],
             "gamma": [r"$\gamma$: ", True],
             "actor_lr": [r"Actor $\alpha$: ", True],
             "actor_hidden_nn": [r"Actor NN: ", True],
@@ -146,7 +180,30 @@ def experiment():
         "critic_lr": [0.01],        # value function learning rate(s) to sweep
         "critic_hidden_nn": [[128, 128]],  # list of NN architectures to sweep for value function network
         "TN_step": [10],                 # list of n-step returns to sweep (Target Network). Default: [10]. Set to [1] to skip n-step return trials.
+        # -- Engineering tricks (sweepable lists; optimal defaults) --
+        "entropy_coef": [0.01],
+        "max_grad_norm": [0.5],
+        "adam_eps": [1e-5],
+        "anneal_lr": [True],
+        "orthogonal_init": [True],
+        "normalize_advantages": [True],
+        "normalize_obs": [False],
+        "value_loss_coef": [0.5],
+        "activation_name": ["tanh"],
+        "use_gae": [True],
+        "gae_lambda": [0.95],
         "legend_parameters": {          # [plot label, show flag]
+            "entropy_coef": [r"H: ", False],
+            "max_grad_norm": [r"gclip: ", False],
+            "adam_eps": [r"AdamEps: ", False],
+            "anneal_lr": [r"anneal: ", False],
+            "orthogonal_init": [r"ortho: ", False],
+            "normalize_advantages": [r"normA: ", False],
+            "normalize_obs": [r"normObs: ", False],
+            "value_loss_coef": [r"cV: ", False],
+            "activation_name": [r"act: ", False],
+            "use_gae": [r"GAE: ", False],
+            "gae_lambda": [r"lambdaGAE: ", False],
             "gamma": [r"$\gamma$: ", True],
             "actor_lr": [r"Actor $\alpha$: ", True],
             "critic_lr": [r"Critic $\beta$: ", True],
@@ -160,24 +217,49 @@ def experiment():
     # ------------- Algorithm Type: PPO hyperparameters (basic PPO + GAE) ----
     # Proximal Policy Optimisation (PPO-clipped) - Schulman
     PPO_config = {
-        "gamma": [0.9,0.99,1],                  # list of discount factors to sweep
+        "gamma": [0.99],                  # list of discount factors to sweep
         "actor_lr": [3e-4],               # actor learning rate(s) to sweep
         "actor_hidden_nn": [[64, 64]],    # actor NN architectures to sweep
         "critic_lr": [1e-3],              # 4e-3 # critic learning rate(s) to sweep
         "critic_hidden_nn": [[128, 128]], # 256  # critic NN architectures to sweep
         "gae_lambda": [0.95],     # 0.96 # GAE lambda parameter which controls the bias-variance trade-off of the Generalized Advantage Estimation (GAE). Default: 0.95. Set to 1.0 to disable GAE and use regular advantage estimation.
         "clip_eps": [0.2],                # 0.1  # PPO clipping epsilon which controls the clipping range for the probability ratio in the PPO surrogate objective. Default: 0.2.
-        "n_epochs": [10],                 # 15   # of optimisation epochs per rollout which controls how many times we reuse each collected rollout batch of data to update the policy. Default: 10. Set to 1 to skip PPO epoch trials and only do one epoch per rollout.
+        "n_epochs": [10,20,30],                 # 15   # of optimisation epochs per rollout which controls how many times we reuse each collected rollout batch of data to update the policy. Default: 10. Set to 1 to skip PPO epoch trials and only do one epoch per rollout.
         "rollout_steps": [2048],          # 1024 # of env steps per rollout (PPO buffer size) which controls how many steps of data we collect in each rollout before we perform policy updates. Default: 2048. Set to a large number (e.g., 1e6) to skip rollout length trials and effectively use the entire episode as one rollout.
+        # -- Engineering tricks (sweepable lists; optimal defaults) --
+        "entropy_coef": [0.01],
+        "max_grad_norm": [0.5],
+        "adam_eps": [1e-5],
+        "anneal_lr": [True],
+        "orthogonal_init": [True],
+        "normalize_advantages": [True],
+        "normalize_obs": [False],
+        "value_loss_coef": [0.5],
+        "activation_name": ["tanh"],
+        "num_minibatches": [32],
+        "clip_vloss": [True],
+        "target_kl": [None],
         "legend_parameters": {            # [curve label, show flag]
-            "gamma": [r"$\gamma$: ", True],
+            "entropy_coef": [r"H: ", False],
+            "max_grad_norm": [r"gclip: ", False],
+            "adam_eps": [r"AdamEps: ", False],
+            "anneal_lr": [r"anneal: ", False],
+            "orthogonal_init": [r"ortho: ", False],
+            "normalize_advantages": [r"normA: ", False],
+            "normalize_obs": [r"normObs: ", False],
+            "value_loss_coef": [r"cV: ", False],
+            "activation_name": [r"act: ", False],
+            "num_minibatches": [r"mb: ", False],
+            "clip_vloss": [r"vclip: ", False],
+            "target_kl": [r"KL: ", False],
+            "gamma": [r"$\gamma$: ", False],
             "actor_lr": [r"Actor $\alpha$: ", False],
             "critic_lr": [r"Critic $\beta$: ", False],
             "actor_hidden_nn": [r"Actor NN: ", False],
             "critic_hidden_nn": [r"Critic NN: ", False],
             "gae_lambda": [r"$\lambda_{GAE}$: ", False],
             "clip_eps": [r"$\epsilon_{clip}$: ", False],
-            "n_epochs": [r"Epochs: ", False],
+            "n_epochs": [r"Epochs: ", True],
             "rollout_steps": [r"Rollout: ", False],
         },
     }

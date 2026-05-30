@@ -10,6 +10,7 @@ from typing import Any, cast
 
 from Environment import CartPoleEnvironment
 from Library import average_over_repetitions, LearningCurvePlot, smooth
+import Library as fn
 from tqdm import tqdm
 
 
@@ -24,6 +25,18 @@ class A2C_Agent(BaseAgent):
         TN_step,
         actor_hidden_nn,
         critic_hidden_nn,
+        # ── Engineering tricks (default-on / optimal) ──
+        entropy_coef=0.01,
+        value_loss_coef=0.5,
+        max_grad_norm=0.5,
+        adam_eps=1e-5,
+        anneal_lr=True,
+        orthogonal_init=True,
+        normalize_advantages=True,
+        normalize_obs=False,
+        activation_name="tanh",
+        use_gae=True,
+        gae_lambda=0.95,
     ):
         """Initialise the A2C agent."""
 
@@ -34,20 +47,58 @@ class A2C_Agent(BaseAgent):
         self.gamma = gamma
         self.TN_step = TN_step
 
+        # Trick hyperparameters
+        self.entropy_coef = float(entropy_coef)
+        self.value_loss_coef = float(value_loss_coef)
+        self.max_grad_norm = max_grad_norm
+        self.anneal_lr = bool(anneal_lr)
+        self.normalize_advantages = bool(normalize_advantages)
+        self.normalize_obs = bool(normalize_obs)
+        self.activation_name = activation_name
+        self.use_gae = bool(use_gae)
+        self.gae_lambda = float(gae_lambda)
+        self.base_actor_lr = float(actor_lr)
+        self.base_critic_lr = float(critic_lr)
+
         self.policy = PolicyNetwork(
             n_agent_state_elements,
             n_actions,
             actor_hidden_nn,
-            activation=nn.ReLU,
+            activation=activation_name,
+            orthogonal_init=orthogonal_init,
+            normalize_obs=normalize_obs,
         )
         self.value_func = ValueNetwork(
             n_agent_state_elements,
             critic_hidden_nn,
-            activation=nn.ReLU,
+            activation=activation_name,
+            orthogonal_init=orthogonal_init,
+            normalize_obs=normalize_obs,
         )
 
-        self.opt_actor = torch.optim.Adam(self.policy.parameters(), lr=actor_lr)
-        self.opt_critic = torch.optim.Adam(self.value_func.parameters(), lr=critic_lr)
+        self.opt_actor = torch.optim.Adam(self.policy.parameters(), lr=actor_lr, eps=adam_eps)
+        self.opt_critic = torch.optim.Adam(self.value_func.parameters(), lr=critic_lr, eps=adam_eps)
+
+    # ── trick helpers ──
+    def anneal_learning_rate(self, fraction_remaining):
+        if not self.anneal_lr:
+            return
+        frac = max(0.0, float(fraction_remaining))
+        for group in self.opt_actor.param_groups:
+            group["lr"] = self.base_actor_lr * frac
+        for group in self.opt_critic.param_groups:
+            group["lr"] = self.base_critic_lr * frac
+
+    def clip_gradients(self, parameters):
+        if self.max_grad_norm is not None:
+            nn.utils.clip_grad_norm_(parameters, self.max_grad_norm)
+
+    @staticmethod
+    def whiten(x, eps=1e-8):
+        std = x.std(unbiased=False)
+        if not torch.isfinite(std) or std < eps:
+            return x - x.mean()
+        return (x - x.mean()) / (std + eps)
 
     def select_action(self, obs):
         """Sample an action from the policy."""
@@ -58,7 +109,7 @@ class A2C_Agent(BaseAgent):
         return int(action.item()), dist.log_prob(action)
 
     def compute_returns(self, rewards, next_states, dones):
-        """Compute the n-step return estimate for each timestep."""
+        """Compute the n-step return estimate for each timestep (bootstrapped V)."""
 
         episode_length = len(rewards)
         next_states_t = torch.tensor(np.array(next_states), dtype=torch.float32)
@@ -87,8 +138,35 @@ class A2C_Agent(BaseAgent):
 
         return q_hat
 
+    def compute_gae(self, states_t, rewards, next_states, dones):
+        """Generalised Advantage Estimation (Schulman et al., 2015).
+
+        Used in place of the fixed n-step return when use_gae is True; returns
+        '(advantages, value-targets)' both detached for use as training targets.
+        """
+        next_states_t = torch.tensor(np.array(next_states), dtype=torch.float32)
+        with torch.no_grad():
+            values = self.value_func(states_t)
+            next_values = self.value_func(next_states_t)
+
+        T = len(rewards)
+        advantages = torch.zeros(T)
+        gae = 0.0
+        for t in reversed(range(T)):
+            non_terminal = 0.0 if dones[t] else 1.0
+            delta = rewards[t] + self.gamma * float(next_values[t]) * non_terminal - float(values[t])
+            gae = delta + self.gamma * self.gae_lambda * non_terminal * gae
+            advantages[t] = gae
+        returns = advantages + values
+        return advantages, returns
+
     def update(self, **kwargs):
-        """Update policy and value networks from one trajectory."""
+        """Update policy and value networks from one trajectory.
+
+        Engineering tricks: optional GAE advantage estimator (use_gae), advantage
+        whitening (normalize_advantages), entropy bonus (entropy_coef), critic
+        loss scaling (value_loss_coef) and gradient-norm clipping (max_grad_norm).
+        """
 
         states = kwargs["states"]
         actions = kwargs["actions"]
@@ -98,24 +176,38 @@ class A2C_Agent(BaseAgent):
 
         states_t = torch.tensor(np.array(states), dtype=torch.float32)
         actions_t = torch.tensor(np.array(actions), dtype=torch.long)
+        fn.update_obs_norm(self.policy, states_t)
+        fn.update_obs_norm(self.value_func, states_t)
 
-        q_hat = self.compute_returns(rewards, next_states, dones)
+        # Advantage + critic target: GAE or fixed n-step return.
+        if self.use_gae:
+            advantages, returns = self.compute_gae(states_t, rewards, next_states, dones)
+        else:
+            returns = self.compute_returns(rewards, next_states, dones)
+            with torch.no_grad():
+                advantages = returns - self.value_func(states_t)
+        advantages = advantages.detach()
+        returns = returns.detach()
 
+        # Critic regression V(s) -> returns
         v_s = self.value_func(states_t)
-        advantages = q_hat - v_s
-
-        critic_loss = (advantages**2).sum()
+        critic_loss = self.value_loss_coef * ((returns - v_s) ** 2).sum()
         self.opt_critic.zero_grad()
         critic_loss.backward()
+        self.clip_gradients(self.value_func.parameters())
         self.opt_critic.step()
 
+        # Actor: advantage-weighted log-prob + entropy bonus
+        adv = self.whiten(advantages) if self.normalize_advantages else advantages
         logits = self.policy(states_t)
         dist = torch.distributions.Categorical(logits=logits)
         log_probs = dist.log_prob(actions_t)
-        actor_loss = -(advantages.detach() * log_probs).sum()
+        entropy_term = dist.entropy().sum()
+        actor_loss = -(adv * log_probs).sum() - self.entropy_coef * entropy_term
 
         self.opt_actor.zero_grad()
         actor_loss.backward()
+        self.clip_gradients(self.policy.parameters())
         self.opt_actor.step()
 
     def evaluate(self, n_eval_episodes: int = 30, max_steps: int = 500) -> np.floating:
@@ -149,43 +241,59 @@ class A2C_Agent(BaseAgent):
 
 
 class PolicyNetwork(nn.Module):
-    def __init__(self, n_agent_state_elements, n_actions, hidden_layers, activation):
+    def __init__(self, n_agent_state_elements, n_actions, hidden_layers, activation,
+                 orthogonal_init=True, normalize_obs=False):
         super().__init__()
+        activation = fn.resolve_activation(activation)
 
         layers = []
         input_size = n_agent_state_elements
 
         for layer_size in hidden_layers:
-            layers.append(nn.Linear(input_size, layer_size))
+            layers.append(nn.Linear(input_size, int(layer_size)))
             layers.append(activation())
-            input_size = layer_size
+            input_size = int(layer_size)
 
         layers.append(nn.Linear(input_size, n_actions))
         self.net = nn.Sequential(*layers)
 
+        self.normalize_obs = bool(normalize_obs)
+        if self.normalize_obs:
+            fn.register_obs_norm(self, n_features=n_agent_state_elements)
+        if orthogonal_init:
+            fn.init_mlp_orthogonal(self.net, head_gain=0.01)  # policy head gain = 0.01
+
     def forward(self, x):
         x = torch.as_tensor(x, dtype=torch.float32)
-        return self.net(x)
+        return self.net(fn.normalize_obs(self, x))
 
 
 class ValueNetwork(nn.Module):
-    def __init__(self, n_agent_state_elements, hidden_layers, activation):
+    def __init__(self, n_agent_state_elements, hidden_layers, activation,
+                 orthogonal_init=True, normalize_obs=False):
         super().__init__()
+        activation = fn.resolve_activation(activation)
 
         layers = []
         input_size = n_agent_state_elements
 
         for layer_size in hidden_layers:
-            layers.append(nn.Linear(input_size, layer_size))
+            layers.append(nn.Linear(input_size, int(layer_size)))
             layers.append(activation())
-            input_size = layer_size
+            input_size = int(layer_size)
 
         layers.append(nn.Linear(input_size, 1))
         self.net = nn.Sequential(*layers)
 
+        self.normalize_obs = bool(normalize_obs)
+        if self.normalize_obs:
+            fn.register_obs_norm(self, n_features=n_agent_state_elements)
+        if orthogonal_init:
+            fn.init_mlp_orthogonal(self.net, head_gain=1.0)  # value head gain = 1.0
+
     def forward(self, x):
         x = torch.as_tensor(x, dtype=torch.float32)
-        return self.net(x).squeeze(-1)
+        return self.net(fn.normalize_obs(self, x)).squeeze(-1)
 
 
 def run_a2c(
@@ -254,6 +362,9 @@ def run_a2c(
 
                 state = next_state
                 global_step += 1
+
+                # Linear learning-rate annealing over the full training horizon.
+                agent.anneal_learning_rate(1.0 - global_step / n_timesteps)
 
                 if (global_step - last_progress_update) >= 512 or global_step >= n_timesteps:
                     progress_delta = global_step - last_progress_update

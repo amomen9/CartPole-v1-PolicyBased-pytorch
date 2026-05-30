@@ -25,7 +25,17 @@ class AC_Agent(BaseAgent):
     def __init__(self, actor_hidden_nn=np.array([16, 16]),
                  critic_hidden_nn=np.array([64, 64]),
                  actor_lr=0.001, critic_lr=0.001,
-                 gamma=0.99):
+                 gamma=0.99,
+                 # ── Engineering tricks (default-on / optimal) ──
+                 use_advantage=True,        # train the actor on (G_t - V) not raw G_t
+                 entropy_coef=0.01,
+                 value_loss_coef=0.5,
+                 max_grad_norm=0.5,
+                 adam_eps=1e-5,
+                 anneal_lr=True,
+                 orthogonal_init=True,
+                 normalize_advantages=True,
+                 normalize_obs=False):
 
         super().__init__(
             actor_hidden_nn=actor_hidden_nn,
@@ -35,92 +45,111 @@ class AC_Agent(BaseAgent):
             gamma=gamma,
             use_critic=True,
             critic_type='V',
+            entropy_coef=entropy_coef,
+            value_loss_coef=value_loss_coef,
+            max_grad_norm=max_grad_norm,
+            adam_eps=adam_eps,
+            anneal_lr=anneal_lr,
+            orthogonal_init=orthogonal_init,
+            normalize_advantages=normalize_advantages,
+            normalize_obs=normalize_obs,
         )
+        self.use_advantage = bool(use_advantage)
 
     def update(self, **kwargs):
         """
-        Updates the actor and critic networks with
-        the given states, rewards and log_probs
+        Update the actor and critic on one completed episode.
+
+        Engineering tricks (all behind BaseAgent flags):
+          - actor trained on the advantage (G_t - V(s)) instead of the raw return,
+            which is the standard variance-reducing baseline for actor-critic
+            (use_advantage);
+          - advantage whitening (normalize_advantages);
+          - entropy bonus (entropy_coef);
+          - critic loss scaled by value_loss_coef;
+          - gradient-norm clipping on both networks (max_grad_norm).
+        Log-probs / entropy are recomputed from the stored states+actions so the
+        gradient and the entropy bonus share one distribution.
         """
         states = kwargs["states"]
+        actions = kwargs["actions"]
         rewards = kwargs["rewards"]
-        log_probs = kwargs["log_probs"]
 
-        "Determine the monte carlo return"
-        G_t = self.compute_discounted_returns(rewards).detach()
-
-        "We need to stack the list of tensors into one tensor"
-        log_probs = torch.stack(log_probs)
-
-        "Determine the policy loss. Since we're summing tensors we need to not use np.sum"
-        actor_loss = -torch.sum(G_t * log_probs)
-
-        "Make a tensor of the states"
-        states_tensor = torch.as_tensor(states, dtype=torch.float32)
-
-        "Make sure the dimension goes from (something, 1) to (something,)"
         assert self.critic is not None
         assert self.critic_optimizer is not None
-        critic_values = self.critic(states_tensor).squeeze()
 
-        "Determine the value loss. Since we're summing tensors we need to not use np.sum"
-        critic_loss = torch.sum((G_t - critic_values) ** 2)
+        "Determine the monte carlo return (the critic regression target)"
+        G_t = self.compute_discounted_returns(rewards).detach()
 
-        """
-        Reset the actor loss gradient to zero
-        Determine how weights need to be updated
-        and update the weights
-        """
+        states_tensor = torch.as_tensor(np.array(states), dtype=torch.float32)
+        actions_tensor = torch.as_tensor(np.array(actions), dtype=torch.float32)
+        fn.update_obs_norm(self.actor, states_tensor)
+        fn.update_obs_norm(self.critic, states_tensor)
+
+        "Critic: regress V(s) towards the discounted return G_t"
+        critic_values = self.critic(states_tensor).squeeze(-1)
+        critic_loss = self.value_loss_coef * torch.sum((G_t - critic_values) ** 2)
+
+        "Actor weight: advantage (G_t - V) with a detached baseline, else raw G_t"
+        if self.use_advantage:
+            weight = (G_t - critic_values.detach())
+        else:
+            weight = G_t
+        if self.normalize_advantages:
+            weight = self.whiten(weight)
+
+        dist = self.policy_distribution(states_tensor)
+        log_probs = dist.log_prob(actions_tensor)
+        entropy_term = dist.entropy().sum()
+        actor_loss = -torch.sum(weight * log_probs) - self.entropy_coef * entropy_term
+
         self.actor_optimizer.zero_grad()
         actor_loss.backward()
+        self.clip_gradients(self.actor.parameters())
         self.actor_optimizer.step()
 
-        "Now do the same for the critic part"
         self.critic_optimizer.zero_grad()
         critic_loss.backward()
+        self.clip_gradients(self.critic.parameters())
         self.critic_optimizer.step()
 
     def update_vectorised(self, states, actions, rewards):
-        """
+        """Vectorised-environment variant of `update` (same tricks)."""
 
-        """
+        assert self.critic is not None
+        assert self.critic_optimizer is not None
 
-        "Make a tensor of the states and one of the actions"
-        states_tensor = torch.tensor(states, dtype=torch.float32)
-        actions_tensor = torch.tensor(actions, dtype=torch.float32)
-
-        "Calculate the log_probs as done in select_action"
-        logit = self.actor(states_tensor)
-        prob = torch.sigmoid(logit)
-        dist = torch.distributions.Bernoulli(probs=prob)
-        log_probs = dist.log_prob(actions_tensor.unsqueeze(1)).squeeze()
+        states_tensor = torch.as_tensor(np.array(states), dtype=torch.float32)
+        actions_tensor = torch.as_tensor(np.array(actions), dtype=torch.float32)
+        fn.update_obs_norm(self.actor, states_tensor)
+        fn.update_obs_norm(self.critic, states_tensor)
 
         "Determine the monte carlo return"
         G_t = self.compute_discounted_returns(rewards).detach()
 
-        "Determine the policy loss. Since we're summing tensors we need to not use np.sum"
-        actor_loss = -torch.sum(G_t * log_probs)
+        critic_values = self.critic(states_tensor).squeeze(-1)
+        critic_loss = self.value_loss_coef * torch.sum((G_t - critic_values) ** 2)
 
-        "Make sure the dimension goes from (something, 1) to (something,)"
-        assert self.critic is not None
-        assert self.critic_optimizer is not None
-        critic_values = self.critic(states_tensor).squeeze()
+        if self.use_advantage:
+            weight = (G_t - critic_values.detach())
+        else:
+            weight = G_t
+        if self.normalize_advantages:
+            weight = self.whiten(weight)
 
-        "Determine the value loss. Since we're summing tensors we need to not use np.sum"
-        critic_loss = torch.sum((G_t - critic_values) ** 2)
+        dist = self.policy_distribution(states_tensor)
+        log_probs = dist.log_prob(actions_tensor)
+        entropy_term = dist.entropy().sum()
+        actor_loss = -torch.sum(weight * log_probs) - self.entropy_coef * entropy_term
 
-        """
-        Reset the actor loss gradient to zero
-        Determine how weights need to be updated
-        and update the weights
-        """
         self.actor_optimizer.zero_grad()
         actor_loss.backward()
+        self.clip_gradients(self.actor.parameters())
         self.actor_optimizer.step()
 
-        "Now do the same for the critic part"
         self.critic_optimizer.zero_grad()
         critic_loss.backward()
+        self.clip_gradients(self.critic.parameters())
         self.critic_optimizer.step()
 
 
@@ -151,9 +180,9 @@ def run_ac(
 
 
 
-    "Keep track of the actions, states, log_probs and rewards"
+    "Keep track of the actions, states and rewards"
     states = []
-    log_probs = []
+    actions = []
     rewards = []
 
     "Retrieve the initial state from the environment"
@@ -186,19 +215,19 @@ def run_ac(
         "Loop until the max. number of timesteps is reached, but don't cut off an episode early"
         while iteration < n_timesteps:
             "Choose the action to take"
-            action, log_prob = agent.select_action(state)
-            
-            
+            action, _ = agent.select_action(state)
+
+
             "Receive the next state, reward and whether the agent is terminated/truncated"
             next_state, reward, terminated, truncated, info = env.step(action)
 
             "The episode is done if the agent terminates/truncates"
             episode_done = terminated or truncated
 
-            "Store the reward, state and log probability"
+            "Store the reward, state and action"
             rewards.append(reward)
             states.append(state)
-            log_probs.append(log_prob)
+            actions.append(action)
             episode_return += reward
 
             "Update the state"
@@ -206,6 +235,9 @@ def run_ac(
 
             "Increase the iteration counter by 1"
             iteration += 1
+
+            "Linear learning-rate annealing over the full training horizon"
+            agent.anneal_learning_rate(1.0 - iteration / n_timesteps)
 
             "Update the progress bar and shared counter periodically"
             if (iteration - last_progress_update) >= 512 or iteration >= n_timesteps:
@@ -238,11 +270,11 @@ def run_ac(
                 episode_return = 0
 
                 "Update the actor and critic networks on the completed episode"
-                agent.update(states=np.array(states), rewards=np.array(rewards), log_probs=log_probs)
+                agent.update(states=np.array(states), actions=np.array(actions), rewards=np.array(rewards))
 
-                "Reset the rewards and log probs array"
+                "Reset the rewards, actions and states arrays"
                 rewards = []
-                log_probs = []
+                actions = []
                 states = []
 
     finally:

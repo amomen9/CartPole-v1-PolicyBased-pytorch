@@ -16,6 +16,7 @@ import shutil
 import time
 import ast
 import glob
+import itertools
 from copy import copy
 from datetime import datetime
 from functools import lru_cache
@@ -1352,6 +1353,60 @@ def _parse_pg_config(cfg):
     return gammas, learning_rates, nn_architectures, legend
 
 
+# ── Engineering-trick hyperparameters (sweepable from Experiment*.py configs) ──
+# Each maps a trick key to its optimal default (used when the config omits it).
+# Config values may be given as a scalar or a list; lists are swept.
+_REINFORCE_TRICK_DEFAULTS = {
+    "entropy_coef": 0.01,
+    "max_grad_norm": 0.5,
+    "adam_eps": 1e-5,
+    "anneal_lr": True,
+    "orthogonal_init": True,
+    "normalize_advantages": True,
+    "normalize_obs": False,
+}
+_AC_TRICK_DEFAULTS = {
+    **_REINFORCE_TRICK_DEFAULTS,
+    "value_loss_coef": 0.5,
+    "use_advantage": True,
+}
+_A2C_TRICK_DEFAULTS = {
+    **_REINFORCE_TRICK_DEFAULTS,
+    "value_loss_coef": 0.5,
+    "activation_name": "tanh",
+    "use_gae": True,
+    "gae_lambda": 0.95,
+}
+_PPO_TRICK_DEFAULTS = {
+    **_REINFORCE_TRICK_DEFAULTS,
+    "value_loss_coef": 0.5,
+    "activation_name": "tanh",
+    "num_minibatches": 32,
+    "clip_vloss": True,
+    "target_kl": None,
+}
+# Every trick key, for the forwarding whitelist in _run_pending_parallel.
+_ALL_TRICK_KEYS = tuple(dict.fromkeys(
+    list(_REINFORCE_TRICK_DEFAULTS)
+    + list(_AC_TRICK_DEFAULTS)
+    + list(_A2C_TRICK_DEFAULTS)
+    + list(_PPO_TRICK_DEFAULTS)
+))
+
+
+def _trick_combos(cfg, defaults):
+    """Cartesian product of the engineering-trick hyperparameters for one algo.
+
+    Returns a list of dicts (one per combination). Each trick key is read from
+    cfg (scalar or list) falling back to its optimal default; single-valued keys
+    contribute one element so the default config produces exactly one combo and
+    no job-count explosion.
+    """
+    keys = list(defaults.keys())
+    value_lists = [_as_list(cfg.get(key, defaults[key])) for key in keys]
+    return [dict(zip(keys, combo)) for combo in itertools.product(*value_lists)]
+
+
 def _build_reinforce_jobs(
     *,
     algo_config,
@@ -1376,46 +1431,50 @@ def _build_reinforce_jobs(
             nn_arch = np.asarray(nn_arch, dtype=np.int32)
             for lr_val in learning_rates:
                 lr_val = float(lr_val)
+                for trick in _trick_combos(cfg, _REINFORCE_TRICK_DEFAULTS):
 
-                legend_cfg = {
-                    **cfg,
-                    "gamma": gamma_val,
-                    "actor_lr": lr_val,
-                    "actor_hidden_nn": nn_arch,
-                }
-                curve_label = _build_curve_label("REINFORCE", global_config=global_config, algo_config=legend_cfg)
-
-                setting_jobs.append({
-                    "curve_label": curve_label,
-                    "method": "REINFORCE",
-                    "kwargs": dict(
-                        method="REINFORCE",
-                        n_repetitions=n_repetitions,
-                        n_timesteps=n_timesteps,
-                        eval_interval=eval_interval,
-                        max_train_episode_length=max_train_episode_length,
-                        max_eval_episode_length=max_eval_episode_length,
-                        actor_lr=lr_val,
-                        gamma=gamma_val,
-                        actor_hidden_nn=nn_arch,
-                        base_seed=base_seed,
-                        eval_with_env_episode_trials=eval_with_env_episode_trials,
-                        n_eval_episodes=n_eval_episodes,
-                        plot_smoothing_window=1,
-                    ),
-                    "hyperparams": {
-                        "n_repetitions": n_repetitions,
-                        "n_timesteps": n_timesteps,
-                        "eval_interval": eval_interval,
-                        "max_train_episode_length": max_train_episode_length,
-                        "max_eval_episode_length": max_eval_episode_length,
-                        "actor_lr": lr_val,
+                    legend_cfg = {
+                        **cfg,
                         "gamma": gamma_val,
-                        "actor_hidden_nn": str(nn_arch.tolist()),
-                        "eval_with_env_episode_trials": eval_with_env_episode_trials,
-                        "n_eval_episodes": n_eval_episodes,
-                    },
-                })
+                        "actor_lr": lr_val,
+                        "actor_hidden_nn": nn_arch,
+                        **trick,
+                    }
+                    curve_label = _build_curve_label("REINFORCE", global_config=global_config, algo_config=legend_cfg)
+
+                    setting_jobs.append({
+                        "curve_label": curve_label,
+                        "method": "REINFORCE",
+                        "kwargs": dict(
+                            method="REINFORCE",
+                            n_repetitions=n_repetitions,
+                            n_timesteps=n_timesteps,
+                            eval_interval=eval_interval,
+                            max_train_episode_length=max_train_episode_length,
+                            max_eval_episode_length=max_eval_episode_length,
+                            actor_lr=lr_val,
+                            gamma=gamma_val,
+                            actor_hidden_nn=nn_arch,
+                            base_seed=base_seed,
+                            eval_with_env_episode_trials=eval_with_env_episode_trials,
+                            n_eval_episodes=n_eval_episodes,
+                            plot_smoothing_window=1,
+                            **trick,
+                        ),
+                        "hyperparams": {
+                            "n_repetitions": n_repetitions,
+                            "n_timesteps": n_timesteps,
+                            "eval_interval": eval_interval,
+                            "max_train_episode_length": max_train_episode_length,
+                            "max_eval_episode_length": max_eval_episode_length,
+                            "actor_lr": lr_val,
+                            "gamma": gamma_val,
+                            "actor_hidden_nn": str(nn_arch.tolist()),
+                            "eval_with_env_episode_trials": eval_with_env_episode_trials,
+                            "n_eval_episodes": n_eval_episodes,
+                            **{k: str(v) for k, v in trick.items()},
+                        },
+                    })
     return setting_jobs
 
 
@@ -1454,50 +1513,54 @@ def _build_ac_jobs(
                     critic_nn = np.asarray(critic_nn, dtype=np.int32)
                     for critic_lr_val in critic_learning_rates:
                         critic_lr_val = float(critic_lr_val)
-                        iter_cfg = {
-                            **cfg,
-                            "gamma": gamma_val,
-                            "actor_lr": actor_lr_val,
-                            "actor_hidden_nn": actor_nn,
-                            "critic_lr": critic_lr_val,
-                            "critic_hidden_nn": critic_nn,
-                        }
-                        curve_label = _build_curve_label("AC", global_config=global_config, algo_config=iter_cfg)
-                        setting_jobs.append({
-                            "curve_label": curve_label,
-                            "method": "ac",
-                            "kwargs": dict(
-                                method="ac",
-                                n_repetitions=n_repetitions,
-                                n_timesteps=n_timesteps,
-                                eval_interval=eval_interval,
-                                max_train_episode_length=max_train_episode_length,
-                                max_eval_episode_length=max_eval_episode_length,
-                                actor_lr=actor_lr_val,
-                                critic_lr=critic_lr_val,
-                                gamma=gamma_val,
-                                actor_hidden_nn=actor_nn,
-                                critic_hidden_nn=critic_nn,
-                                base_seed=base_seed,
-                                eval_with_env_episode_trials=eval_with_env_episode_trials,
-                                n_eval_episodes=n_eval_episodes,
-                                plot_smoothing_window=1,
-                            ),
-                            "hyperparams": {
-                                "n_repetitions": n_repetitions,
-                                "n_timesteps": n_timesteps,
-                                "eval_interval": eval_interval,
-                                "max_train_episode_length": max_train_episode_length,
-                                "max_eval_episode_length": max_eval_episode_length,
-                                "actor_lr": actor_lr_val,
-                                "critic_lr": critic_lr_val,
+                        for trick in _trick_combos(cfg, _AC_TRICK_DEFAULTS):
+                            iter_cfg = {
+                                **cfg,
                                 "gamma": gamma_val,
-                                "actor_hidden_nn": str(actor_nn.tolist()),
-                                "critic_hidden_nn": str(critic_nn.tolist()),
-                                "eval_with_env_episode_trials": eval_with_env_episode_trials,
-                                "n_eval_episodes": n_eval_episodes,
-                            },
-                        })
+                                "actor_lr": actor_lr_val,
+                                "actor_hidden_nn": actor_nn,
+                                "critic_lr": critic_lr_val,
+                                "critic_hidden_nn": critic_nn,
+                                **trick,
+                            }
+                            curve_label = _build_curve_label("AC", global_config=global_config, algo_config=iter_cfg)
+                            setting_jobs.append({
+                                "curve_label": curve_label,
+                                "method": "ac",
+                                "kwargs": dict(
+                                    method="ac",
+                                    n_repetitions=n_repetitions,
+                                    n_timesteps=n_timesteps,
+                                    eval_interval=eval_interval,
+                                    max_train_episode_length=max_train_episode_length,
+                                    max_eval_episode_length=max_eval_episode_length,
+                                    actor_lr=actor_lr_val,
+                                    critic_lr=critic_lr_val,
+                                    gamma=gamma_val,
+                                    actor_hidden_nn=actor_nn,
+                                    critic_hidden_nn=critic_nn,
+                                    base_seed=base_seed,
+                                    eval_with_env_episode_trials=eval_with_env_episode_trials,
+                                    n_eval_episodes=n_eval_episodes,
+                                    plot_smoothing_window=1,
+                                    **trick,
+                                ),
+                                "hyperparams": {
+                                    "n_repetitions": n_repetitions,
+                                    "n_timesteps": n_timesteps,
+                                    "eval_interval": eval_interval,
+                                    "max_train_episode_length": max_train_episode_length,
+                                    "max_eval_episode_length": max_eval_episode_length,
+                                    "actor_lr": actor_lr_val,
+                                    "critic_lr": critic_lr_val,
+                                    "gamma": gamma_val,
+                                    "actor_hidden_nn": str(actor_nn.tolist()),
+                                    "critic_hidden_nn": str(critic_nn.tolist()),
+                                    "eval_with_env_episode_trials": eval_with_env_episode_trials,
+                                    "n_eval_episodes": n_eval_episodes,
+                                    **{k: str(v) for k, v in trick.items()},
+                                },
+                            })
     return setting_jobs
 
 
@@ -1539,53 +1602,57 @@ def _build_a2c_jobs(
                         critic_lr_val = float(critic_lr_val)
                         for tn_step in TN_steps:
                             tn_step = int(tn_step)
-                            iter_cfg = {
-                                **cfg,
-                                "gamma": gamma_val,
-                                "actor_lr": actor_lr_val,
-                                "actor_hidden_nn": actor_nn,
-                                "critic_lr": critic_lr_val,
-                                "critic_hidden_nn": critic_nn,
-                                "TN_step": tn_step,
-                            }
-                            curve_label = _build_curve_label("A2C", global_config=global_config, algo_config=iter_cfg)
-                            setting_jobs.append({
-                                "curve_label": curve_label,
-                                "method": "a2c",
-                                "kwargs": dict(
-                                    method="a2c",
-                                    n_repetitions=n_repetitions,
-                                    n_timesteps=n_timesteps,
-                                    eval_interval=eval_interval,
-                                    max_train_episode_length=max_train_episode_length,
-                                    max_eval_episode_length=max_eval_episode_length,
-                                    actor_lr=actor_lr_val,
-                                    critic_lr=critic_lr_val,
-                                    gamma=gamma_val,
-                                    actor_hidden_nn=actor_nn,
-                                    critic_hidden_nn=critic_nn,
-                                    TN_step=tn_step,
-                                    base_seed=base_seed,
-                                    eval_with_env_episode_trials=eval_with_env_episode_trials,
-                                    n_eval_episodes=n_eval_episodes,
-                                    plot_smoothing_window=1,
-                                ),
-                                "hyperparams": {
-                                    "n_repetitions": n_repetitions,
-                                    "n_timesteps": n_timesteps,
-                                    "eval_interval": eval_interval,
-                                    "max_train_episode_length": max_train_episode_length,
-                                    "max_eval_episode_length": max_eval_episode_length,
-                                    "actor_lr": actor_lr_val,
-                                    "critic_lr": critic_lr_val,
+                            for trick in _trick_combos(cfg, _A2C_TRICK_DEFAULTS):
+                                iter_cfg = {
+                                    **cfg,
                                     "gamma": gamma_val,
-                                    "actor_hidden_nn": str(actor_nn.tolist()),
-                                    "critic_hidden_nn": str(critic_nn.tolist()),
+                                    "actor_lr": actor_lr_val,
+                                    "actor_hidden_nn": actor_nn,
+                                    "critic_lr": critic_lr_val,
+                                    "critic_hidden_nn": critic_nn,
                                     "TN_step": tn_step,
-                                    "eval_with_env_episode_trials": eval_with_env_episode_trials,
-                                    "n_eval_episodes": n_eval_episodes,
-                                },
-                            })
+                                    **trick,
+                                }
+                                curve_label = _build_curve_label("A2C", global_config=global_config, algo_config=iter_cfg)
+                                setting_jobs.append({
+                                    "curve_label": curve_label,
+                                    "method": "a2c",
+                                    "kwargs": dict(
+                                        method="a2c",
+                                        n_repetitions=n_repetitions,
+                                        n_timesteps=n_timesteps,
+                                        eval_interval=eval_interval,
+                                        max_train_episode_length=max_train_episode_length,
+                                        max_eval_episode_length=max_eval_episode_length,
+                                        actor_lr=actor_lr_val,
+                                        critic_lr=critic_lr_val,
+                                        gamma=gamma_val,
+                                        actor_hidden_nn=actor_nn,
+                                        critic_hidden_nn=critic_nn,
+                                        TN_step=tn_step,
+                                        base_seed=base_seed,
+                                        eval_with_env_episode_trials=eval_with_env_episode_trials,
+                                        n_eval_episodes=n_eval_episodes,
+                                        plot_smoothing_window=1,
+                                        **trick,
+                                    ),
+                                    "hyperparams": {
+                                        "n_repetitions": n_repetitions,
+                                        "n_timesteps": n_timesteps,
+                                        "eval_interval": eval_interval,
+                                        "max_train_episode_length": max_train_episode_length,
+                                        "max_eval_episode_length": max_eval_episode_length,
+                                        "actor_lr": actor_lr_val,
+                                        "critic_lr": critic_lr_val,
+                                        "gamma": gamma_val,
+                                        "actor_hidden_nn": str(actor_nn.tolist()),
+                                        "critic_hidden_nn": str(critic_nn.tolist()),
+                                        "TN_step": tn_step,
+                                        "eval_with_env_episode_trials": eval_with_env_episode_trials,
+                                        "n_eval_episodes": n_eval_episodes,
+                                        **{k: str(v) for k, v in trick.items()},
+                                    },
+                                })
     return setting_jobs
 
 
@@ -1637,62 +1704,66 @@ def _build_ppo_jobs(
                                     n_epochs_val = int(n_epochs_val)
                                     for rollout_steps_val in rollout_steps_list:
                                         rollout_steps_val = int(rollout_steps_val)
-                                        iter_cfg = {
-                                            **cfg,
-                                            "gamma": gamma_val,
-                                            "actor_lr": actor_lr_val,
-                                            "actor_hidden_nn": actor_nn,
-                                            "critic_lr": critic_lr_val,
-                                            "critic_hidden_nn": critic_nn,
-                                            "gae_lambda": gae_lambda_val,
-                                            "clip_eps": clip_eps_val,
-                                            "n_epochs": n_epochs_val,
-                                            "rollout_steps": rollout_steps_val,
-                                        }
-                                        curve_label = _build_curve_label("PPO", global_config=global_config, algo_config=iter_cfg)
-                                        setting_jobs.append({
-                                            "curve_label": curve_label,
-                                            "method": "ppo",
-                                            "kwargs": dict(
-                                                method="ppo",
-                                                n_repetitions=n_repetitions,
-                                                n_timesteps=n_timesteps,
-                                                eval_interval=eval_interval,
-                                                max_train_episode_length=max_train_episode_length,
-                                                max_eval_episode_length=max_eval_episode_length,
-                                                actor_lr=actor_lr_val,
-                                                critic_lr=critic_lr_val,
-                                                gamma=gamma_val,
-                                                actor_hidden_nn=actor_nn,
-                                                critic_hidden_nn=critic_nn,
-                                                gae_lambda=gae_lambda_val,
-                                                clip_eps=clip_eps_val,
-                                                n_epochs=n_epochs_val,
-                                                rollout_steps=rollout_steps_val,
-                                                base_seed=base_seed,
-                                                eval_with_env_episode_trials=eval_with_env_episode_trials,
-                                                n_eval_episodes=n_eval_episodes,
-                                                plot_smoothing_window=1,
-                                            ),
-                                            "hyperparams": {
-                                                "n_repetitions": n_repetitions,
-                                                "n_timesteps": n_timesteps,
-                                                "eval_interval": eval_interval,
-                                                "max_train_episode_length": max_train_episode_length,
-                                                "max_eval_episode_length": max_eval_episode_length,
-                                                "actor_lr": actor_lr_val,
-                                                "critic_lr": critic_lr_val,
+                                        for trick in _trick_combos(cfg, _PPO_TRICK_DEFAULTS):
+                                            iter_cfg = {
+                                                **cfg,
                                                 "gamma": gamma_val,
-                                                "actor_hidden_nn": str(actor_nn.tolist()),
-                                                "critic_hidden_nn": str(critic_nn.tolist()),
+                                                "actor_lr": actor_lr_val,
+                                                "actor_hidden_nn": actor_nn,
+                                                "critic_lr": critic_lr_val,
+                                                "critic_hidden_nn": critic_nn,
                                                 "gae_lambda": gae_lambda_val,
                                                 "clip_eps": clip_eps_val,
                                                 "n_epochs": n_epochs_val,
                                                 "rollout_steps": rollout_steps_val,
-                                                "eval_with_env_episode_trials": eval_with_env_episode_trials,
-                                                "n_eval_episodes": n_eval_episodes,
-                                            },
-                                        })
+                                                **trick,
+                                            }
+                                            curve_label = _build_curve_label("PPO", global_config=global_config, algo_config=iter_cfg)
+                                            setting_jobs.append({
+                                                "curve_label": curve_label,
+                                                "method": "ppo",
+                                                "kwargs": dict(
+                                                    method="ppo",
+                                                    n_repetitions=n_repetitions,
+                                                    n_timesteps=n_timesteps,
+                                                    eval_interval=eval_interval,
+                                                    max_train_episode_length=max_train_episode_length,
+                                                    max_eval_episode_length=max_eval_episode_length,
+                                                    actor_lr=actor_lr_val,
+                                                    critic_lr=critic_lr_val,
+                                                    gamma=gamma_val,
+                                                    actor_hidden_nn=actor_nn,
+                                                    critic_hidden_nn=critic_nn,
+                                                    gae_lambda=gae_lambda_val,
+                                                    clip_eps=clip_eps_val,
+                                                    n_epochs=n_epochs_val,
+                                                    rollout_steps=rollout_steps_val,
+                                                    base_seed=base_seed,
+                                                    eval_with_env_episode_trials=eval_with_env_episode_trials,
+                                                    n_eval_episodes=n_eval_episodes,
+                                                    plot_smoothing_window=1,
+                                                    **trick,
+                                                ),
+                                                "hyperparams": {
+                                                    "n_repetitions": n_repetitions,
+                                                    "n_timesteps": n_timesteps,
+                                                    "eval_interval": eval_interval,
+                                                    "max_train_episode_length": max_train_episode_length,
+                                                    "max_eval_episode_length": max_eval_episode_length,
+                                                    "actor_lr": actor_lr_val,
+                                                    "critic_lr": critic_lr_val,
+                                                    "gamma": gamma_val,
+                                                    "actor_hidden_nn": str(actor_nn.tolist()),
+                                                    "critic_hidden_nn": str(critic_nn.tolist()),
+                                                    "gae_lambda": gae_lambda_val,
+                                                    "clip_eps": clip_eps_val,
+                                                    "n_epochs": n_epochs_val,
+                                                    "rollout_steps": rollout_steps_val,
+                                                    "eval_with_env_episode_trials": eval_with_env_episode_trials,
+                                                    "n_eval_episodes": n_eval_episodes,
+                                                    **{k: str(v) for k, v in trick.items()},
+                                                },
+                                            })
     return setting_jobs
 
 
@@ -2026,13 +2097,11 @@ def _run_pending_parallel(pending_settings, n_repetitions, n_timesteps, eval_int
                             # A2C-specific
                             if "TN_step" in kw:
                                 algo_extra_kwargs["TN_step"] = int(kw["TN_step"])
-                            # PPO-specific
-                            for k in (
-                                "gae_lambda",
-                                "clip_eps",
-                                "n_epochs",
-                                "rollout_steps",
-                            ):
+                            # PPO-specific rollout/clip params + the shared
+                            # engineering-trick hyperparameters. Each is forwarded
+                            # only when the job actually carries it, so the
+                            # algorithm-appropriate subset reaches the agent.
+                            for k in ("gae_lambda", "clip_eps", "n_epochs", "rollout_steps") + _ALL_TRICK_KEYS:
                                 if k in kw:
                                     algo_extra_kwargs[k] = kw[k]
                             future = executor.submit(

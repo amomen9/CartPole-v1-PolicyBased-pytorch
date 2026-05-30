@@ -223,7 +223,9 @@ def _build_actor_checkpoint_model(algo_upper: str, actor_hidden_nn: np.ndarray):
             from A2C import PolicyNetwork
         else:
             from PPO import PolicyNetwork
-        return PolicyNetwork(4, 2, actor_hidden_nn, activation=nn.ReLU)
+        # Must match the activation used at training time. A2C/PPO now default to
+        # tanh (the PPO-standard choice), so rebuild the eval network with tanh.
+        return PolicyNetwork(4, 2, actor_hidden_nn, activation="tanh")
     if algo_upper == "DQN":
         from assignment2_repo.mylibrary import PolicyNetwork as DQN_QNetwork
         nn_depth = int(np.asarray(actor_hidden_nn).reshape(-1).size) + 2
@@ -1290,10 +1292,99 @@ def test_policy(obs):
     return 0 if angle < 0 else 1
 # End test policy definition ##############################################################
 
+################[ Shared engineering-trick helpers (init & observation normalization) ]################
+# These small helpers are reused by every network class in the project (Policy_NN /
+# Value_NN here, and the PolicyNetwork / ValueNetwork classes in A2C.py / PPO.py) so
+# that the same orthogonal-initialization and running observation-normalization
+# behaviour is available to all four policy-gradient algorithms.
+
+def init_mlp_orthogonal(net, head_gain, hidden_gain=None):
+    """Orthogonally initialize every nn.Linear in `net`.
+
+    Hidden layers use `hidden_gain` (default sqrt(2), the standard choice for
+    tanh/ReLU MLPs); the final (output) layer uses the smaller `head_gain`
+    (typically 0.01 for a policy head and 1.0 for a value head) so the network
+    starts close to a uniform policy / unbiased value. Biases are zeroed.
+    This is one of the most consistently beneficial PPO/A2C implementation
+    details (Engstrom et al., 2020 — "Implementation Matters").
+    """
+    if hidden_gain is None:
+        hidden_gain = float(np.sqrt(2))
+    linear_layers = [m for m in net.modules() if isinstance(m, nn.Linear)]
+    for index, layer in enumerate(linear_layers):
+        gain = head_gain if index == len(linear_layers) - 1 else hidden_gain
+        nn.init.orthogonal_(layer.weight, gain)
+        if layer.bias is not None:
+            nn.init.zeros_(layer.bias)
+
+
+def register_obs_norm(module, n_features=4):
+    """Register running-statistics buffers for observation normalization.
+
+    Buffers are only created when normalization is actually requested, so the
+    state_dict of a network trained WITHOUT obs-normalization keeps exactly the
+    same keys as before — existing checkpoints continue to load with strict=True.
+    """
+    module.register_buffer("obs_running_mean", torch.zeros(n_features))
+    module.register_buffer("obs_running_var", torch.ones(n_features))
+    module.register_buffer("obs_norm_count", torch.tensor(1e-4))
+
+
+def normalize_obs(module, x):
+    """Apply (and clamp) observation normalization if the module has it enabled."""
+    if not getattr(module, "normalize_obs", False):
+        return x
+    mean = module.obs_running_mean
+    var = module.obs_running_var
+    return torch.clamp((x - mean) / torch.sqrt(var + 1e-8), -10.0, 10.0)
+
+
+@torch.no_grad()
+def update_obs_norm(module, batch):
+    """Welford parallel-update of the running observation mean/variance.
+
+    Call once per `update()` with the batch of states. No-op when the module
+    was built with normalize_obs=False.
+    """
+    if not getattr(module, "normalize_obs", False):
+        return
+    batch = torch.as_tensor(batch, dtype=torch.float32).reshape(-1, module.obs_running_mean.shape[-1])
+    if batch.shape[0] == 0:
+        return
+    batch_mean = batch.mean(0)
+    batch_var = batch.var(0, unbiased=False)
+    batch_count = float(batch.shape[0])
+    delta = batch_mean - module.obs_running_mean
+    total = module.obs_norm_count + batch_count
+    module.obs_running_mean.add_(delta * batch_count / total)
+    m_a = module.obs_running_var * module.obs_norm_count
+    m_b = batch_var * batch_count
+    m2 = m_a + m_b + delta.pow(2) * module.obs_norm_count * batch_count / total
+    module.obs_running_var.copy_(m2 / total)
+    module.obs_norm_count.copy_(total)
+
+
+def resolve_activation(activation):
+    """Map an activation name (or class) to an nn activation class.
+
+    Accepts the strings "tanh"/"relu" (case-insensitive) or an nn.Module
+    subclass directly, so callers can pass either a configurable name or a class.
+    """
+    if isinstance(activation, str):
+        key = activation.strip().lower()
+        if key == "tanh":
+            return nn.Tanh
+        if key == "relu":
+            return nn.ReLU
+        raise ValueError(f"Unsupported activation name: {activation!r}")
+    return activation
+#########################################################
+
 ################[ Value_NN (Critic) ]################
 class Value_NN(nn.Module):      # This is neural network for the critic (Values NN), which can be used as either a state-value critic V_phi(s) or an action-value critic Q_phi(s) depending on the output size and how it's trained.
     """State-value critic V_phi(s), or Q-value critic Q_phi(s) when used per-action."""
-    def __init__(self, nn_hidden_layer_widths=np.array([64, 64]), output_size=1):
+    def __init__(self, nn_hidden_layer_widths=np.array([64, 64]), output_size=1,
+                 orthogonal_init=True, normalize_obs=False):
         super().__init__()
         hidden_widths = np.asarray(nn_hidden_layer_widths, dtype=np.int32).tolist()
         if len(hidden_widths) == 0:
@@ -1308,14 +1399,23 @@ class Value_NN(nn.Module):      # This is neural network for the critic (Values 
         layers.append(nn.Linear(input_size, output_size))   # Output layer: 1 for V_phi(s), 2 for Q_phi(s) with two actions
         self.net = nn.Sequential(*layers)
 
+        # Engineering tricks (default-on init; obs-norm opt-in for checkpoint compat)
+        self.normalize_obs = bool(normalize_obs)
+        if self.normalize_obs:
+            register_obs_norm(self, n_features=4)
+        if orthogonal_init:
+            init_mlp_orthogonal(self.net, head_gain=1.0)  # value head gain = 1.0
+
     def forward(self, state):
-        return self.net(state)
+        state = torch.as_tensor(state, dtype=torch.float32)
+        return self.net(normalize_obs(self, state))
 #########################################################
 
 ################[ Policy_NN Class              ]################
 class Policy_NN(nn.Module):
-    def __init__(self, nn_hidden_layer_widths=np.array([5])):     # nn_depth is the total number of layers (input + hidden + output), and nn_hidden_layer_widths are the input and output sizes of all layers in depth order (the first number is for the input and the last number is for the output). For example, if nn_depth=3 and nn_hidden_layer_widths=[5, 5], then the network will have an input layer of size 4 (the state dimension), a hidden layer of size 5, another hidden layer of size 5, and an output layer of size 1 (the action dimension).
-        super().__init__()        
+    def __init__(self, nn_hidden_layer_widths=np.array([5]),
+                 orthogonal_init=True, normalize_obs=False):     # nn_depth is the total number of layers (input + hidden + output), and nn_hidden_layer_widths are the input and output sizes of all layers in depth order (the first number is for the input and the last number is for the output). For example, if nn_depth=3 and nn_hidden_layer_widths=[5, 5], then the network will have an input layer of size 4 (the state dimension), a hidden layer of size 5, another hidden layer of size 5, and an output layer of size 1 (the action dimension).
+        super().__init__()
         hidden_widths = np.asarray(nn_hidden_layer_widths, dtype=np.int32).tolist()
         if len(hidden_widths) == 0:
             raise ValueError("nn_hidden_layer_widths must contain at least one hidden-layer width")
@@ -1329,8 +1429,16 @@ class Policy_NN(nn.Module):
         layers.append(nn.Linear(input_layer_size, 1))    # 1 is the output layer size (action dimension). Is always 1 for CartPole REINFORCE algorithm, but we keep it here for generality and readability.
         self.net = nn.Sequential(*layers)
 
+        # Engineering tricks (default-on init; obs-norm opt-in for checkpoint compat)
+        self.normalize_obs = bool(normalize_obs)
+        if self.normalize_obs:
+            register_obs_norm(self, n_features=4)
+        if orthogonal_init:
+            init_mlp_orthogonal(self.net, head_gain=0.01)  # policy head gain = 0.01
+
     def forward(self, state):
-        return self.net(state)
+        state = torch.as_tensor(state, dtype=torch.float32)
+        return self.net(normalize_obs(self, state))
 ####################################################################
 
 
@@ -2412,6 +2520,22 @@ def _run_single_repetition(
     clip_eps: float = 0.2,
     n_epochs: int = 10,
     rollout_steps: int = 2048,
+    # ── Engineering-trick hyperparameters (optimal defaults; overridable from
+    #    the Experiment*.py configs via the job builders + forwarding whitelist) ──
+    entropy_coef: float = 0.01,
+    value_loss_coef: float = 0.5,
+    max_grad_norm=0.5,
+    adam_eps: float = 1e-5,
+    anneal_lr: bool = True,
+    orthogonal_init: bool = True,
+    normalize_advantages: bool = True,
+    normalize_obs: bool = False,
+    activation_name: str = "tanh",
+    use_advantage: bool = True,
+    use_gae: bool = True,
+    num_minibatches: int = 32,
+    clip_vloss: bool = True,
+    target_kl=None,
 ):
     """Run one training repetition (pickle-safe for ProcessPoolExecutor)."""
 
@@ -2441,6 +2565,13 @@ def _run_single_repetition(
             actor_lr=actor_lr,
             gamma=gamma,
             use_critic=False,
+            entropy_coef=entropy_coef,
+            max_grad_norm=max_grad_norm,
+            adam_eps=adam_eps,
+            anneal_lr=anneal_lr,
+            orthogonal_init=orthogonal_init,
+            normalize_advantages=normalize_advantages,
+            normalize_obs=normalize_obs,
         )
 
         actor_ck = pg_actor_checkpoint_path(
@@ -2509,6 +2640,15 @@ def _run_single_repetition(
             actor_lr=actor_lr,
             critic_lr=critic_lr,
             gamma=gamma,
+            use_advantage=use_advantage,
+            entropy_coef=entropy_coef,
+            value_loss_coef=value_loss_coef,
+            max_grad_norm=max_grad_norm,
+            adam_eps=adam_eps,
+            anneal_lr=anneal_lr,
+            orthogonal_init=orthogonal_init,
+            normalize_advantages=normalize_advantages,
+            normalize_obs=normalize_obs,
         )
 
         actor_ck = pg_actor_checkpoint_path(
@@ -2612,6 +2752,17 @@ def _run_single_repetition(
             actor_hidden_nn=actor_hidden_nn,
             actor_lr=actor_lr,
             gamma=gamma,
+            entropy_coef=entropy_coef,
+            value_loss_coef=value_loss_coef,
+            max_grad_norm=max_grad_norm,
+            adam_eps=adam_eps,
+            anneal_lr=anneal_lr,
+            orthogonal_init=orthogonal_init,
+            normalize_advantages=normalize_advantages,
+            normalize_obs=normalize_obs,
+            activation_name=activation_name,
+            use_gae=use_gae,
+            gae_lambda=gae_lambda,
         )
 
         actor_ck = pg_actor_checkpoint_path(
@@ -2720,6 +2871,18 @@ def _run_single_repetition(
             n_epochs=n_epochs,
             actor_hidden_nn=actor_hidden_nn,
             critic_hidden_nn=critic_hidden_nn,
+            entropy_coef=entropy_coef,
+            value_loss_coef=value_loss_coef,
+            max_grad_norm=max_grad_norm,
+            adam_eps=adam_eps,
+            anneal_lr=anneal_lr,
+            orthogonal_init=orthogonal_init,
+            normalize_advantages=normalize_advantages,
+            normalize_obs=normalize_obs,
+            activation_name=activation_name,
+            num_minibatches=num_minibatches,
+            clip_vloss=clip_vloss,
+            target_kl=target_kl,
         )
 
         actor_ck = pg_actor_checkpoint_path(

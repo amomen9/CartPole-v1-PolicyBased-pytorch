@@ -3,19 +3,45 @@ import torch
 import numpy as np
 from tqdm import tqdm
 from Agent import BaseAgent
+import Library as fn
 
 class REINFORCE_Agent(BaseAgent):
 
     def update(self, **kwargs):
-        """REINFORCE policy gradient update."""
-        log_probs = kwargs['log_probs']
-        rewards = kwargs['rewards']
-        G = self.compute_discounted_returns(rewards)
-        G = (G - G.mean()) / (G.std(unbiased=False) + 1e-8)
+        """REINFORCE policy-gradient update with engineering tricks.
 
-        policy_loss = torch.stack([-lp * g for lp, g in zip(log_probs, G)]).sum()
+        On top of the textbook update (causal discounted return * log-prob) this
+        adds, all behind the BaseAgent trick flags:
+          - return whitening (variance-reducing baseline)      -> normalize_advantages
+          - an entropy bonus to keep exploration alive          -> entropy_coef
+          - global gradient-norm clipping                       -> max_grad_norm
+        Orthogonal init, Adam-eps and LR annealing are handled by BaseAgent / the
+        training loop. Log-probs and entropy are recomputed from the stored states
+        so the entropy term shares the exact distribution used for the gradient.
+        """
+        states = kwargs['states']
+        actions = kwargs['actions']
+        rewards = kwargs['rewards']
+
+        G = self.compute_discounted_returns(rewards)
+        if self.normalize_advantages:
+            G = self.whiten(G)
+
+        states_t = torch.as_tensor(np.array(states), dtype=torch.float32)
+        actions_t = torch.as_tensor(np.array(actions), dtype=torch.float32)
+        fn.update_obs_norm(self.actor, states_t)  # no-op unless obs-norm enabled
+
+        dist = self.policy_distribution(states_t)
+        log_probs = dist.log_prob(actions_t)
+        entropy_term = dist.entropy().sum()
+
+        # Summed (not averaged) to preserve the original loss scale; the entropy
+        # bonus is summed over timesteps to stay scale-consistent with it.
+        policy_loss = -(log_probs * G).sum() - self.entropy_coef * entropy_term
+
         self.actor_optimizer.zero_grad()
         policy_loss.backward()
+        self.clip_gradients(self.actor.parameters())
         self.actor_optimizer.step()
 
 def run_reinforce(
@@ -77,17 +103,21 @@ def run_reinforce(
             # --- collect one full episode step by step ---
             env.reset()
             obs = env.obs
-            log_probs, episode_rewards = [], []
+            states_buf, actions_buf, episode_rewards = [], [], []
             done, truncated = False, False
 
             for _ in range(truncation_step):
-                action, log_prob = agent.select_action(obs)
+                action, _ = agent.select_action(obs)
                 next_obs, reward, done, truncated, info = env.step(action)
 
-                log_probs.append(log_prob)
+                states_buf.append(np.asarray(obs, dtype=np.float32))
+                actions_buf.append(action)
                 episode_rewards.append(reward)
                 global_step += 1
                 obs = next_obs
+
+                # Linear learning-rate annealing over the full training horizon.
+                agent.anneal_learning_rate(1.0 - global_step / n_timesteps)
 
                 # Update progress bar every 512 steps (reduces terminal spam)
                 if (global_step - last_progress_update) >= 512 or global_step >= n_timesteps:
@@ -116,7 +146,7 @@ def run_reinforce(
                     break
             # Update policy on the completed episode
             last_episode_return = sum(episode_rewards)
-            agent.update(log_probs=log_probs, rewards=episode_rewards)
+            agent.update(states=states_buf, actions=actions_buf, rewards=episode_rewards)
 
             if pbar is not None:
                 pbar.set_postfix_str(f"episode_reward={last_episode_return:.2f}", refresh=False)

@@ -31,26 +31,92 @@ class BaseAgent:
     def __init__(self, actor_hidden_nn=np.array([16, 16]),
                  critic_hidden_nn=np.array([64, 64]),
                  actor_lr=0.001, critic_lr=0.001,
-                 gamma=0.99, use_critic=False, critic_type='V'):
+                 gamma=0.99, use_critic=False, critic_type='V',
+                 # ── Engineering tricks (default to their optimal/ON values) ──
+                 entropy_coef=0.01,        # weight of the entropy bonus -coef*H(pi)
+                 value_loss_coef=0.5,      # weight of the critic regression loss
+                 max_grad_norm=0.5,        # global grad-norm clip (None disables)
+                 adam_eps=1e-5,            # Adam epsilon (PPO-standard, more stable)
+                 anneal_lr=True,           # linearly anneal LR to 0 over training
+                 orthogonal_init=True,     # orthogonal weight init with head gains
+                 normalize_advantages=True,# whiten advantages/returns per batch
+                 normalize_obs=False):     # running obs-normalization (opt-in; see note)
         # Actor (policy network pi_theta)
-        self.actor = fn.Policy_NN(nn_hidden_layer_widths=actor_hidden_nn)
-        self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=actor_lr)
+        self.actor = fn.Policy_NN(
+            nn_hidden_layer_widths=actor_hidden_nn,
+            orthogonal_init=orthogonal_init,
+            normalize_obs=normalize_obs,
+        )
+        self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=actor_lr, eps=adam_eps)
 
-        # Do not use critic for REINFORCE (use_critic=False), but set up critic network and optimizer if critic methods are used (AC, A2C, A3C - use_critic=True). 
+        # Do not use critic for REINFORCE (use_critic=False), but set up critic network and optimizer if critic methods are used (AC, A2C, A3C - use_critic=True).
         self.use_critic = use_critic
         # The critic_type determines whether it's a state-value (V) or action-value (Q) critic.
         self.critic_type = critic_type  # 'V' for state-value (AC, A2C, A3C), 'Q' for action-value (explicit Q critic)
-        
+
         if use_critic:
             # Critic (V_phi or Q_phi)
             output_size = 1 if critic_type == 'V' else 2  # Q outputs one value per action
-            self.critic = fn.Value_NN(nn_hidden_layer_widths=critic_hidden_nn, output_size=output_size)
-            self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=critic_lr)
+            self.critic = fn.Value_NN(
+                nn_hidden_layer_widths=critic_hidden_nn,
+                output_size=output_size,
+                orthogonal_init=orthogonal_init,
+                normalize_obs=normalize_obs,
+            )
+            self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=critic_lr, eps=adam_eps)
         else:
             self.critic = None
             self.critic_optimizer = None
 
         self.gamma = gamma
+
+        # ── store trick hyperparameters ──
+        self.entropy_coef = float(entropy_coef)
+        self.value_loss_coef = float(value_loss_coef)
+        self.max_grad_norm = max_grad_norm
+        self.anneal_lr = bool(anneal_lr)
+        self.orthogonal_init = bool(orthogonal_init)
+        self.normalize_advantages = bool(normalize_advantages)
+        self.normalize_obs = bool(normalize_obs)
+        # Base learning rates remembered so the LR scheduler can rescale from a
+        # fixed reference instead of compounding each step.
+        self.base_actor_lr = float(actor_lr)
+        self.base_critic_lr = float(critic_lr)
+
+    # ── Shared engineering-trick helpers ─────────────────────────────────────
+    def anneal_learning_rate(self, fraction_remaining):
+        """Linearly scale every optimizer LR by `fraction_remaining` in [0, 1].
+
+        Called by each training loop once per environment step using
+        fraction_remaining = 1 - global_step / n_timesteps. No-op when
+        anneal_lr is disabled.
+        """
+        if not self.anneal_lr:
+            return
+        frac = max(0.0, float(fraction_remaining))
+        for group in self.actor_optimizer.param_groups:
+            group["lr"] = self.base_actor_lr * frac
+        if self.critic_optimizer is not None:
+            for group in self.critic_optimizer.param_groups:
+                group["lr"] = self.base_critic_lr * frac
+
+    def clip_gradients(self, parameters):
+        """Apply global gradient-norm clipping when max_grad_norm is set."""
+        if self.max_grad_norm is not None:
+            nn.utils.clip_grad_norm_(parameters, self.max_grad_norm)
+
+    @staticmethod
+    def whiten(x, eps=1e-8):
+        """Zero-mean / unit-std normalization with a near-constant guard."""
+        std = x.std(unbiased=False)
+        if not torch.isfinite(std) or std < eps:
+            return x - x.mean()
+        return (x - x.mean()) / (std + eps)
+
+    def policy_distribution(self, states_tensor):
+        """Bernoulli policy distribution over the single CartPole action logit."""
+        logits = self.actor(states_tensor).squeeze(-1)
+        return torch.distributions.Bernoulli(logits=logits)
 
     def select_action(self, obs):
         """Sample action from pi_theta(s). Returns (action, log_prob)."""
