@@ -1,0 +1,28 @@
+((= glyphfix template: reproduces the default nbconvert 'latex' output and
+    appends \usepackage{glyphfix} to the preamble, so the generated .tex
+    compiles under XeLaTeX without "Missing character" errors. =))
+
+((=- Default to the notebook output style (same as the stock template) -=))
+((*- if not cell_style is defined -*))
+    ((* set cell_style = 'style_jupyter.tex.j2' *))
+((*- endif -*))
+
+((=- Inherit from the specified cell style. -=))
+((* extends cell_style *))
+
+
+%===============================================================================
+% Latex Article
+%===============================================================================
+
+((*- block docclass -*))
+\documentclass[11pt]{article}
+((*- endblock docclass -*))
+
+
+((=- Add our fallback-glyph package on top of the default package list. -=))
+((* block packages *))
+((( super() )))
+% --- injected automatically by the glyphfix nbconvert template ---
+\usepackage{glyphfix}
+((* endblock packages *))

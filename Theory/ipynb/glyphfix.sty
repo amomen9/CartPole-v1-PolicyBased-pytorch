@@ -1,0 +1,69 @@
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{glyphfix}[2026/07/21 v1.1 Fallback glyphs for XeLaTeX/LuaLaTeX]
+
+% ---------------------------------------------------------------------------
+% Purpose
+%   The main body font (Latin Modern Roman) has no glyphs for a number of
+%   Unicode characters that leak in from Markdown/notebook text, producing:
+%       Missing character: There is no <X> in font [lmroman10-regular]...
+%   This package silences those warnings by re-mapping each offending
+%   character to something that renders:
+%     * decorative dingbats -> pulled from a fallback font (Segoe UI Symbol)
+%     * stray math symbols  -> typeset in math mode (font-independent)
+%     * Unicode spaces       -> real LaTeX horizontal space
+%
+% Engine: XeLaTeX or LuaLaTeX (needs fontspec). Safe to load twice.
+% This file MUST be UTF-8 encoded (it contains literal Unicode characters).
+% ---------------------------------------------------------------------------
+
+\RequirePackage{newunicodechar}
+\RequirePackage{fontspec}
+
+% Fallback font holding the dingbats/symbols LM Roman lacks.
+% Segoe UI Symbol ships with Windows and covers U+2714/U+2718/U+2726.
+% To compile elsewhere, change this to any installed font with those glyphs
+% (e.g. "DejaVu Sans", "Noto Sans Symbols 2").
+\newfontfamily\glyphfixfont{Segoe UI Symbol}[Scale=MatchLowercase]
+
+% --- Decorative dingbats -----------------------------------------------------
+% \char"XXXX selects the glyph by codepoint in the fallback font, which avoids
+% the active-character recursion \newunicodechar would otherwise cause.
+\newunicodechar{✦}{{\glyphfixfont\char"2726 }}% U+2726 BLACK FOUR POINTED STAR
+\newunicodechar{✔}{{\glyphfixfont\char"2714 }}% U+2714 HEAVY CHECK MARK
+\newunicodechar{✘}{{\glyphfixfont\char"2718 }}% U+2718 HEAVY BALLOT X
+
+% --- Stray math letters / operators appearing in text mode -------------------
+\newunicodechar{π}{\ensuremath{\pi}}%          U+03C0 GREEK SMALL LETTER PI
+\newunicodechar{θ}{\ensuremath{\theta}}%       U+03B8 GREEK SMALL LETTER THETA
+\newunicodechar{λ}{\ensuremath{\lambda}}%      U+03BB GREEK SMALL LETTER LAMBDA
+\newunicodechar{𝜆}{\ensuremath{\lambda}}%      U+1D706 MATHEMATICAL ITALIC SMALL LAMBDA
+\newunicodechar{≠}{\ensuremath{\neq}}%         U+2260 NOT EQUAL TO
+\newunicodechar{≈}{\ensuremath{\approx}}%      U+2248 ALMOST EQUAL TO
+\newunicodechar{∼}{\ensuremath{\sim}}%         U+223C TILDE OPERATOR
+\newunicodechar{≫}{\ensuremath{\gg}}%          U+226B MUCH GREATER-THAN
+\newunicodechar{⇒}{\ensuremath{\Rightarrow}}%  U+21D2 RIGHTWARDS DOUBLE ARROW
+
+% --- Unicode spaces ----------------------------------------------------------
+% (caret notation ^^^^XXXX is used here so these invisible space characters
+%  cannot be silently normalised to an ordinary space in the source file.)
+\newunicodechar{^^^^2003}{\hspace{1em}}%       U+2003 EM SPACE
+\newunicodechar{^^^^2002}{\hspace{0.5em}}%     U+2002 EN SPACE
+
+% --- Math symbols used in text mode ------------------------------------------
+% nbconvert sometimes emits math commands (\lambda, \gg, ...) OUTSIDE math mode,
+% e.g. inside \hyperref link text where the enclosing \(...\) was stripped.
+% Under unicode-math those emit a raw Unicode glyph in the body font (which has
+% no such glyph). Re-wrapping them in \ensuremath makes them render as proper
+% math whether or not math mode is already active. Add more names here if new
+% "Missing character" warnings for math symbols appear.
+\AtBeginDocument{%
+  \newcommand\glyphfix@textsafe[1]{%
+    \expandafter\let\csname glyphfix@o@\string#1\endcsname#1%
+    \renewcommand#1{\ensuremath{\csname glyphfix@o@\string#1\endcsname}}%
+  }%
+  \glyphfix@textsafe\lambda
+  \glyphfix@textsafe\gg
+  \glyphfix@textsafe\sim
+}
+
+\endinput
