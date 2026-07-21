@@ -1,0 +1,18 @@
+{
+  "TN_step": 10,
+  "actor_hidden_nn": [
+    64,
+    64
+  ],
+  "actor_lr": 9.999999747378752e-05,
+  "algo_type": "A2C",
+  "component": "Actor",
+  "eval_interval": 250,
+  "eval_with_env_episode_trials": true,
+  "gamma": 0.9900000095367432,
+  "max_eval_episode_length": 20000,
+  "max_train_episode_length": 500,
+  "n_eval_episodes": 5,
+  "n_timesteps": 500000,
+  "use_saved_disk_networks_checkpoints": false
+}
