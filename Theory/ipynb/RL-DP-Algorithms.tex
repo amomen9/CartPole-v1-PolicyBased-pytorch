@@ -99,6 +99,17 @@
 % \refstepcounter{none}. Define a dummy 'none' counter so that does not error.
 \newcounter{none}
 \providecommand{\theHnone}{none.\arabic{none}}
+% --- pseudocode algorithm box: the PseudoBoxToLatex preprocessor rewrites
+%     <div class="pseudobox"> ... </div> into this environment. ---
+% tcolorbox is already loaded (with [breakable]) by the default nbconvert style,
+% so we must NOT reload it (option clash); just enable the libraries we use.
+\tcbuselibrary{skins, breakable}
+\newtcolorbox{pseudobox}{%
+  breakable, enhanced, sharp corners,
+  colback=white, colframe=black, boxrule=0.8pt,
+  left=8pt, right=8pt, top=6pt, bottom=6pt,
+  before skip=14pt, after skip=14pt,
+}
 
 
     
@@ -430,260 +441,57 @@
     
 
     
-    \phantomsection\label{algo-toc-sidebar}
-\phantomsection\label{algo-toc-title}Index
+    \section{RL-DP Algorithms}\label{rl-dp-algorithms}
 
-Model-Based Methods
-
-\begin{enumerate}
-\def\labelenumi{\arabic{enumi}.}
-\tightlist
-\item
-  Value Iteration
-
-  · Introduction · Algorithm · Engineering Tricks · Pseudocode
-
-  \begin{enumerate}
-  \def\labelenumii{\arabic{enumii}.}
-  \setcounter{enumii}{1}
-  \tightlist
-  \item
-    Policy Iteration
-
-    · Introduction · Algorithm · Engineering Tricks · Pseudocode
-
-    \begin{enumerate}
-    \def\labelenumiii{\arabic{enumiii}.}
-    \setcounter{enumiii}{2}
-    \tightlist
-    \item
-      Held-Karp (Bottom-Up / Tabulation)
-
-      · Introduction · Algorithm · Engineering Tricks · Pseudocode
-
-      \begin{enumerate}
-      \def\labelenumiv{\arabic{enumiv}.}
-      \setcounter{enumiv}{3}
-      \tightlist
-      \item
-        Held-Karp (Top-Down / Memoisation)
-
-        · Introduction · Algorithm · Engineering Tricks · Pseudocode
-
-        Model-Free Methods
-
-        On-Policy vs Off-Policy Algorithms
-
-        Full Episodes vs Step-wise Updates
-
-        \begin{enumerate}
-        \def\labelenumv{\arabic{enumv}.}
-        \tightlist
-        \item
-          Monte Carlo (First-Visit, On-Policy)
-
-          · Introduction · Algorithm · Engineering Tricks · Pseudocode
-
-          \begin{enumerate}
-          \def\labelenumvi{\arabic{enumvi}.}
-          \tightlist
-          \item
-            Temporal Difference --- TD(0)
-
-            · Introduction · Algorithm · Engineering Tricks · Pseudocode
-
-            \begin{enumerate}
-            \def\labelenumvii{\arabic{enumvii}.}
-            \tightlist
-            \item
-              n-Step TD
-
-              · Introduction · Algorithm · Engineering Tricks ·
-              Pseudocode
-
-              \begin{enumerate}
-              \def\labelenumviii{\arabic{enumviii}.}
-              \tightlist
-              \item
-                SARSA (State-Action-Reward-State-Action)
-
-                · Introduction · Algorithm · Engineering Tricks ·
-                Pseudocode
-
-                \begin{enumerate}
-                \def\labelenumix{\arabic{enumix}.}
-                \tightlist
-                \item
-                  Q-Learning
-
-                  · Introduction · Algorithm · Engineering Tricks ·
-                  Pseudocode
-
-                  Deep RL --- Value-Based
-
-                  \begin{enumerate}
-                  \def\labelenumx{\arabic{enumx}.}
-                  \tightlist
-                  \item
-                    DQN Naive (Deep Q-Network, no tricks)
-
-                    · Introduction · Algorithm · Engineering Tricks ·
-                    Pseudocode
-
-                    \begin{enumerate}
-                    \def\labelenumxi{\arabic{enumxi}.}
-                    \tightlist
-                    \item
-                      DQN + Target Network (DQN+TN)
-
-                      · Introduction · Algorithm · Engineering Tricks ·
-                      Pseudocode
-
-                      \begin{enumerate}
-                      \def\labelenumxii{\arabic{enumxii}.}
-                      \tightlist
-                      \item
-                        DQN + Experience Replay (DQN+ER)
-
-                        · Introduction · Algorithm · Engineering Tricks
-                        · Pseudocode
-
-                        Deep RL --- Policy Gradient Methods
-
-                        What Is the Vanilla Policy Gradient Loss?
-
-                        Vanilla Policy Gradient
-
-                        \begin{enumerate}
-                        \def\labelenumxiii{\arabic{enumxiii}.}
-                        \tightlist
-                        \item
-                          REINFORCE (Monte Carlo Policy Gradient)
-
-                          · Introduction · Algorithm · Engineering
-                          Tricks · Pseudocode
-
-                          \begin{enumerate}
-                          \def\labelenumxiv{\arabic{enumxiv}.}
-                          \tightlist
-                          \item
-                            Actor-Critic (AC)
-
-                            · Introduction · Algorithm · Engineering
-                            Tricks · Pseudocode
-
-                            \begin{enumerate}
-                            \def\labelenumxv{\arabic{enumxv}.}
-                            \tightlist
-                            \item
-                              A2C (Advantage Actor-Critic)
-
-                              · Introduction · Algorithm · Engineering
-                              Tricks · Pseudocode
-
-                              \begin{enumerate}
-                              \def\labelenumxvi{\arabic{enumxvi}.}
-                              \tightlist
-                              \item
-                                A3C (Asynchronous Advantage
-                                Actor-Critic)
-
-                                · Introduction · Algorithm · Engineering
-                                Tricks · Pseudocode
-
-                                Advanced Policy Optimization
-
-                                \begin{enumerate}
-                                \def\labelenumxvii{\arabic{enumxvii}.}
-                                \tightlist
-                                \item
-                                  DDPG (Deep Deterministic Policy
-                                  Gradient)
-
-                                  · Introduction · Algorithm ·
-                                  Engineering Tricks · Pseudocode
-
-                                  \begin{enumerate}
-                                  \def\labelenumxviii{\arabic{enumxviii}.}
-                                  \tightlist
-                                  \item
-                                    SAC (Soft Actor-Critic)
-
-                                    · Introduction · Algorithm ·
-                                    Engineering Tricks · Pseudocode
-
-                                    \begin{enumerate}
-                                    \def\labelenumxix{\arabic{enumxix}.}
-                                    \tightlist
-                                    \item
-                                      PPO (Proximal Policy Optimization)
-
-                                      · Introduction · Algorithm ·
-                                      Engineering Tricks · Pseudocode
-
-                                      \begin{enumerate}
-                                      \def\labelenumxx{\arabic{enumxx}.}
-                                      \tightlist
-                                      \item
-                                        CQL (Conservative Q-Learning)
-
-                                        · Introduction · Algorithm ·
-                                        Engineering Tricks · Pseudocode
-                                      \end{enumerate}
-                                    \end{enumerate}
-                                  \end{enumerate}
-                                \end{enumerate}
-                              \end{enumerate}
-                            \end{enumerate}
-                          \end{enumerate}
-                        \end{enumerate}
-                      \end{enumerate}
-                    \end{enumerate}
-                  \end{enumerate}
-                \end{enumerate}
-              \end{enumerate}
-            \end{enumerate}
-          \end{enumerate}
-        \end{enumerate}
-      \end{enumerate}
-    \end{enumerate}
-  \end{enumerate}
-\end{enumerate}
+    \clearpage
 
 \subsection{Index}\label{index}
 
-\textbf{Model-Based Methods}
+\textbf{Classic Dynamic Programming}
 
-   1. Value Iteration
+  \hyperref[classic-dp-intro]{What Defines a Classic DP Problem?}
 
-   ~~· \hyperref[intro-1-1]{Introduction} ~·
-\hyperref[value-iteration]{Algorithm} ~·
-\hyperref[tricks-1-1]{Engineering Tricks} ~·
-\hyperref[pseudo-1-1]{Pseudocode}
+  Ex: TSP (Traveling Salesman Problem)
 
-   2. Policy Iteration
-
-   ~~· \hyperref[intro-1-2]{Introduction} ~·
-\hyperref[policy-iteration]{Algorithm} ~·
-\hyperref[tricks-1-2]{Engineering Tricks} ~·
-\hyperref[pseudo-1-2]{Pseudocode}
-
-   3. Held-Karp (Bottom-Up / Tabulation)
+   1. Held-Karp (Bottom-Up / Tabulation)
 
    ~~· \hyperref[intro-1-3]{Introduction} ~·
 \hyperref[held-karp-bottom-up]{Algorithm} ~·
 \hyperref[tricks-1-3]{Engineering Tricks} ~·
 \hyperref[pseudo-1-3]{Pseudocode}
 
-   4. Held-Karp (Top-Down / Memoisation)
+   2. Held-Karp (Top-Down / Memoisation)
 
    ~~· \hyperref[intro-1-4]{Introduction} ~·
 \hyperref[held-karp-top-down]{Algorithm} ~·
 \hyperref[tricks-1-4]{Engineering Tricks} ~·
 \hyperref[pseudo-1-4]{Pseudocode}
 
-\textbf{Model-Free Methods}
+\textbf{Reinforcement Learning Dynamic Programming}
 
+  \hyperref[rl-dp-intro]{What Defines an RL DP Problem?}
+
+\textbf{RL Model-Based Methods}
+
+  \hyperref[model-based-intro]{Introduction}
+
+   1. Value Iteration
+
+   ~~· \hyperref[intro-1-1]{Introduction} ~·
+\hyperref[value-iteration-algo]{Algorithm} ~·
+\hyperref[tricks-1-1]{Engineering Tricks} ~·
+\hyperref[pseudo-1-1]{Pseudocode}
+
+   2. Policy Iteration
+
+   ~~· \hyperref[intro-1-2]{Introduction} ~·
+\hyperref[policy-iteration-algo]{Algorithm} ~·
+\hyperref[tricks-1-2]{Engineering Tricks} ~·
+\hyperref[pseudo-1-2]{Pseudocode}
+
+\textbf{RL Model-Free Methods}
+
+  \hyperref[model-free-intro]{Introduction}\\
   \hyperref[on-off-policy-intro]{On-Policy vs Off-Policy Algorithms}\\
   \hyperref[full-episodes-intro]{Full Episodes vs Step-wise Updates}
 
@@ -703,8 +511,9 @@ Model-Based Methods
    3. n-Step TD
 
    ~~· \hyperref[intro-2-3]{Introduction} ~·
-\hyperref[n-step-td]{Algorithm} ~· \hyperref[tricks-2-3]{Engineering
-Tricks} ~· \hyperref[pseudo-2-3]{Pseudocode}
+\hyperref[n-step-td-algo]{Algorithm} ~·
+\hyperref[tricks-2-3]{Engineering Tricks} ~·
+\hyperref[pseudo-2-3]{Pseudocode}
 
    4. SARSA (State-Action-Reward-State-Action)
 
@@ -715,8 +524,9 @@ Tricks} ~· \hyperref[pseudo-2-3]{Pseudocode}
    5. Q-Learning
 
    ~~· \hyperref[intro-2-5]{Introduction} ~·
-\hyperref[q-learning]{Algorithm} ~· \hyperref[tricks-2-5]{Engineering
-Tricks} ~· \hyperref[pseudo-2-5]{Pseudocode}
+\hyperref[q-learning-algo]{Algorithm} ~·
+\hyperref[tricks-2-5]{Engineering Tricks} ~·
+\hyperref[pseudo-2-5]{Pseudocode}
 
   \textbf{Deep RL --- Value-Based}
 
@@ -799,418 +609,63 @@ Tricks} ~· \hyperref[pseudo-4-2]{Pseudocode}
 
     \clearpage
 
-\phantomsection\label{value-iteration}
+\subsection{Classic Dynamic
+Programming}\label{classic-dynamic-programming}
 
-    \subsubsection{Value Iteration:}\label{value-iteration}
+\phantomsection\label{classic-dp-intro}
 
-    \textbf{Notation:} - \(r(s,a,s')\) --- reward received when
-transitioning from \(s\) to \(s'\) via action \(a\) - \(v\) ---
-temporary copy of \(V(s)\) before the Bellman update, used to measure
-change \(\Delta\)
+\subsubsection{\texorpdfstring{What Defines a \emph{Classic} DP
+Problem?}{What Defines a Classic DP Problem?}}\label{what-defines-a-classic-dp-problem}
 
-    \phantomsection\label{intro-1-1}
+Classic \textbf{Dynamic Programming (DP)} solves a problem by breaking
+it into overlapping subproblems, optimizing each one \emph{once}, and
+combining those stored sub-solutions to build the answer to the full
+problem. Every subproblem's optimal value is cached in a \textbf{DP
+table}, which guarantees the \emph{exact} global optimum --- but that
+table can grow \textbf{exponentially} with problem size, so these
+methods are often memory-hungry.
 
-    \textbf{Introduction:} Solves an MDP by iteratively applying the Bellman
-optimality update
-\(V(s) \leftarrow \max_a \sum_{s'} P(s'\mid s,a)\bigl[r(s,a,s') + \gamma\, V(s')\bigr]\)
-until \(V\) converges, then reads off the greedy policy. \emph{Idea:}
-fuse policy evaluation and policy improvement into a single max-backup
---- no need to fully evaluate each intermediate policy as Policy
-Iteration does.
-
-    \textbf{Algorithm:}
-
-\textbf{Input:} MDP \((S, A, P, r, \gamma)\), threshold \(\theta > 0\)
-
-\begin{enumerate}
-\def\labelenumi{\arabic{enumi}.}
-\item
-  Initialize \(V(s)\) arbitrarily for all \(s \in S\) (e.g.,
-  \(V(s) = 0\))
-\item
-  \textbf{Repeat} \emph{(outer loop --- sweeps)}:
-
-  \begin{itemize}
-  \tightlist
-  \item
-    \(\Delta \leftarrow 0\)
-  \item
-    For each \(s \in S\) \emph{(inner loop --- states)}:
-
-    \begin{itemize}
-    \tightlist
-    \item
-      \(v \leftarrow V(s)\)
-    \item
-      \(\displaystyle V(s) \leftarrow \max_a \sum_{s'} P(s' \mid s,a)\,\bigl[r(s,a,s') + \gamma\, V(s')\bigr]\)
-    \item
-      \(\Delta \leftarrow \max(\Delta,\; |v - V(s)|)\)
-    \end{itemize}
-  \item
-    Until \(\Delta < \theta\) \emph{(convergence check)}
-  \end{itemize}
-\item
-  \textbf{Output policy} --- for each \(s \in S\):
-\end{enumerate}
-
-\[\pi(s) = \arg\max_a \sum_{s'} P(s' \mid s,a)\,\bigl[r(s,a,s') + \gamma\, V(s')\bigr]\]
-
-Return \(\pi\)
-
-    \phantomsection\label{tricks-1-1}
-
-    \textbf{Additional Known Engineering Tricks}
+The traits that make a problem a \emph{classic} DP problem are:
 
 \begin{itemize}
+\tightlist
 \item
-  \phantomsection\label{trick-1-1-1}\textbf{In-place (Gauss--Seidel)
-  updates} --- overwrite \(V(s)\) as soon as the new value is computed
-  within a sweep, rather than building a fresh copy from \(V_k\).
-  \emph{Why it helps:} the freshest values are reused immediately by
-  later states in the same sweep, so the effective contraction is
-  tighter and convergence typically needs fewer sweeps.
-  \emph{Interaction:} now the \emph{order} of states matters --- pairs
-  naturally with \textbf{prioritized sweeping} and \textbf{asynchronous
-  DP}, and is mutually exclusive with the \emph{vectorised} synchronous
-  backup below.
+  \textbf{A fully known, static, (usually) deterministic structure.} The
+  costs, transitions, and constraints are all given up front --- nothing
+  is sampled or estimated from experience.
 \item
-  \phantomsection\label{trick-1-1-2}\textbf{Prioritized sweeping}
-  \emph{(Moore \& Atkeson, 1993)} --- maintain a priority queue keyed by
-  each state's current Bellman residual; on every step, pop the
-  highest-error state, update it, and re-queue its predecessors.
-  \emph{Why it helps:} compute is concentrated where \(V\) is still
-  changing significantly, instead of wasting full sweeps on
-  already-converged states. \emph{Interaction:} assumes in-place
-  updates; in the limit it is the most aggressive scheduling of
-  asynchronous DP.
+  \textbf{No agent, no actions-over-time, no reward.} The goal is a
+  single \textbf{combinatorial optimum} (a shortest tour, a longest
+  common subsequence, an optimal matrix-chain order), \emph{not} a rule
+  for behaving in an environment.
 \item
-  \phantomsection\label{trick-1-1-3}\textbf{Asynchronous DP} --- update
-  only a subset of states per pass (random, trajectory-based, or
-  reachable-from-start). \emph{Why it helps:} avoids touching irrelevant
-  states in large MDPs where most states are unreachable from typical
-  start distributions, and parallelises across processors without
-  coordination. \emph{Interaction:} generalises in-place sweeping;
-  convergence still holds as long as every state is visited infinitely
-  often.
-\item
-  \phantomsection\label{trick-1-1-4}\textbf{Vectorised Bellman backup}
-  --- store \(P\) as a dense \((|S|,|A|,|S'|)\) tensor and compute one
-  synchronous sweep via \texttt{einsum} / matrix products. \emph{Why it
-  helps:} turns the triple loop into a single BLAS call, giving
-  order-of-magnitude wall-clock speed-ups on dense MDPs.
-  \emph{Interaction:} implements the \emph{synchronous} Jacobi-style
-  backup --- incompatible with strict in-place updates; pick one or the
-  other depending on whether speed or sweep count matters more.
-\item
-  \phantomsection\label{trick-1-1-5}\textbf{Span-seminorm convergence
-  test} --- replace \(\Delta < \theta\) with
-  \(\mathrm{sp}(V_{k+1}-V_k) < \theta\,(1-\gamma)/\gamma\), where
-  \(\mathrm{sp}(x)=\max x-\min x\). \emph{Why it helps:} yields a tight
-  \(\varepsilon\)-optimal-\emph{policy} guarantee from the contraction
-  bound, so the loop stops as soon as the policy is provably
-  near-optimal rather than at an arbitrary max-norm threshold.
-\item
-  \phantomsection\label{trick-1-1-6}\textbf{Action-set pruning /
-  dominance} --- at each state, drop actions that are dominated (lower
-  \(Q(s,a)\) than another action under all admissible \(V\) bounds).
-  \emph{Why it helps:} shrinks the inner \(\max_a\) in every sweep ---
-  important when \(|A|\) is large or many actions are clearly suboptimal
-  early.
+  \textbf{Exact optimality in one shot.} Because the whole structure is
+  known, the recursion returns the provably optimal answer directly,
+  rather than an approximation refined over many iterations.
 \end{itemize}
 
-    \phantomsection\label{pseudo-1-1}
+This is exactly the contrast with the \textbf{reinforcement-learning DP}
+of the next section. There, the ``problem'' is a \emph{sequential
+decision process} --- an MDP --- in which an agent repeatedly chooses
+actions, the transitions are typically \textbf{stochastic}, and the
+objective is a \textbf{long-run expected return} instead of a one-shot
+combinatorial cost. Both families reuse the same Bellman idea of
+building on optimal sub-solutions, but \textbf{classic DP optimizes a
+fixed structure}, whereas \textbf{RL DP plans a \emph{policy} under
+uncertainty}.
 
-    Algorithm 1.1 Value iteration --- Raw Pseudocode (without additional
-tricks) {[}Sutton \& Barto, §4.4{]}
-
-Here is the pseudocode for the value iteration core (base) algorithm
-without any further additions and engineering tricks (also mentioned
-above) added:
-
-\textbf{Input:} MDP \((S, A, P, r, \gamma)\), threshold \(\theta > 0\)\\
-Initialize \(V(s) \leftarrow 0\) for all \(s \in S\)\\
-\textbf{repeat}\\
- \(\Delta \leftarrow 0\)\\
- \textbf{for each} \(s \in S\) \textbf{do}\\
-  \(v \leftarrow V(s)\)\\
-  \(V(s) \leftarrow \max_{a}\, \sum_{s'} P(s' \mid s, a)\,\bigl[\, r(s, a, s') + \gamma\, V(s') \,\bigr]\)\\
-  \(\Delta \leftarrow \max\!\bigl(\Delta,\; |v - V(s)|\bigr)\)\\
- \textbf{end for}\\
-\textbf{until} \(\Delta < \theta\)\\
-\textbf{Output:} deterministic policy
-\(\pi(s) \leftarrow \arg\max_{a}\, \sum_{s'} P(s' \mid s, a)\,\bigl[\, r(s, a, s') + \gamma\, V(s') \,\bigr]\)
-
-    Algorithm 1.1 Value iteration --- Pseudocode with Additions (Engineering
-Tricks) {[}Sutton \& Barto, §4.4{]}
-
-Here is the pseudocode for the value iteration algorithm with also
-employing all of the additions and engineering tricks mentioned above:
-
-\textbf{Input:} MDP \((S, A, P, r, \gamma)\), threshold \(\theta > 0\)\\
-Initialize \(V(s) \leftarrow 0\) for all \(s \in S\)\\
-✦ Initialize priority queue \(\mathrm{PQ}\); insert every \(s\) with
-priority \(\infty\) ✦ (\hyperref[trick-1-1-2]{Prioritized sweeping})\\
-✦ Pre-compute predecessor sets \(\mathrm{pred}(s)\) for all \(s\) ✦
-(\hyperref[trick-1-1-2]{Prioritized sweeping})\\
-\textbf{repeat}\\
- \(\Delta \leftarrow 0\)\\
- ✦ \textbf{while} \(\mathrm{PQ}\) is not empty \textbf{do} \emph{(update
-only high-residual states; or process a random / trajectory-based
-subset)} ✦ (\hyperref[trick-1-1-2]{Prioritized sweeping} /
-\hyperref[trick-1-1-3]{Asynchronous DP})\\
-  ✦ \(s \leftarrow \mathrm{PQ.pop\_max}()\) ✦
-(\hyperref[trick-1-1-2]{Prioritized sweeping})\\
-  \(v \leftarrow V(s)\)\\
-  ✦ \(A'(s) \leftarrow \{a \in A \mid a \text{ not dominated}\}\) ✦
-(\hyperref[trick-1-1-6]{Action-set pruning / dominance})\\
-  ✦
-\(V(s) \leftarrow \max_{a \in A'(s)}\, \sum_{s'} P(s' \mid s, a)\,\bigl[\, r(s, a, s') + \gamma\, V(s') \,\bigr]\)
-\emph{(overwrite in-place)} ✦ (\hyperref[trick-1-1-1]{In-place
-(Gauss--Seidel) updates})\\
-  \(\Delta \leftarrow \max\!\bigl(\Delta,\; |v - V(s)|\bigr)\)\\
-  ✦ \textbf{for each} \(s_p \in \mathrm{pred}(s)\) \textbf{do} update
-\(\mathrm{PQ}(s_p)\) with new residual \textbf{end for} ✦
-(\hyperref[trick-1-1-2]{Prioritized sweeping})\\
- ✦ \textbf{end while} ✦ (\hyperref[trick-1-1-2]{Prioritized sweeping})\\
-✦ \textbf{until}
-\(\mathrm{sp}(V_{k+1} - V_k) < \theta\,(1-\gamma)/\gamma\)
-\emph{(span-seminorm test)} ✦ (\hyperref[trick-1-1-5]{Span-seminorm
-convergence test})\\
-✦ \emph{Alternative: replace the per-state loop with \(V \leftarrow\)
-vectorised \(\max_a\bigl[P_a\,(r_a + \gamma V)\bigr]\) via einsum
-(synchronous Jacobi-style; incompatible with in-place)} ✦
-(\hyperref[trick-1-1-4]{Vectorised Bellman backup})\\
-\textbf{Output:}
-\(\pi(s) \leftarrow \arg\max_{a \in A'(s)}\, \sum_{s'} P(s' \mid s, a)\,\bigl[\, r(s, a, s') + \gamma\, V(s') \,\bigr]\)
-
-    ✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦
+The following are two solution methods for one of the most famous
+classic DP problems --- the \textbf{TSP} (Traveling Salesman Problem).
 
     \clearpage
 
-\phantomsection\label{policy-iteration}
+\subsubsection{\texorpdfstring{\textbf{TSP} (Traveling Salesman
+Problem)}{TSP (Traveling Salesman Problem)}}\label{tsp-traveling-salesman-problem}
 
-    \subsubsection{Policy Iteration}\label{policy-iteration}
+    \phantomsection\label{held-karp-bottom-up}
 
-    \textbf{Notation:} - \(r(s,a,s')\) --- reward on transition
-\(s \xrightarrow{a} s'\) - \(v\) --- temporary copy of \(V(s)\) before
-update - \(\text{policy\_stable}\) --- flag that becomes false whenever
-any state's action changes during improvement
-
-    \phantomsection\label{intro-1-2}
-
-    \textbf{Introduction:} Solves an MDP by alternating two steps until the
-policy stops changing: (i) \textbf{policy evaluation} --- compute
-\(V^\pi\) for the current \(\pi\) by repeated Bellman expectation
-updates, and (ii) \textbf{policy improvement} --- set
-\(\pi(s) \leftarrow \arg\max_a \sum_{s'} P(s'\mid s,a)\bigl[r + \gamma\, V^\pi(s')\bigr]\).
-\emph{Idea:} each improvement is guaranteed to produce a strictly better
-(or equal) policy (policy improvement theorem), so the algorithm
-converges in \emph{finitely} many outer iterations on a finite MDP ---
-typically far fewer than Value Iteration needs sweeps, at the cost of a
-full evaluation sweep per outer iteration.
-
-    \textbf{Algorithm:}
-
-\textbf{Input:} MDP \((S, A, P, r, \gamma)\), threshold \(\theta > 0\)
-
-\begin{enumerate}
-\def\labelenumi{\arabic{enumi}.}
-\item
-  Initialize \(\pi(s)\) arbitrarily for all \(s \in S\)
-\item
-  \textbf{Repeat} \emph{(outer loop --- policy iterations)}:
-
-  \begin{itemize}
-  \item
-    \textbf{--- Policy Evaluation ---}
-  \item
-    \textbf{Repeat} \emph{(middle loop --- evaluation sweeps)}:
-
-    \begin{itemize}
-    \tightlist
-    \item
-      \(\Delta \leftarrow 0\)
-    \item
-      For each \(s \in S\) \emph{(inner loop --- states)}:
-
-      \begin{itemize}
-      \tightlist
-      \item
-        \(v \leftarrow V(s)\)
-      \item
-        \(\displaystyle V(s) \leftarrow \sum_{s'} P\!\left(s' \mid s,\pi(s)\right)\bigl[r(s,\pi(s),s') + \gamma\, V(s')\bigr]\)
-      \item
-        \(\Delta \leftarrow \max(\Delta,\; |v - V(s)|)\)
-      \end{itemize}
-    \item
-      Until \(\Delta < \theta\) \emph{(evaluation convergence check)}
-    \end{itemize}
-  \item
-    \textbf{--- Policy Improvement ---}
-  \item
-    \(\text{policy\_stable} \leftarrow \textit{true}\)
-  \item
-    For each \(s \in S\) \emph{(single pass --- states)}:
-
-    \begin{itemize}
-    \tightlist
-    \item
-      \(\text{old\_action} \leftarrow \pi(s)\)
-    \item
-      \(\displaystyle \pi(s) \leftarrow \arg\max_a \sum_{s'} P(s' \mid s,a)\,\bigl[r(s,a,s') + \gamma\, V(s')\bigr]\)
-    \item
-      If \(\text{old\_action} \neq \pi(s)\):
-      \(\;\text{policy\_stable} \leftarrow \textit{false}\)
-    \end{itemize}
-  \end{itemize}
-
-  Until \(\text{policy\_stable} = \textit{true}\) \emph{(outer
-  convergence check)}
-\item
-  Return \(\pi,\; V\)
-\end{enumerate}
-
-    \phantomsection\label{tricks-1-2}
-
-    \textbf{Additional Known Engineering Tricks}
-
-\begin{itemize}
-\item
-  \phantomsection\label{trick-1-2-1}\textbf{Modified Policy Iteration
-  (MPI)} \emph{(Puterman \& Shin, 1978)} --- replace exact policy
-  evaluation with just \(k\) Bellman-expectation sweeps (typically
-  \(k\in[5,50]\)). \emph{Why it helps:} full evaluation is wasted effort
-  early on when the policy is still bad and will change anyway ---
-  partial evaluation is enough to drive improvement, so total work drops
-  dramatically. \emph{Interaction:} defines the spectrum from value
-  iteration (\(k=1\)) to classical policy iteration (\(k=\infty\)).
-\item
-  \phantomsection\label{trick-1-2-2}\textbf{Generalised Policy Iteration
-  (GPI)} --- interleave evaluation and improvement at \emph{any}
-  granularity (one state at a time, asynchronously, even
-  action-selection-driven). \emph{Why it helps:} makes the algorithm an
-  anytime procedure that converges as long as both processes make
-  progress on every state infinitely often. \emph{Interaction:} MPI is
-  the special case where each interleaved evaluation phase is \(k\) full
-  sweeps; pairs with \textbf{asynchronous policy evaluation}.
-\item
-  \phantomsection\label{trick-1-2-3}\textbf{Warm-start \(V\) across
-  outer iterations} --- keep \(V\) between policy improvements rather
-  than re-initialising to zero. \emph{Why it helps:} a newly-improved
-  policy's value function is usually close to the previous one, so inner
-  evaluation needs only a few sweeps to re-converge. \emph{Interaction:}
-  this is precisely what makes MPI's small \(k\) work --- without
-  warm-start, truncating evaluation would forget all prior progress.
-\item
-  \phantomsection\label{trick-1-2-4}\textbf{Action-value caching during
-  improvement} --- during the improvement sweep, compute
-  \(Q(s,a)=\sum_{s'} P(s'\mid s,a)[r+\gamma V(s')]\) once per \((s,a)\),
-  store it, then take \(\arg\max\) and the change-flag from the same
-  table. \emph{Why it helps:} the improvement step otherwise recomputes
-  the same sum twice --- once for the argmax, once when checking if
-  anything changed.
-\item
-  \phantomsection\label{trick-1-2-5}\textbf{Policy-stable early exit}
-  --- break the inner evaluation as soon as no state's greedy action
-  would change. \emph{Why it helps:} once the policy has stabilised,
-  further evaluation cannot improve it; the outer loop will terminate
-  next round anyway.
-\item
-  \phantomsection\label{trick-1-2-6}\textbf{Bertsekas's
-  \(\lambda\)-policy-iteration} --- bootstrap evaluation with
-  \(\lambda\)-returns instead of one-step Bellman backups. \emph{Why it
-  helps:} trades a controllable amount of bias for much faster
-  propagation of value information across long horizons.
-  \emph{Interaction:} generalises both MPI and value iteration as
-  endpoints.
-\end{itemize}
-
-    \phantomsection\label{pseudo-1-2}
-
-    Algorithm 1.2 Policy iteration --- Raw Pseudocode (without additional
-tricks) {[}Sutton \& Barto, §4.3{]}
-
-Here is the pseudocode for the policy iteration core (base) algorithm
-without any further additions and engineering tricks (also mentioned
-above) added:
-
-\textbf{Input:} MDP \((S, A, P, r, \gamma)\), threshold \(\theta > 0\)\\
-Initialize \(V(s) \in \mathbb{R}\) and \(\pi(s) \in A\) arbitrarily for
-all \(s \in S\)\\
-\textbf{repeat}\\
- \emph{// --- Policy Evaluation ---}\\
- \textbf{repeat}\\
-  \(\Delta \leftarrow 0\)\\
-  \textbf{for each} \(s \in S\) \textbf{do}\\
-   \(v \leftarrow V(s)\)\\
-   \(V(s) \leftarrow \sum_{s'} P(s' \mid s, \pi(s))\,\bigl[\, r(s, \pi(s), s') + \gamma\, V(s') \,\bigr]\)\\
-   \(\Delta \leftarrow \max\!\bigl(\Delta,\; |v - V(s)|\bigr)\)\\
-  \textbf{end for}\\
- \textbf{until} \(\Delta < \theta\)\\
- \emph{// --- Policy Improvement ---}\\
- \(\text{policy\_stable} \leftarrow \mathbf{true}\)\\
- \textbf{for each} \(s \in S\) \textbf{do}\\
-  \(a_{\text{old}} \leftarrow \pi(s)\)\\
-  \(\pi(s) \leftarrow \arg\max_{a}\, \sum_{s'} P(s' \mid s, a)\,\bigl[\, r(s, a, s') + \gamma\, V(s') \,\bigr]\)\\
-  \textbf{if} \(a_{\text{old}} \neq \pi(s)\) \textbf{then}
-\(\text{policy\_stable} \leftarrow \mathbf{false}\)\\
- \textbf{end for}\\
-\textbf{until} \(\text{policy\_stable} = \mathbf{true}\)\\
-\textbf{Output:} \(V \approx v_{*}\) and \(\pi \approx \pi_{*}\)
-
-    Algorithm 1.2 Policy iteration --- Pseudocode with Additions
-(Engineering Tricks) {[}Sutton \& Barto, §4.3{]}
-
-Here is the pseudocode for the policy iteration algorithm with also
-employing all of the additions and engineering tricks mentioned above:
-
-\textbf{Input:} MDP \((S, A, P, r, \gamma)\), threshold \(\theta > 0\),
-✦ evaluation sweeps \(k\) ✦ (\hyperref[trick-1-2-1]{Modified Policy
-Iteration (MPI)})\\
-Initialize \(V(s) \in \mathbb{R}\) and \(\pi(s) \in A\) arbitrarily for
-all \(s \in S\)\\
-\textbf{repeat}\\
- \emph{// --- Policy Evaluation (truncated) ---}\\
- ✦ \textbf{for} \(\text{sweep} = 1, \ldots, k\) \textbf{do} \emph{(only
-\(k\) sweeps instead of until convergence)} ✦
-(\hyperref[trick-1-2-1]{Modified Policy Iteration (MPI)})\\
-  \textbf{for each} \(s \in S\) \textbf{do}\\
-   \(V(s) \leftarrow \sum_{s'} P(s' \mid s, \pi(s))\,\bigl[\, r(s, \pi(s), s') + \gamma\, V(s') \,\bigr]\)\\
-  \textbf{end for}\\
-  ✦ \textbf{if} no state's greedy action would change \textbf{then
-break} \emph{(early exit)} ✦ (\hyperref[trick-1-2-5]{Policy-stable early
-exit})\\
- ✦ \textbf{end for} \emph{(warm-start: \(V\) is carried forward across
-outer iterations, not re-initialised)} ✦
-(\hyperref[trick-1-2-3]{Warm-start \(V\) across outer iterations})\\
- \emph{// --- Policy Improvement ---}\\
- \(\text{policy\_stable} \leftarrow \mathbf{true}\)\\
- \textbf{for each} \(s \in S\) \textbf{do}\\
-  \(a_{\text{old}} \leftarrow \pi(s)\)\\
-  ✦ Cache
-\(Q(s,a) \leftarrow \sum_{s'} P(s'\mid s,a)\bigl[r + \gamma V(s')\bigr]\)
-for all \(a\) \emph{(compute once, reuse for argmax and stability
-check)} ✦ (\hyperref[trick-1-2-4]{Action-value caching during
-improvement})\\
-  ✦ \(\pi(s) \leftarrow \arg\max_a Q(s,a)\) ✦
-(\hyperref[trick-1-2-4]{Action-value caching during improvement})\\
-  \textbf{if} \(a_{\text{old}} \neq \pi(s)\) \textbf{then}
-\(\text{policy\_stable} \leftarrow \mathbf{false}\)\\
- \textbf{end for}\\
- ✦ \emph{(Evaluation and improvement may be interleaved at any
-granularity --- per-state, per-action --- under the GPI framework)} ✦
-(\hyperref[trick-1-2-2]{Generalised Policy Iteration (GPI)})\\
-\textbf{until} \(\text{policy\_stable} = \mathbf{true}\)\\
-\textbf{Output:} \(V \approx v_{*}\) and \(\pi \approx \pi_{*}\)
-
-    ✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦
-
-    \clearpage
-
-\phantomsection\label{held-karp-bottom-up}
-
-    \subsubsection{Held-Karp (Bottom-Up /
-Tabulation)}\label{held-karp-bottom-up-tabulation}
+    \paragraph{Held-Karp (Bottom-Up / Tabulation)
+Method}\label{held-karp-bottom-up-tabulation-method}
 
     \textbf{Notation:} - \(n\) --- total number of cities - \(d[i][j]\) ---
 travel cost / distance from city \(i\) to city \(j\) - \(S\) --- a
@@ -1374,8 +829,12 @@ starts at city \(1\), visits every city in subset
 
     \phantomsection\label{pseudo-1-3}
 
-    Algorithm 1.3 Held--Karp (bottom-up / tabulation) --- Raw Pseudocode
-(without additional tricks) {[}Held \& Karp, 1962{]}
+    \begin{pseudobox}
+
+\textbf{Algorithm 1.3} Held--Karp (bottom-up / tabulation) --- Raw
+Pseudocode (without additional tricks) \emph{{[}Held \& Karp, 1962{]}}
+
+\tcbline
 
 Here is the pseudocode for the Held--Karp (bottom-up / tabulation) core
 (base) algorithm without any further additions and engineering tricks
@@ -1384,23 +843,30 @@ Here is the pseudocode for the Held--Karp (bottom-up / tabulation) core
 \textbf{Input:} number of cities \(n\), distance matrix \(d[i][j]\)\\
 \emph{// Base cases --- singleton subsets}\\
 \textbf{for each} \(l \in \{2, \ldots, n\}\) \textbf{do}\\
- \(C(\{l\},\, l) \leftarrow d[1][l]\)\\
+\strut ~~\(C(\{l\},\, l) \leftarrow d[1][l]\)\\
 \textbf{end for}\\
 \emph{// Build subsets bottom-up by size}\\
 \textbf{for} \(s = 2\) \textbf{to} \(n - 1\) \textbf{do}\\
- \textbf{for each} \(S \subseteq \{2, \ldots, n\}\) with \(|S| = s\)
-\textbf{do}\\
-  \textbf{for each} \(l \in S\) \textbf{do}\\
-   \(C(S,\, l) \leftarrow \displaystyle\min_{k \in S \setminus \{l\}} \bigl\{\, C(S \setminus \{l\},\, k) + d[k][l] \,\bigr\}\)\\
-  \textbf{end for}\\
- \textbf{end for}\\
+\strut ~~\textbf{for each} \(S \subseteq \{2, \ldots, n\}\) with
+\(|S| = s\) \textbf{do}\\
+\strut ~~~~\textbf{for each} \(l \in S\) \textbf{do}\\
+\strut ~~~~~~\(C(S,\, l) \leftarrow \displaystyle\min_{k \in S \setminus \{l\}} \bigl\{\, C(S \setminus \{l\},\, k) + d[k][l] \,\bigr\}\)\\
+\strut ~~~~\textbf{end for}\\
+\strut ~~\textbf{end for}\\
 \textbf{end for}\\
 \emph{// Close the tour back to city 1}\\
 \(\text{OPT} \leftarrow \displaystyle\min_{l \in \{2, \ldots, n\}} \bigl\{\, C(\{2, \ldots, n\},\, l) + d[l][1] \,\bigr\}\)\\
 \textbf{Output:} \(\text{OPT}\)
 
-    Algorithm 1.3 Held--Karp (bottom-up / tabulation) --- Pseudocode with
-Additions (Engineering Tricks) {[}Held \& Karp, 1962{]}
+\end{pseudobox}
+
+    \begin{pseudobox}
+
+\textbf{Algorithm 1.3} Held--Karp (bottom-up / tabulation) ---
+Pseudocode with Additions (Engineering Tricks) \emph{{[}Held \& Karp,
+1962{]}}
+
+\tcbline
 
 Here is the pseudocode for the Held--Karp (bottom-up / tabulation)
 algorithm with also employing all of the additions and engineering
@@ -1418,41 +884,43 @@ reconstruction ✦ (\hyperref[trick-1-3-4]{Parent / predecessor table})\\
 tour) ✦ (\hyperref[trick-1-3-6]{Best-known-tour pruning})\\
 \emph{// Base cases --- singleton subsets}\\
 \textbf{for each} \(l \in \{2, \ldots, n\}\) \textbf{do}\\
- \(C[\texttt{1<<}(l{-}2),\, l] \leftarrow d[1][l]\)\\
- ✦ \(P[\texttt{1<<}(l{-}2),\, l] \leftarrow 1\) ✦
+\strut ~~\(C[\texttt{1<<}(l{-}2),\, l] \leftarrow d[1][l]\)\\
+\strut ~~✦ \(P[\texttt{1<<}(l{-}2),\, l] \leftarrow 1\) ✦
 (\hyperref[trick-1-3-4]{Parent / predecessor table})\\
 \textbf{end for}\\
 \emph{// Build subsets bottom-up by size}\\
 \textbf{for} \(s = 2\) \textbf{to} \(n - 1\) \textbf{do}\\
- ✦ \textbf{for each} mask with \(\mathrm{popcount}(\text{mask}) = s\)
-\emph{(via Gosper's hack)} \textbf{do} ✦
-(\hyperref[trick-1-3-2]{Gosper's hack for fixed-cardinality
-enumeration})\\
-  ✦ \emph{(For symmetric \(d\): fix direction so second city \(<\) last
-city in subset)} ✦ (\hyperref[trick-1-3-5]{Symmetry exploitation for
-symmetric distance matrices})\\
-  \textbf{for each} \(l\) with bit \(l\) set in mask \textbf{do}\\
-   \(C[\text{mask},\, l] \leftarrow \min_{k \in \text{mask}\setminus\{l\}} \bigl\{\, C[\text{mask}\oplus\texttt{1<<}(l{-}2),\, k] + d[k][l] \,\bigr\}\)\\
-   ✦ \(P[\text{mask},\, l] \leftarrow \arg\min_k(\cdots)\) ✦
+\strut ~~✦ \textbf{for each} mask with
+\(\mathrm{popcount}(\text{mask}) = s\) \emph{(via Gosper's hack)}
+\textbf{do} ✦ (\hyperref[trick-1-3-2]{Gosper's hack for
+fixed-cardinality enumeration})\\
+\strut ~~~~✦ \emph{(For symmetric \(d\): fix direction so second city
+\(<\) last city in subset)} ✦ (\hyperref[trick-1-3-5]{Symmetry
+exploitation for symmetric distance matrices})\\
+\strut ~~~~\textbf{for each} \(l\) with bit \(l\) set in mask
+\textbf{do}\\
+\strut ~~~~~~\(C[\text{mask},\, l] \leftarrow \min_{k \in \text{mask}\setminus\{l\}} \bigl\{\, C[\text{mask}\oplus\texttt{1<<}(l{-}2),\, k] + d[k][l] \,\bigr\}\)\\
+\strut ~~~~~~✦ \(P[\text{mask},\, l] \leftarrow \arg\min_k(\cdots)\) ✦
 (\hyperref[trick-1-3-4]{Parent / predecessor table})\\
-   ✦ \textbf{if} \(C[\text{mask},l] + d[l][1] \geq \mathrm{UB}\)
-\textbf{then skip} ✦ (\hyperref[trick-1-3-6]{Best-known-tour pruning})\\
-  \textbf{end for}\\
- \textbf{end for}\\
+\strut ~~~~~~✦ \textbf{if}
+\(C[\text{mask},l] + d[l][1] \geq \mathrm{UB}\) \textbf{then skip} ✦
+(\hyperref[trick-1-3-6]{Best-known-tour pruning})\\
+\strut ~~~~\textbf{end for}\\
+\strut ~~\textbf{end for}\\
 \textbf{end for}\\
 \(\text{OPT} \leftarrow \min_{l\in\{2,\ldots,n\}} \bigl\{\, C[\text{full},\,l] + d[l][1] \,\bigr\}\)\\
 ✦ Reconstruct optimal tour by following \(P[\cdot]\) backwards from
 \(\arg\min\) ✦ (\hyperref[trick-1-3-4]{Parent / predecessor table})\\
 \textbf{Output:} \(\text{OPT}\) and optimal tour
 
+\end{pseudobox}
+
     ✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦
 
-    \clearpage
+    \phantomsection\label{held-karp-top-down}
 
-\phantomsection\label{held-karp-top-down}
-
-    \subsubsection{Held-Karp (Top-Down /
-Memoisation)}\label{held-karp-top-down-memoisation}
+    \paragraph{Held-Karp (Top-Down / Memoisation)
+Method}\label{held-karp-top-down-memoisation-method}
 
     \textbf{Notation:}
 
@@ -1635,8 +1103,12 @@ cache-friendly \\
 
     \phantomsection\label{pseudo-1-4}
 
-    Algorithm 1.4 Held--Karp (top-down / memoisation) --- Raw Pseudocode
-(without additional tricks) {[}Held \& Karp, 1962{]}
+    \begin{pseudobox}
+
+\textbf{Algorithm 1.4} Held--Karp (top-down / memoisation) --- Raw
+Pseudocode (without additional tricks) \emph{{[}Held \& Karp, 1962{]}}
+
+\tcbline
 
 Here is the pseudocode for the Held--Karp (top-down / memoisation) core
 (base) algorithm without any further additions and engineering tricks
@@ -1647,17 +1119,24 @@ Initialize memo table \(C[S][j] \leftarrow \texttt{None}\) for all
 \((S, j)\)
 
 \textbf{function} \(\texttt{solve}(S,\, j)\):\\
- \textbf{if} \(S = \{j\}\) \textbf{then return} \(d[1][j]\)\\
- \textbf{if} \(C[S][j] \neq \texttt{None}\) \textbf{then return}
+\strut ~~\textbf{if} \(S = \{j\}\) \textbf{then return} \(d[1][j]\)\\
+\strut ~~\textbf{if} \(C[S][j] \neq \texttt{None}\) \textbf{then return}
 \(C[S][j]\)\\
- \(C[S][j] \leftarrow \displaystyle\min_{k \in S \setminus \{j\}} \bigl\{\, \texttt{solve}(S \setminus \{j\},\, k) + d[k][j] \,\bigr\}\)\\
- \textbf{return} \(C[S][j]\)
+\strut ~~\(C[S][j] \leftarrow \displaystyle\min_{k \in S \setminus \{j\}} \bigl\{\, \texttt{solve}(S \setminus \{j\},\, k) + d[k][j] \,\bigr\}\)\\
+\strut ~~\textbf{return} \(C[S][j]\)
 
 \(\text{OPT} \leftarrow \displaystyle\min_{j \in \{2, \ldots, n\}} \bigl\{\, \texttt{solve}(\{2, \ldots, n\},\, j) + d[j][1] \,\bigr\}\)\\
 \textbf{Output:} \(\text{OPT}\)
 
-    Algorithm 1.4 Held--Karp (top-down / memoisation) --- Pseudocode with
-Additions (Engineering Tricks) {[}Held \& Karp, 1962{]}
+\end{pseudobox}
+
+    \begin{pseudobox}
+
+\textbf{Algorithm 1.4} Held--Karp (top-down / memoisation) ---
+Pseudocode with Additions (Engineering Tricks) \emph{{[}Held \& Karp,
+1962{]}}
+
+\tcbline
 
 Here is the pseudocode for the Held--Karp (top-down / memoisation)
 algorithm with also employing all of the additions and engineering
@@ -1679,22 +1158,534 @@ memo (dict not array)})\\
 \textbf{function} \(\texttt{solve}(\)✦ \(\text{mask}\) ✦
 (\hyperref[trick-1-4-2]{Integer bitmask keys instead of
 frozenset})\(,\, j)\):\\
- \textbf{if} \(\text{mask} = \texttt{1<<}(j{-}2)\) \textbf{then return}
-\(d[1][j]\)\\
- ✦ \(\texttt{lb} \leftarrow\) lower bound on remaining tour from
+\strut ~~\textbf{if} \(\text{mask} = \texttt{1<<}(j{-}2)\) \textbf{then
+return} \(d[1][j]\)\\
+\strut ~~✦ \(\texttt{lb} \leftarrow\) lower bound on remaining tour from
 \((\text{mask}, j)\) ✦ (\hyperref[trick-1-4-4]{Branch-and-bound with
 global upper bound})\\
- ✦ \textbf{if} partial cost \(+ \texttt{lb} \geq \mathrm{UB}\)
+\strut ~~✦ \textbf{if} partial cost \(+ \texttt{lb} \geq \mathrm{UB}\)
 \textbf{then return} \(+\infty\) ✦
 (\hyperref[trick-1-4-4]{Branch-and-bound with global upper bound})\\
- ✦ Batch all \(k\in\text{mask}\setminus\{j\}\) sub-calls sharing the
-same sub-mask ✦ (\hyperref[trick-1-4-6]{Tail-shared subproblem
+\strut ~~✦ Batch all \(k\in\text{mask}\setminus\{j\}\) sub-calls sharing
+the same sub-mask ✦ (\hyperref[trick-1-4-6]{Tail-shared subproblem
 detection})\\
- \(C[\text{mask}][j] \leftarrow \min_{k \in \text{mask}\setminus\{j\}} \bigl\{\, \texttt{solve}(\text{mask}\oplus\texttt{1<<}(j{-}2),\, k) + d[k][j] \,\bigr\}\)\\
- \textbf{return} \(C[\text{mask}][j]\)
+\strut ~~\(C[\text{mask}][j] \leftarrow \min_{k \in \text{mask}\setminus\{j\}} \bigl\{\, \texttt{solve}(\text{mask}\oplus\texttt{1<<}(j{-}2),\, k) + d[k][j] \,\bigr\}\)\\
+\strut ~~\textbf{return} \(C[\text{mask}][j]\)
 
 \(\text{OPT} \leftarrow \min_{j\in\{2,\ldots,n\}} \bigl\{\, \texttt{solve}(\texttt{full\_mask},\, j) + d[j][1] \,\bigr\}\)\\
 \textbf{Output:} \(\text{OPT}\)
+
+\end{pseudobox}
+
+    ✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦
+
+    \clearpage
+
+\subsection{Reinforcement Learning Dynamic
+Programming}\label{reinforcement-learning-dynamic-programming}
+
+\phantomsection\label{rl-dp-intro}
+
+\subsubsection{\texorpdfstring{What Defines an \emph{RL} DP
+Problem?}{What Defines an RL DP Problem?}}\label{what-defines-an-rl-dp-problem}
+
+\textbf{Reinforcement-learning Dynamic Programming} applies the same
+Bellman ``reuse optimal sub-solutions'' principle, but to a
+fundamentally different kind of problem: a \textbf{Markov Decision
+Process (MDP)}. A problem here is described by \emph{states},
+\emph{actions}, a \emph{transition model} \(P(s'\mid s,a)\), and a
+\emph{reward} \(r(s,a,s')\) --- and the goal is not a single
+combinatorial answer but an \textbf{optimal policy} \(\pi^{*}\): a rule
+telling the agent which action to take in every state so as to maximize
+its \textbf{long-run expected (discounted) return}.
+
+The traits that make a problem an \emph{RL} DP problem are:
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{A sequential decision process.} An agent acts over time; each
+  action shapes future states and rewards, so the objective spans an
+  entire trajectory rather than a static structure.
+\item
+  \textbf{Stochastic transitions and expected value.} The next state is
+  generally random, so the Bellman update takes an \textbf{expectation}
+  \(\sum_{s'} P(s'\mid s,a)\,[\,\cdots\,]\) instead of a deterministic
+  combination of subproblems.
+\item
+  \textbf{A known model, solved by \emph{planning}.} The
+  \emph{model-based} methods here --- \textbf{Value Iteration} and
+  \textbf{Policy Iteration} --- assume \(P\) and \(r\) are known and
+  \textbf{iterate the Bellman equations to convergence}, computing value
+  functions and improving the policy. (Learning these from
+  \emph{sampled} experience, with no model, is the \emph{model-free}
+  territory of the following chapter.)
+\end{itemize}
+
+\textbf{In short:} \emph{classic} DP optimizes a fully specified, static
+combinatorial structure and returns an exact optimum; \emph{RL} DP plans
+an optimal \textbf{policy} for acting under uncertainty in an MDP. The
+machinery (Bellman recursion, tabular sub-solutions) is shared --- what
+changes is the \textbf{problem itself}: a one-shot optimization versus
+an ongoing, stochastic decision process.
+
+    \clearpage
+
+\subsection{RL Model-Based Methods}\label{rl-model-based-methods}
+
+    \phantomsection\label{model-based-intro}
+
+    \subsubsection{Introduction}\label{introduction}
+
+Model-based methods assume the environment's dynamics are \textbf{fully
+known} --- the transition probabilities \(P(s' \mid s, a)\) and the
+reward function \(r(s, a)\) are given up front. Rather than
+\emph{learning} from sampled experience, the agent
+\textbf{\emph{plans}}: it iterates the Bellman equations to convergence
+to compute the value functions and improve the policy.
+
+\(\;\cdot\;\) \textbf{Requires a model} --- needs the complete MDP
+\((P, r)\) before any computation begins.
+
+\(\;\cdot\;\) \textbf{Planning, not sampling} --- updates sweep over
+\emph{all} states using the known dynamics; no interaction with the
+environment is needed.
+
+\(\;\cdot\;\) \textbf{Exact but limited} --- converges to the true
+optimal values, yet only tractable when the state space is small enough
+to enumerate. \emph{Examples: Value Iteration, Policy Iteration.}
+
+    \clearpage
+
+\phantomsection\label{value-iteration-algo}
+
+    \subsubsection{Value Iteration:}\label{value-iteration}
+
+    \textbf{Notation:} - \(r(s,a,s')\) --- reward received when
+transitioning from \(s\) to \(s'\) via action \(a\) - \(v\) ---
+temporary copy of \(V(s)\) before the Bellman update, used to measure
+change \(\Delta\)
+
+    \phantomsection\label{intro-1-1}
+
+    \textbf{Introduction:} Solves an MDP by iteratively applying the Bellman
+optimality update
+\(V(s) \leftarrow \max_a \sum_{s'} P(s'\mid s,a)\bigl[r(s,a,s') + \gamma\, V(s')\bigr]\)
+until \(V\) converges, then reads off the greedy policy. \emph{Idea:}
+fuse policy evaluation and policy improvement into a single max-backup
+--- no need to fully evaluate each intermediate policy as Policy
+Iteration does.
+
+    \textbf{Algorithm:}
+
+\textbf{Input:} MDP \((S, A, P, r, \gamma)\), threshold \(\theta > 0\)
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\item
+  Initialize \(V(s)\) arbitrarily for all \(s \in S\) (e.g.,
+  \(V(s) = 0\))
+\item
+  \textbf{Repeat} \emph{(outer loop --- sweeps)}:
+
+  \begin{itemize}
+  \tightlist
+  \item
+    \(\Delta \leftarrow 0\)
+  \item
+    For each \(s \in S\) \emph{(inner loop --- states)}:
+
+    \begin{itemize}
+    \tightlist
+    \item
+      \(v \leftarrow V(s)\)
+    \item
+      \(\displaystyle V(s) \leftarrow \max_a \sum_{s'} P(s' \mid s,a)\,\bigl[r(s,a,s') + \gamma\, V(s')\bigr]\)
+    \item
+      \(\Delta \leftarrow \max(\Delta,\; |v - V(s)|)\)
+    \end{itemize}
+  \item
+    Until \(\Delta < \theta\) \emph{(convergence check)}
+  \end{itemize}
+\item
+  \textbf{Output policy} --- for each \(s \in S\):
+\end{enumerate}
+
+\[\pi(s) = \arg\max_a \sum_{s'} P(s' \mid s,a)\,\bigl[r(s,a,s') + \gamma\, V(s')\bigr]\]
+
+Return \(\pi\)
+
+    \phantomsection\label{tricks-1-1}
+
+    \textbf{Additional Known Engineering Tricks}
+
+\begin{itemize}
+\item
+  \phantomsection\label{trick-1-1-1}\textbf{In-place (Gauss--Seidel)
+  updates} --- overwrite \(V(s)\) as soon as the new value is computed
+  within a sweep, rather than building a fresh copy from \(V_k\).
+  \emph{Why it helps:} the freshest values are reused immediately by
+  later states in the same sweep, so the effective contraction is
+  tighter and convergence typically needs fewer sweeps.
+  \emph{Interaction:} now the \emph{order} of states matters --- pairs
+  naturally with \textbf{prioritized sweeping} and \textbf{asynchronous
+  DP}, and is mutually exclusive with the \emph{vectorised} synchronous
+  backup below.
+\item
+  \phantomsection\label{trick-1-1-2}\textbf{Prioritized sweeping}
+  \emph{(Moore \& Atkeson, 1993)} --- maintain a priority queue keyed by
+  each state's current Bellman residual; on every step, pop the
+  highest-error state, update it, and re-queue its predecessors.
+  \emph{Why it helps:} compute is concentrated where \(V\) is still
+  changing significantly, instead of wasting full sweeps on
+  already-converged states. \emph{Interaction:} assumes in-place
+  updates; in the limit it is the most aggressive scheduling of
+  asynchronous DP.
+\item
+  \phantomsection\label{trick-1-1-3}\textbf{Asynchronous DP} --- update
+  only a subset of states per pass (random, trajectory-based, or
+  reachable-from-start). \emph{Why it helps:} avoids touching irrelevant
+  states in large MDPs where most states are unreachable from typical
+  start distributions, and parallelises across processors without
+  coordination. \emph{Interaction:} generalises in-place sweeping;
+  convergence still holds as long as every state is visited infinitely
+  often.
+\item
+  \phantomsection\label{trick-1-1-4}\textbf{Vectorised Bellman backup}
+  --- store \(P\) as a dense \((|S|,|A|,|S'|)\) tensor and compute one
+  synchronous sweep via \texttt{einsum} / matrix products. \emph{Why it
+  helps:} turns the triple loop into a single BLAS call, giving
+  order-of-magnitude wall-clock speed-ups on dense MDPs.
+  \emph{Interaction:} implements the \emph{synchronous} Jacobi-style
+  backup --- incompatible with strict in-place updates; pick one or the
+  other depending on whether speed or sweep count matters more.
+\item
+  \phantomsection\label{trick-1-1-5}\textbf{Span-seminorm convergence
+  test} --- replace \(\Delta < \theta\) with
+  \(\mathrm{sp}(V_{k+1}-V_k) < \theta\,(1-\gamma)/\gamma\), where
+  \(\mathrm{sp}(x)=\max x-\min x\). \emph{Why it helps:} yields a tight
+  \(\varepsilon\)-optimal-\emph{policy} guarantee from the contraction
+  bound, so the loop stops as soon as the policy is provably
+  near-optimal rather than at an arbitrary max-norm threshold.
+\item
+  \phantomsection\label{trick-1-1-6}\textbf{Action-set pruning /
+  dominance} --- at each state, drop actions that are dominated (lower
+  \(Q(s,a)\) than another action under all admissible \(V\) bounds).
+  \emph{Why it helps:} shrinks the inner \(\max_a\) in every sweep ---
+  important when \(|A|\) is large or many actions are clearly suboptimal
+  early.
+\end{itemize}
+
+    \phantomsection\label{pseudo-1-1}
+
+    \begin{pseudobox}
+
+\textbf{Algorithm 1.1} Value iteration --- Raw Pseudocode (without
+additional tricks) \emph{{[}Sutton \& Barto, §4.4{]}}
+
+\tcbline
+
+Here is the pseudocode for the value iteration core (base) algorithm
+without any further additions and engineering tricks (also mentioned
+above) added:
+
+\textbf{Input:} MDP \((S, A, P, r, \gamma)\), threshold \(\theta > 0\)\\
+Initialize \(V(s) \leftarrow 0\) for all \(s \in S\)\\
+\textbf{repeat}\\
+\strut ~~\(\Delta \leftarrow 0\)\\
+\strut ~~\textbf{for each} \(s \in S\) \textbf{do}\\
+\strut ~~~~\(v \leftarrow V(s)\)\\
+\strut ~~~~\(V(s) \leftarrow \max_{a}\, \sum_{s'} P(s' \mid s, a)\,\bigl[\, r(s, a, s') + \gamma\, V(s') \,\bigr]\)\\
+\strut ~~~~\(\Delta \leftarrow \max\!\bigl(\Delta,\; |v - V(s)|\bigr)\)\\
+\strut ~~\textbf{end for}\\
+\textbf{until} \(\Delta < \theta\)\\
+\textbf{Output:} deterministic policy
+\(\pi(s) \leftarrow \arg\max_{a}\, \sum_{s'} P(s' \mid s, a)\,\bigl[\, r(s, a, s') + \gamma\, V(s') \,\bigr]\)
+
+\end{pseudobox}
+
+    \begin{pseudobox}
+
+\textbf{Algorithm 1.1} Value iteration --- Pseudocode with Additions
+(Engineering Tricks) \emph{{[}Sutton \& Barto, §4.4{]}}
+
+\tcbline
+
+Here is the pseudocode for the value iteration algorithm with also
+employing all of the additions and engineering tricks mentioned above:
+
+\textbf{Input:} MDP \((S, A, P, r, \gamma)\), threshold \(\theta > 0\)\\
+Initialize \(V(s) \leftarrow 0\) for all \(s \in S\)\\
+✦ Initialize priority queue \(\mathrm{PQ}\); insert every \(s\) with
+priority \(\infty\) ✦ (\hyperref[trick-1-1-2]{Prioritized sweeping})\\
+✦ Pre-compute predecessor sets \(\mathrm{pred}(s)\) for all \(s\) ✦
+(\hyperref[trick-1-1-2]{Prioritized sweeping})\\
+\textbf{repeat}\\
+\strut ~~\(\Delta \leftarrow 0\)\\
+\strut ~~✦ \textbf{while} \(\mathrm{PQ}\) is not empty \textbf{do}
+\emph{(update only high-residual states; or process a random /
+trajectory-based subset)} ✦ (\hyperref[trick-1-1-2]{Prioritized
+sweeping} / \hyperref[trick-1-1-3]{Asynchronous DP})\\
+\strut ~~~~✦ \(s \leftarrow \mathrm{PQ.pop\_max}()\) ✦
+(\hyperref[trick-1-1-2]{Prioritized sweeping})\\
+\strut ~~~~\(v \leftarrow V(s)\)\\
+\strut ~~~~✦
+\(A'(s) \leftarrow \{a \in A \mid a \text{ not dominated}\}\) ✦
+(\hyperref[trick-1-1-6]{Action-set pruning / dominance})\\
+\strut ~~~~✦
+\(V(s) \leftarrow \max_{a \in A'(s)}\, \sum_{s'} P(s' \mid s, a)\,\bigl[\, r(s, a, s') + \gamma\, V(s') \,\bigr]\)
+\emph{(overwrite in-place)} ✦ (\hyperref[trick-1-1-1]{In-place
+(Gauss--Seidel) updates})\\
+\strut ~~~~\(\Delta \leftarrow \max\!\bigl(\Delta,\; |v - V(s)|\bigr)\)\\
+\strut ~~~~✦ \textbf{for each} \(s_p \in \mathrm{pred}(s)\) \textbf{do}
+update \(\mathrm{PQ}(s_p)\) with new residual \textbf{end for} ✦
+(\hyperref[trick-1-1-2]{Prioritized sweeping})\\
+\strut ~~✦ \textbf{end while} ✦ (\hyperref[trick-1-1-2]{Prioritized
+sweeping})\\
+✦ \textbf{until}
+\(\mathrm{sp}(V_{k+1} - V_k) < \theta\,(1-\gamma)/\gamma\)
+\emph{(span-seminorm test)} ✦ (\hyperref[trick-1-1-5]{Span-seminorm
+convergence test})\\
+✦ \emph{Alternative: replace the per-state loop with \(V \leftarrow\)
+vectorised \(\max_a\bigl[P_a\,(r_a + \gamma V)\bigr]\) via einsum
+(synchronous Jacobi-style; incompatible with in-place)} ✦
+(\hyperref[trick-1-1-4]{Vectorised Bellman backup})\\
+\textbf{Output:}
+\(\pi(s) \leftarrow \arg\max_{a \in A'(s)}\, \sum_{s'} P(s' \mid s, a)\,\bigl[\, r(s, a, s') + \gamma\, V(s') \,\bigr]\)
+
+\end{pseudobox}
+
+    ✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦
+
+    \clearpage
+
+\phantomsection\label{policy-iteration-algo}
+
+    \subsubsection{Policy Iteration}\label{policy-iteration}
+
+    \textbf{Notation:} - \(r(s,a,s')\) --- reward on transition
+\(s \xrightarrow{a} s'\) - \(v\) --- temporary copy of \(V(s)\) before
+update - \(\text{policy\_stable}\) --- flag that becomes false whenever
+any state's action changes during improvement
+
+    \phantomsection\label{intro-1-2}
+
+    \textbf{Introduction:} Solves an MDP by alternating two steps until the
+policy stops changing: (i) \textbf{policy evaluation} --- compute
+\(V^\pi\) for the current \(\pi\) by repeated Bellman expectation
+updates, and (ii) \textbf{policy improvement} --- set
+\(\pi(s) \leftarrow \arg\max_a \sum_{s'} P(s'\mid s,a)\bigl[r + \gamma\, V^\pi(s')\bigr]\).
+\emph{Idea:} each improvement is guaranteed to produce a strictly better
+(or equal) policy (policy improvement theorem), so the algorithm
+converges in \emph{finitely} many outer iterations on a finite MDP ---
+typically far fewer than Value Iteration needs sweeps, at the cost of a
+full evaluation sweep per outer iteration.
+
+    \textbf{Algorithm:}
+
+\textbf{Input:} MDP \((S, A, P, r, \gamma)\), threshold \(\theta > 0\)
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\item
+  Initialize \(\pi(s)\) arbitrarily for all \(s \in S\)
+\item
+  \textbf{Repeat} \emph{(outer loop --- policy iterations)}:
+
+  \begin{itemize}
+  \item
+    \textbf{--- Policy Evaluation ---}
+  \item
+    \textbf{Repeat} \emph{(middle loop --- evaluation sweeps)}:
+
+    \begin{itemize}
+    \tightlist
+    \item
+      \(\Delta \leftarrow 0\)
+    \item
+      For each \(s \in S\) \emph{(inner loop --- states)}:
+
+      \begin{itemize}
+      \tightlist
+      \item
+        \(v \leftarrow V(s)\)
+      \item
+        \(\displaystyle V(s) \leftarrow \sum_{s'} P\!\left(s' \mid s,\pi(s)\right)\bigl[r(s,\pi(s),s') + \gamma\, V(s')\bigr]\)
+      \item
+        \(\Delta \leftarrow \max(\Delta,\; |v - V(s)|)\)
+      \end{itemize}
+    \item
+      Until \(\Delta < \theta\) \emph{(evaluation convergence check)}
+    \end{itemize}
+  \item
+    \textbf{--- Policy Improvement ---}
+  \item
+    \(\text{policy\_stable} \leftarrow \textit{true}\)
+  \item
+    For each \(s \in S\) \emph{(single pass --- states)}:
+
+    \begin{itemize}
+    \tightlist
+    \item
+      \(\text{old\_action} \leftarrow \pi(s)\)
+    \item
+      \(\displaystyle \pi(s) \leftarrow \arg\max_a \sum_{s'} P(s' \mid s,a)\,\bigl[r(s,a,s') + \gamma\, V(s')\bigr]\)
+    \item
+      If \(\text{old\_action} \neq \pi(s)\):
+      \(\;\text{policy\_stable} \leftarrow \textit{false}\)
+    \end{itemize}
+  \end{itemize}
+
+  Until \(\text{policy\_stable} = \textit{true}\) \emph{(outer
+  convergence check)}
+\item
+  Return \(\pi,\; V\)
+\end{enumerate}
+
+    \phantomsection\label{tricks-1-2}
+
+    \textbf{Additional Known Engineering Tricks}
+
+\begin{itemize}
+\item
+  \phantomsection\label{trick-1-2-1}\textbf{Modified Policy Iteration
+  (MPI)} \emph{(Puterman \& Shin, 1978)} --- replace exact policy
+  evaluation with just \(k\) Bellman-expectation sweeps (typically
+  \(k\in[5,50]\)). \emph{Why it helps:} full evaluation is wasted effort
+  early on when the policy is still bad and will change anyway ---
+  partial evaluation is enough to drive improvement, so total work drops
+  dramatically. \emph{Interaction:} defines the spectrum from value
+  iteration (\(k=1\)) to classical policy iteration (\(k=\infty\)).
+\item
+  \phantomsection\label{trick-1-2-2}\textbf{Generalised Policy Iteration
+  (GPI)} --- interleave evaluation and improvement at \emph{any}
+  granularity (one state at a time, asynchronously, even
+  action-selection-driven). \emph{Why it helps:} makes the algorithm an
+  anytime procedure that converges as long as both processes make
+  progress on every state infinitely often. \emph{Interaction:} MPI is
+  the special case where each interleaved evaluation phase is \(k\) full
+  sweeps; pairs with \textbf{asynchronous policy evaluation}.
+\item
+  \phantomsection\label{trick-1-2-3}\textbf{Warm-start \(V\) across
+  outer iterations} --- keep \(V\) between policy improvements rather
+  than re-initialising to zero. \emph{Why it helps:} a newly-improved
+  policy's value function is usually close to the previous one, so inner
+  evaluation needs only a few sweeps to re-converge. \emph{Interaction:}
+  this is precisely what makes MPI's small \(k\) work --- without
+  warm-start, truncating evaluation would forget all prior progress.
+\item
+  \phantomsection\label{trick-1-2-4}\textbf{Action-value caching during
+  improvement} --- during the improvement sweep, compute
+  \(Q(s,a)=\sum_{s'} P(s'\mid s,a)[r+\gamma V(s')]\) once per \((s,a)\),
+  store it, then take \(\arg\max\) and the change-flag from the same
+  table. \emph{Why it helps:} the improvement step otherwise recomputes
+  the same sum twice --- once for the argmax, once when checking if
+  anything changed.
+\item
+  \phantomsection\label{trick-1-2-5}\textbf{Policy-stable early exit}
+  --- break the inner evaluation as soon as no state's greedy action
+  would change. \emph{Why it helps:} once the policy has stabilised,
+  further evaluation cannot improve it; the outer loop will terminate
+  next round anyway.
+\item
+  \phantomsection\label{trick-1-2-6}\textbf{Bertsekas's
+  \(\lambda\)-policy-iteration} --- bootstrap evaluation with
+  \(\lambda\)-returns instead of one-step Bellman backups. \emph{Why it
+  helps:} trades a controllable amount of bias for much faster
+  propagation of value information across long horizons.
+  \emph{Interaction:} generalises both MPI and value iteration as
+  endpoints.
+\end{itemize}
+
+    \phantomsection\label{pseudo-1-2}
+
+    \begin{pseudobox}
+
+\textbf{Algorithm 1.2} Policy iteration --- Raw Pseudocode (without
+additional tricks) \emph{{[}Sutton \& Barto, §4.3{]}}
+
+\tcbline
+
+Here is the pseudocode for the policy iteration core (base) algorithm
+without any further additions and engineering tricks (also mentioned
+above) added:
+
+\textbf{Input:} MDP \((S, A, P, r, \gamma)\), threshold \(\theta > 0\)\\
+Initialize \(V(s) \in \mathbb{R}\) and \(\pi(s) \in A\) arbitrarily for
+all \(s \in S\)\\
+\textbf{repeat}\\
+\strut ~~\emph{// --- Policy Evaluation ---}\\
+\strut ~~\textbf{repeat}\\
+\strut ~~~~\(\Delta \leftarrow 0\)\\
+\strut ~~~~\textbf{for each} \(s \in S\) \textbf{do}\\
+\strut ~~~~~~\(v \leftarrow V(s)\)\\
+\strut ~~~~~~\(V(s) \leftarrow \sum_{s'} P(s' \mid s, \pi(s))\,\bigl[\, r(s, \pi(s), s') + \gamma\, V(s') \,\bigr]\)\\
+\strut ~~~~~~\(\Delta \leftarrow \max\!\bigl(\Delta,\; |v - V(s)|\bigr)\)\\
+\strut ~~~~\textbf{end for}\\
+\strut ~~\textbf{until} \(\Delta < \theta\)\\
+\strut ~~\emph{// --- Policy Improvement ---}\\
+\strut ~~\(\text{policy\_stable} \leftarrow \mathbf{true}\)\\
+\strut ~~\textbf{for each} \(s \in S\) \textbf{do}\\
+\strut ~~~~\(a_{\text{old}} \leftarrow \pi(s)\)\\
+\strut ~~~~\(\pi(s) \leftarrow \arg\max_{a}\, \sum_{s'} P(s' \mid s, a)\,\bigl[\, r(s, a, s') + \gamma\, V(s') \,\bigr]\)\\
+\strut ~~~~\textbf{if} \(a_{\text{old}} \neq \pi(s)\) \textbf{then}
+\(\text{policy\_stable} \leftarrow \mathbf{false}\)\\
+\strut ~~\textbf{end for}\\
+\textbf{until} \(\text{policy\_stable} = \mathbf{true}\)\\
+\textbf{Output:} \(V \approx v_{*}\) and \(\pi \approx \pi_{*}\)
+
+\end{pseudobox}
+
+    \begin{pseudobox}
+
+\textbf{Algorithm 1.2} Policy iteration --- Pseudocode with Additions
+(Engineering Tricks) \emph{{[}Sutton \& Barto, §4.3{]}}
+
+\tcbline
+
+Here is the pseudocode for the policy iteration algorithm with also
+employing all of the additions and engineering tricks mentioned above:
+
+\textbf{Input:} MDP \((S, A, P, r, \gamma)\), threshold \(\theta > 0\),
+✦ evaluation sweeps \(k\) ✦ (\hyperref[trick-1-2-1]{Modified Policy
+Iteration (MPI)})\\
+Initialize \(V(s) \in \mathbb{R}\) and \(\pi(s) \in A\) arbitrarily for
+all \(s \in S\)\\
+\textbf{repeat}\\
+\strut ~~\emph{// --- Policy Evaluation (truncated) ---}\\
+\strut ~~✦ \textbf{for} \(\text{sweep} = 1, \ldots, k\) \textbf{do}
+\emph{(only \(k\) sweeps instead of until convergence)} ✦
+(\hyperref[trick-1-2-1]{Modified Policy Iteration (MPI)})\\
+\strut ~~~~\textbf{for each} \(s \in S\) \textbf{do}\\
+\strut ~~~~~~\(V(s) \leftarrow \sum_{s'} P(s' \mid s, \pi(s))\,\bigl[\, r(s, \pi(s), s') + \gamma\, V(s') \,\bigr]\)\\
+\strut ~~~~\textbf{end for}\\
+\strut ~~~~✦ \textbf{if} no state's greedy action would change
+\textbf{then break} \emph{(early exit)} ✦
+(\hyperref[trick-1-2-5]{Policy-stable early exit})\\
+\strut ~~✦ \textbf{end for} \emph{(warm-start: \(V\) is carried forward
+across outer iterations, not re-initialised)} ✦
+(\hyperref[trick-1-2-3]{Warm-start \(V\) across outer iterations})\\
+\strut ~~\emph{// --- Policy Improvement ---}\\
+\strut ~~\(\text{policy\_stable} \leftarrow \mathbf{true}\)\\
+\strut ~~\textbf{for each} \(s \in S\) \textbf{do}\\
+\strut ~~~~\(a_{\text{old}} \leftarrow \pi(s)\)\\
+\strut ~~~~✦ Cache
+\(Q(s,a) \leftarrow \sum_{s'} P(s'\mid s,a)\bigl[r + \gamma V(s')\bigr]\)
+for all \(a\) \emph{(compute once, reuse for argmax and stability
+check)} ✦ (\hyperref[trick-1-2-4]{Action-value caching during
+improvement})\\
+\strut ~~~~✦ \(\pi(s) \leftarrow \arg\max_a Q(s,a)\) ✦
+(\hyperref[trick-1-2-4]{Action-value caching during improvement})\\
+\strut ~~~~\textbf{if} \(a_{\text{old}} \neq \pi(s)\) \textbf{then}
+\(\text{policy\_stable} \leftarrow \mathbf{false}\)\\
+\strut ~~\textbf{end for}\\
+\strut ~~✦ \emph{(Evaluation and improvement may be interleaved at any
+granularity --- per-state, per-action --- under the GPI framework)} ✦
+(\hyperref[trick-1-2-2]{Generalised Policy Iteration (GPI)})\\
+\textbf{until} \(\text{policy\_stable} = \mathbf{true}\)\\
+\textbf{Output:} \(V \approx v_{*}\) and \(\pi \approx \pi_{*}\)
+
+\end{pseudobox}
 
     ✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦
 
@@ -1702,11 +1693,59 @@ detection})\\
 
 ✦ ✦ ✦
 
-\subsection{Model-Free Methods}\label{model-free-methods}
+\subsection{RL Model-Free Methods}\label{rl-model-free-methods}
 
 ✦ ✦ ✦
 
-    \phantomsection\label{on-off-policy-intro}
+    \phantomsection\label{model-free-intro}
+
+    \subsubsection{Introduction}\label{introduction}
+
+Model-free methods drop the assumption that the dynamics are known ---
+\(P(s' \mid s, a)\) and \(r(s, a)\) are \textbf{unavailable}. Instead,
+the agent \textbf{\emph{learns}} value functions and/or policies
+directly from \textbf{sampled transitions} \((s, a, r, s')\) gathered by
+interacting with the environment.
+
+\(\;\cdot\;\) \textbf{No model needed} --- the dynamics are never
+written down; everything is estimated from experience.
+
+\(\;\cdot\;\) \textbf{Learning by sampling} --- updates use individual
+sampled transitions (or whole episodes), so they scale to large or
+unknown environments where enumeration is impossible.
+
+\(\;\cdot\;\) \textbf{General but noisier} --- the workhorse of modern
+(deep) RL, at the cost of sampling variance. \emph{Examples: Monte
+Carlo, TD, SARSA, Q-learning, and every policy-gradient method below.}
+
+{\def\LTcaptype{none} % do not increment counter
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.3333}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Model-Based
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Model-Free
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+Dynamics \(P, r\) & Known up front & Unknown --- sampled \\
+Core operation & Planning (Bellman sweeps) & Learning from experience \\
+Environment interaction & Not required & Required \\
+Scales to large / unknown MDPs & No (needs enumeration) & Yes \\
+Examples & Value \& Policy Iteration & MC, TD, SARSA, Q-learning, PG
+methods \\
+\end{longtable}
+}
+
+    \clearpage
+
+\phantomsection\label{on-off-policy-intro}
 
     \subsubsection{On-Policy vs Off-Policy
 Algorithms}\label{on-policy-vs-off-policy-algorithms}
@@ -2059,9 +2098,13 @@ exploration rate \(\varepsilon\)
 
     \phantomsection\label{pseudo-2-1}
 
-    Algorithm 2.1 First-visit Monte Carlo control (on-policy,
+    \begin{pseudobox}
+
+\textbf{Algorithm 2.1} First-visit Monte Carlo control (on-policy,
 \(\varepsilon\)-greedy) --- Raw Pseudocode (without additional tricks)
-{[}Sutton \& Barto, §5.4{]}
+\emph{{[}Sutton \& Barto, §5.4{]}}
+
+\tcbline
 
 Here is the pseudocode for the first-visit Monte Carlo control core
 (base) algorithm without any further additions and engineering tricks
@@ -2073,25 +2116,31 @@ Initialize \(Q(s, a)\) arbitrarily for all \(s \in S,\; a \in A\)\\
 \(\text{Returns}(s, a) \leftarrow \emptyset\) for all \(s, a\)\\
 \(\pi \leftarrow \varepsilon\)-greedy w.r.t. \(Q\)\\
 \textbf{for} \(\text{episode} = 1, 2, \ldots, n\) \textbf{do}\\
- Generate an episode using \(\pi\):
+\strut ~~Generate an episode using \(\pi\):
 \(\;s_0, a_0, r_1,\, s_1, a_1, r_2,\, \ldots,\, s_{T-1}, a_{T-1}, r_T\)\\
- \(G \leftarrow 0\)\\
- \textbf{for} \(t = T - 1\) \textbf{down to} \(0\) \textbf{do}\\
-  \(G \leftarrow \gamma\, G + r_{t+1}\)\\
-  \textbf{if} \((s_t, a_t)\) does not appear in
+\strut ~~\(G \leftarrow 0\)\\
+\strut ~~\textbf{for} \(t = T - 1\) \textbf{down to} \(0\) \textbf{do}\\
+\strut ~~~~\(G \leftarrow \gamma\, G + r_{t+1}\)\\
+\strut ~~~~\textbf{if} \((s_t, a_t)\) does not appear in
 \((s_0, a_0), \ldots, (s_{t-1}, a_{t-1})\) \textbf{then}\\
-   Append \(G\) to \(\text{Returns}(s_t, a_t)\)\\
-   \(Q(s_t, a_t) \leftarrow \text{average}\bigl(\text{Returns}(s_t, a_t)\bigr)\)\\
-   \(\pi(\cdot \mid s_t) \leftarrow \varepsilon\)-greedy w.r.t.
-\(Q(s_t, \cdot)\)\\
-  \textbf{end if}\\
- \textbf{end for}\\
+\strut ~~~~~~Append \(G\) to \(\text{Returns}(s_t, a_t)\)\\
+\strut ~~~~~~\(Q(s_t, a_t) \leftarrow \text{average}\bigl(\text{Returns}(s_t, a_t)\bigr)\)\\
+\strut ~~~~~~\(\pi(\cdot \mid s_t) \leftarrow \varepsilon\)-greedy
+w.r.t. \(Q(s_t, \cdot)\)\\
+\strut ~~~~\textbf{end if}\\
+\strut ~~\textbf{end for}\\
 \textbf{end for}\\
 \textbf{Output:} \(Q \approx q_{*}\), \(\pi \approx \pi_{*}\)
 
-    Algorithm 2.1 First-visit Monte Carlo control (on-policy,
+\end{pseudobox}
+
+    \begin{pseudobox}
+
+\textbf{Algorithm 2.1} First-visit Monte Carlo control (on-policy,
 \(\varepsilon\)-greedy) --- Pseudocode with Additions (Engineering
-Tricks) {[}Sutton \& Barto, §5.4{]}
+Tricks) \emph{{[}Sutton \& Barto, §5.4{]}}
+
+\tcbline
 
 Here is the pseudocode for the first-visit Monte Carlo control algorithm
 with also employing all of the additions and engineering tricks
@@ -2105,35 +2154,38 @@ counts for incremental update)} ✦ (\hyperref[trick-2-1-1]{Incremental
 mean update})\\
 \(\pi \leftarrow \varepsilon\)-greedy w.r.t. \(Q\)\\
 \textbf{for} \(\text{episode} = 1, 2, \ldots, n\) \textbf{do}\\
- ✦ \(\varepsilon \leftarrow 1/\text{episode}\) \emph{(anneal toward
-greedy --- GLIE)} ✦ (\hyperref[trick-2-1-3]{GLIE schedule})\\
- ✦ Start episode at uniformly random \((s_0, a_0)\) \emph{(alternative
-to \(\varepsilon\)-greedy)} ✦ (\hyperref[trick-2-1-2]{Exploring
-starts})\\
- Generate an episode using \(\pi\):
+\strut ~~✦ \(\varepsilon \leftarrow 1/\text{episode}\) \emph{(anneal
+toward greedy --- GLIE)} ✦ (\hyperref[trick-2-1-3]{GLIE schedule})\\
+\strut ~~✦ Start episode at uniformly random \((s_0, a_0)\)
+\emph{(alternative to \(\varepsilon\)-greedy)} ✦
+(\hyperref[trick-2-1-2]{Exploring starts})\\
+\strut ~~Generate an episode using \(\pi\):
 \(\;s_0, a_0, r_1,\, s_1, a_1, r_2,\, \ldots,\, s_{T-1}, a_{T-1}, r_T\)\\
- \(G \leftarrow 0\)\\
- \textbf{for} \(t = T - 1\) \textbf{down to} \(0\) \textbf{do}\\
-  \(G \leftarrow \gamma\, G + r_{t+1}\)\\
-  ✦ \emph{(Every-visit variant: skip the first-visit check and update on
-every occurrence)} ✦ (\hyperref[trick-2-1-4]{Every-visit MC})\\
-  \textbf{if} \((s_t, a_t)\) does not appear in
+\strut ~~\(G \leftarrow 0\)\\
+\strut ~~\textbf{for} \(t = T - 1\) \textbf{down to} \(0\) \textbf{do}\\
+\strut ~~~~\(G \leftarrow \gamma\, G + r_{t+1}\)\\
+\strut ~~~~✦ \emph{(Every-visit variant: skip the first-visit check and
+update on every occurrence)} ✦ (\hyperref[trick-2-1-4]{Every-visit
+MC})\\
+\strut ~~~~\textbf{if} \((s_t, a_t)\) does not appear in
 \((s_0, a_0), \ldots, (s_{t-1}, a_{t-1})\) \textbf{then}\\
-   ✦ \(N(s_t,a_t) \leftarrow N(s_t,a_t) + 1\) ✦
+\strut ~~~~~~✦ \(N(s_t,a_t) \leftarrow N(s_t,a_t) + 1\) ✦
 (\hyperref[trick-2-1-1]{Incremental mean update})\\
-   ✦
+\strut ~~~~~~✦
 \(Q(s_t,a_t) \leftarrow Q(s_t,a_t) + \frac{1}{N(s_t,a_t)}\bigl(G - Q(s_t,a_t)\bigr)\)
 \emph{(replaces list-based mean)} ✦ (\hyperref[trick-2-1-1]{Incremental
 mean update})\\
-   \(\pi(\cdot \mid s_t) \leftarrow \varepsilon\)-greedy w.r.t.
-\(Q(s_t, \cdot)\)\\
-  \textbf{end if}\\
- \textbf{end for}\\
- ✦ \emph{(Off-policy variant: weight returns by \(W=\prod_t \pi/\mu\),
-use \(Q \leftarrow \sum WG / \sum W\))} ✦
+\strut ~~~~~~\(\pi(\cdot \mid s_t) \leftarrow \varepsilon\)-greedy
+w.r.t. \(Q(s_t, \cdot)\)\\
+\strut ~~~~\textbf{end if}\\
+\strut ~~\textbf{end for}\\
+\strut ~~✦ \emph{(Off-policy variant: weight returns by
+\(W=\prod_t \pi/\mu\), use \(Q \leftarrow \sum WG / \sum W\))} ✦
 (\hyperref[trick-2-1-5]{Weighted importance sampling (off-policy MC)})\\
 \textbf{end for}\\
 \textbf{Output:} \(Q \approx q_{*}\), \(\pi \approx \pi_{*}\)
+
+\end{pseudobox}
 
     ✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦
 
@@ -2286,8 +2338,13 @@ from the bootstrapped target.
 
     \phantomsection\label{pseudo-2-2}
 
-    Algorithm 2.2 Tabular TD(0) for estimating \(v_\pi\) --- Raw Pseudocode
-(without additional tricks) {[}Sutton \& Barto, §6.1{]}
+    \begin{pseudobox}
+
+\textbf{Algorithm 2.2} Tabular TD(0) for estimating \(v_\pi\) --- Raw
+Pseudocode (without additional tricks) \emph{{[}Sutton \& Barto,
+§6.1{]}}
+
+\tcbline
 
 Here is the pseudocode for the tabular TD(0) core (base) algorithm
 without any further additions and engineering tricks (also mentioned
@@ -2298,18 +2355,25 @@ discount \(\gamma\), episodes \(n\)\\
 Initialize \(V(s)\) arbitrarily for all \(s \in S\);
 \(\;V(\text{terminal}) \leftarrow 0\)\\
 \textbf{for} \(\text{episode} = 1, 2, \ldots, n\) \textbf{do}\\
- Initialize \(s\)\\
- \textbf{repeat} (for each step of episode)\\
-  \(a \leftarrow\) action given by \(\pi\) for \(s\)\\
-  Take action \(a\); observe \(r,\; s'\)\\
-  \(V(s) \leftarrow V(s) + \alpha\,\bigl[\, r + \gamma\, V(s') - V(s) \,\bigr]\)\\
-  \(s \leftarrow s'\)\\
- \textbf{until} \(s\) is terminal\\
+\strut ~~Initialize \(s\)\\
+\strut ~~\textbf{repeat} (for each step of episode)\\
+\strut ~~~~\(a \leftarrow\) action given by \(\pi\) for \(s\)\\
+\strut ~~~~Take action \(a\); observe \(r,\; s'\)\\
+\strut ~~~~\(V(s) \leftarrow V(s) + \alpha\,\bigl[\, r + \gamma\, V(s') - V(s) \,\bigr]\)\\
+\strut ~~~~\(s \leftarrow s'\)\\
+\strut ~~\textbf{until} \(s\) is terminal\\
 \textbf{end for}\\
 \textbf{Output:} \(V \approx v_{\pi}\)
 
-    Algorithm 2.2 Tabular TD(0) for estimating \(v_\pi\) --- Pseudocode with
-Additions (Engineering Tricks) {[}Sutton \& Barto, §6.1{]}
+\end{pseudobox}
+
+    \begin{pseudobox}
+
+\textbf{Algorithm 2.2} Tabular TD(0) for estimating \(v_\pi\) ---
+Pseudocode with Additions (Engineering Tricks) \emph{{[}Sutton \& Barto,
+§6.1{]}}
+
+\tcbline
 
 Here is the pseudocode for the tabular TD(0) algorithm with also
 employing all of the additions and engineering tricks mentioned above:
@@ -2327,35 +2391,38 @@ values})\\
 \(\hat v(s;\mathbf{w})=\mathbf{w}^\top\phi(s)\) --- linear semi-gradient
 TD)} ✦ (\hyperref[trick-2-2-5]{Linear semi-gradient TD(0)})\\
 \textbf{for} \(\text{episode} = 1, 2, \ldots, n\) \textbf{do}\\
- Initialise \(s\)\\
- ✦ \(e(s) \leftarrow 0\) for all \(s\) \emph{(eligibility traces)} ✦
+\strut ~~Initialise \(s\)\\
+\strut ~~✦ \(e(s) \leftarrow 0\) for all \(s\) \emph{(eligibility
+traces)} ✦ (\hyperref[trick-2-2-1]{Eligibility traces ---
+TD(\(\lambda\))})\\
+\strut ~~\textbf{repeat} (for each step of episode)\\
+\strut ~~~~\(a \leftarrow\) action given by \(\pi\) for \(s\)\\
+\strut ~~~~Take action \(a\); observe \(r,\; s'\)\\
+\strut ~~~~\(\delta \leftarrow r + \gamma\, V(s') - V(s)\)\\
+\strut ~~~~✦ \(e(s) \leftarrow e(s) + 1\) \emph{(accumulating trace)} ✦
 (\hyperref[trick-2-2-1]{Eligibility traces --- TD(\(\lambda\))})\\
- \textbf{repeat} (for each step of episode)\\
-  \(a \leftarrow\) action given by \(\pi\) for \(s\)\\
-  Take action \(a\); observe \(r,\; s'\)\\
-  \(\delta \leftarrow r + \gamma\, V(s') - V(s)\)\\
-  ✦ \(e(s) \leftarrow e(s) + 1\) \emph{(accumulating trace)} ✦
-(\hyperref[trick-2-2-1]{Eligibility traces --- TD(\(\lambda\))})\\
-  ✦ \textbf{for all} \(\bar s \in S\) \textbf{do}
+\strut ~~~~✦ \textbf{for all} \(\bar s \in S\) \textbf{do}
 \(V(\bar s) \leftarrow V(\bar s) + \alpha\,\delta\,e(\bar s)\);
 \(\;e(\bar s) \leftarrow \gamma\lambda\,e(\bar s)\) \textbf{end for} ✦
 (\hyperref[trick-2-2-1]{Eligibility traces --- TD(\(\lambda\))})\\
-  ✦ \(\alpha \leftarrow \alpha_0/(1 + \mathrm{visits}(s)/c)\)
+\strut ~~~~✦ \(\alpha \leftarrow \alpha_0/(1 + \mathrm{visits}(s)/c)\)
 \emph{(per-state Robbins--Monro decay)} ✦
 (\hyperref[trick-2-2-2]{Robbins--Monro step-size schedule})\\
-  ✦ \emph{(Off-policy + function approx: use Gradient-TD / TDC update to
-guarantee convergence)} ✦ (\hyperref[trick-2-2-4]{Gradient-TD
+\strut ~~~~✦ \emph{(Off-policy + function approx: use Gradient-TD / TDC
+update to guarantee convergence)} ✦ (\hyperref[trick-2-2-4]{Gradient-TD
 (GTD/TDC)})\\
-  \(s \leftarrow s'\)\\
- \textbf{until} \(s\) is terminal\\
+\strut ~~~~\(s \leftarrow s'\)\\
+\strut ~~\textbf{until} \(s\) is terminal\\
 \textbf{end for}\\
 \textbf{Output:} \(V \approx v_{\pi}\)
+
+\end{pseudobox}
 
     ✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦
 
     \clearpage
 
-\phantomsection\label{n-step-td}
+\phantomsection\label{n-step-td-algo}
 
     \subsubsection{n-Step TD}\label{n-step-td}
 
@@ -2526,8 +2593,13 @@ variance better than either extreme.
 
     \phantomsection\label{pseudo-2-3}
 
-    Algorithm 2.3 \(n\)-step TD for estimating \(v_\pi\) --- Raw Pseudocode
-(without additional tricks) {[}Sutton \& Barto, §7.1{]}
+    \begin{pseudobox}
+
+\textbf{Algorithm 2.3} \(n\)-step TD for estimating \(v_\pi\) --- Raw
+Pseudocode (without additional tricks) \emph{{[}Sutton \& Barto,
+§7.1{]}}
+
+\tcbline
 
 Here is the pseudocode for the \(n\)-step TD core (base) algorithm
 without any further additions and engineering tricks (also mentioned
@@ -2537,26 +2609,34 @@ above) added:
 discount \(\gamma\), lookahead \(n\), episodes \(M\)\\
 Initialize \(V(s)\) arbitrarily; \(\;V(\text{terminal}) \leftarrow 0\)\\
 \textbf{for} \(\text{episode} = 1, 2, \ldots, M\) \textbf{do}\\
- Initialize and store \(s_0\); \(\;T \leftarrow \infty\)\\
- \textbf{for} \(t = 0, 1, 2, \ldots\) \textbf{do}\\
-  \textbf{if} \(t < T\) \textbf{then}\\
-   Take action \(a_t \sim \pi(\cdot \mid s_t)\); observe
+\strut ~~Initialize and store \(s_0\); \(\;T \leftarrow \infty\)\\
+\strut ~~\textbf{for} \(t = 0, 1, 2, \ldots\) \textbf{do}\\
+\strut ~~~~\textbf{if} \(t < T\) \textbf{then}\\
+\strut ~~~~~~Take action \(a_t \sim \pi(\cdot \mid s_t)\); observe
 \(r_{t+1},\, s_{t+1}\)\\
-   \textbf{if} \(s_{t+1}\) is terminal \textbf{then}
+\strut ~~~~~~\textbf{if} \(s_{t+1}\) is terminal \textbf{then}
 \(T \leftarrow t + 1\)\\
-  \textbf{end if}\\
-  \(\tau \leftarrow t - n + 1\) \emph{(index of state being updated)}\\
-  \textbf{if} \(\tau \geq 0\) \textbf{then}\\
-   \(G \leftarrow \displaystyle\sum_{i=\tau+1}^{\min(\tau+n,\, T)} \gamma^{\,i - \tau - 1}\, r_i\)\\
-   \textbf{if} \(\tau + n < T\) \textbf{then}
+\strut ~~~~\textbf{end if}\\
+\strut ~~~~\(\tau \leftarrow t - n + 1\) \emph{(index of state being
+updated)}\\
+\strut ~~~~\textbf{if} \(\tau \geq 0\) \textbf{then}\\
+\strut ~~~~~~\(G \leftarrow \displaystyle\sum_{i=\tau+1}^{\min(\tau+n,\, T)} \gamma^{\,i - \tau - 1}\, r_i\)\\
+\strut ~~~~~~\textbf{if} \(\tau + n < T\) \textbf{then}
 \(G \leftarrow G + \gamma^{n}\, V(s_{\tau + n})\)\\
-   \(V(s_\tau) \leftarrow V(s_\tau) + \alpha\,\bigl[\, G - V(s_\tau) \,\bigr]\)\\
-  \textbf{end if}\\
- \textbf{until} \(\tau = T - 1\)\\
+\strut ~~~~~~\(V(s_\tau) \leftarrow V(s_\tau) + \alpha\,\bigl[\, G - V(s_\tau) \,\bigr]\)\\
+\strut ~~~~\textbf{end if}\\
+\strut ~~\textbf{until} \(\tau = T - 1\)\\
 \textbf{end for}
 
-    Algorithm 2.3 \(n\)-step TD for estimating \(v_\pi\) --- Pseudocode with
-Additions (Engineering Tricks) {[}Sutton \& Barto, §7.1{]}
+\end{pseudobox}
+
+    \begin{pseudobox}
+
+\textbf{Algorithm 2.3} \(n\)-step TD for estimating \(v_\pi\) ---
+Pseudocode with Additions (Engineering Tricks) \emph{{[}Sutton \& Barto,
+§7.1{]}}
+
+\tcbline
 
 Here is the pseudocode for the \(n\)-step TD algorithm with also
 employing all of the additions and engineering tricks mentioned above:
@@ -2566,47 +2646,49 @@ employing all of the additions and engineering tricks mentioned above:
 (forward view)}), lookahead \(n\), episodes \(M\)\\
 Initialise \(V(s)\) arbitrarily; \(\;V(\text{terminal}) \leftarrow 0\)\\
 \textbf{for} \(\text{episode} = 1, 2, \ldots, M\) \textbf{do}\\
- Initialise and store \(s_0\); \(\;T \leftarrow \infty\)\\
- ✦ Allocate circular ring-buffer \(\mathrm{buf}[0\ldots n{-}1]\) for
-\((s, r)\) pairs ✦ (\hyperref[trick-2-3-6]{Circular ring-buffer for the
-last \(n\) transitions})\\
- ✦ \(e(s) \leftarrow 0\) for all \(s\) \emph{(eligibility traces ---
-backward-view equivalent)} ✦ (\hyperref[trick-2-3-2]{Backward-view
+\strut ~~Initialise and store \(s_0\); \(\;T \leftarrow \infty\)\\
+\strut ~~✦ Allocate circular ring-buffer \(\mathrm{buf}[0\ldots n{-}1]\)
+for \((s, r)\) pairs ✦ (\hyperref[trick-2-3-6]{Circular ring-buffer for
+the last \(n\) transitions})\\
+\strut ~~✦ \(e(s) \leftarrow 0\) for all \(s\) \emph{(eligibility traces
+--- backward-view equivalent)} ✦ (\hyperref[trick-2-3-2]{Backward-view
 equivalence via eligibility traces})\\
- \textbf{for} \(t = 0, 1, 2, \ldots\) \textbf{do}\\
-  \textbf{if} \(t < T\) \textbf{then}\\
-   Take action \(a_t \sim \pi(\cdot \mid s_t)\); observe
+\strut ~~\textbf{for} \(t = 0, 1, 2, \ldots\) \textbf{do}\\
+\strut ~~~~\textbf{if} \(t < T\) \textbf{then}\\
+\strut ~~~~~~Take action \(a_t \sim \pi(\cdot \mid s_t)\); observe
 \(r_{t+1},\, s_{t+1}\)\\
-   ✦ Store \((s_t, r_{t+1})\) in \(\mathrm{buf}[t \bmod n]\) ✦
+\strut ~~~~~~✦ Store \((s_t, r_{t+1})\) in \(\mathrm{buf}[t \bmod n]\) ✦
 (\hyperref[trick-2-3-6]{Circular ring-buffer for the last \(n\)
 transitions})\\
-   \textbf{if} \(s_{t+1}\) is terminal \textbf{then}
+\strut ~~~~~~\textbf{if} \(s_{t+1}\) is terminal \textbf{then}
 \(T \leftarrow t + 1\)\\
-  \textbf{end if}\\
-  \(\tau \leftarrow t - n + 1\)\\
-  \textbf{if} \(\tau \geq 0\) \textbf{then}\\
-   ✦
+\strut ~~~~\textbf{end if}\\
+\strut ~~~~\(\tau \leftarrow t - n + 1\)\\
+\strut ~~~~\textbf{if} \(\tau \geq 0\) \textbf{then}\\
+\strut ~~~~~~✦
 \(G \leftarrow G^\lambda_\tau = (1-\lambda)\sum_{k\geq 1}\lambda^{k-1} G_{\tau:\tau+k}\)
 \emph{(\(\lambda\)-return mixing all \(n\)-step targets)} ✦
 (\hyperref[trick-2-3-1]{λ-return (forward view)})\\
-   ✦ \emph{(Off-policy: apply per-decision IS ratios
+\strut ~~~~~~✦ \emph{(Off-policy: apply per-decision IS ratios
 \(\rho_i = \pi(a_i\mid s_i)/\mu(a_i\mid s_i)\) to each step)} ✦
 (\hyperref[trick-2-3-4]{Per-decision importance sampling})\\
-   ✦ \emph{(Off-policy alternative: use Retrace(\(\lambda\)) with
-\(c_k = \lambda\min(1,\pi/\mu)\) for safe correction)} ✦
+\strut ~~~~~~✦ \emph{(Off-policy alternative: use Retrace(\(\lambda\))
+with \(c_k = \lambda\min(1,\pi/\mu)\) for safe correction)} ✦
 (\hyperref[trick-2-3-5]{Retrace(\(\lambda\))})\\
-   ✦ \emph{(Off-policy alternative: tree-backup --- no IS ratios,
-replace leaf with \(\mathbb{E}_\pi[Q]\))} ✦
+\strut ~~~~~~✦ \emph{(Off-policy alternative: tree-backup --- no IS
+ratios, replace leaf with \(\mathbb{E}_\pi[Q]\))} ✦
 (\hyperref[trick-2-3-3]{Tree-backup algorithm})\\
-   \(V(s_\tau) \leftarrow V(s_\tau) + \alpha\,\bigl[\, G - V(s_\tau) \,\bigr]\)\\
-   ✦ \emph{(Backward-view equivalent: update all states via traces
-\(e(\bar s) \leftarrow \gamma\lambda\,e(\bar s)\);
+\strut ~~~~~~\(V(s_\tau) \leftarrow V(s_\tau) + \alpha\,\bigl[\, G - V(s_\tau) \,\bigr]\)\\
+\strut ~~~~~~✦ \emph{(Backward-view equivalent: update all states via
+traces \(e(\bar s) \leftarrow \gamma\lambda\,e(\bar s)\);
 \(V(\bar s)\mathrel{+}=\alpha\delta\,e(\bar s)\))} ✦
 (\hyperref[trick-2-3-2]{Backward-view equivalence via eligibility
 traces})\\
-  \textbf{end if}\\
- \textbf{until} \(\tau = T - 1\)\\
+\strut ~~~~\textbf{end if}\\
+\strut ~~\textbf{until} \(\tau = T - 1\)\\
 \textbf{end for}
+
+\end{pseudobox}
 
     ✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦
 
@@ -2759,8 +2841,12 @@ exploration rate \(\varepsilon\), episodes \(n\)
 
     \phantomsection\label{pseudo-2-4}
 
-    Algorithm 2.4 SARSA (on-policy TD control) --- Raw Pseudocode (without
-additional tricks) {[}Sutton \& Barto, §6.4{]}
+    \begin{pseudobox}
+
+\textbf{Algorithm 2.4} SARSA (on-policy TD control) --- Raw Pseudocode
+(without additional tricks) \emph{{[}Sutton \& Barto, §6.4{]}}
+
+\tcbline
 
 Here is the pseudocode for the SARSA core (base) algorithm without any
 further additions and engineering tricks (also mentioned above) added:
@@ -2770,19 +2856,27 @@ exploration rate \(\varepsilon\), episodes \(n\)\\
 Initialize \(Q(s, a)\) arbitrarily for all \(s \in S,\; a \in A\);
 \(\;Q(\text{terminal}, \cdot) = 0\)\\
 \textbf{for} \(\text{episode} = 1, 2, \ldots, n\) \textbf{do}\\
- Initialize \(s\)\\
- Choose \(a\) from \(s\) using \(\varepsilon\)-greedy w.r.t. \(Q\)\\
- \textbf{repeat} (for each step of episode)\\
-  Take action \(a\); observe \(r,\; s'\)\\
-  Choose \(a'\) from \(s'\) using \(\varepsilon\)-greedy w.r.t. \(Q\)\\
-  \(Q(s, a) \leftarrow Q(s, a) + \alpha\,\bigl[\, r + \gamma\, Q(s', a') - Q(s, a) \,\bigr]\)\\
-  \(s \leftarrow s';\quad a \leftarrow a'\)\\
- \textbf{until} \(s\) is terminal\\
+\strut ~~Initialize \(s\)\\
+\strut ~~Choose \(a\) from \(s\) using \(\varepsilon\)-greedy w.r.t.
+\(Q\)\\
+\strut ~~\textbf{repeat} (for each step of episode)\\
+\strut ~~~~Take action \(a\); observe \(r,\; s'\)\\
+\strut ~~~~Choose \(a'\) from \(s'\) using \(\varepsilon\)-greedy w.r.t.
+\(Q\)\\
+\strut ~~~~\(Q(s, a) \leftarrow Q(s, a) + \alpha\,\bigl[\, r + \gamma\, Q(s', a') - Q(s, a) \,\bigr]\)\\
+\strut ~~~~\(s \leftarrow s';\quad a \leftarrow a'\)\\
+\strut ~~\textbf{until} \(s\) is terminal\\
 \textbf{end for}\\
 \textbf{Output:} \(Q \approx q_{*}\)
 
-    Algorithm 2.4 SARSA (on-policy TD control) --- Pseudocode with Additions
-(Engineering Tricks) {[}Sutton \& Barto, §6.4{]}
+\end{pseudobox}
+
+    \begin{pseudobox}
+
+\textbf{Algorithm 2.4} SARSA (on-policy TD control) --- Pseudocode with
+Additions (Engineering Tricks) \emph{{[}Sutton \& Barto, §6.4{]}}
+
+\tcbline
 
 Here is the pseudocode for the SARSA algorithm with also employing all
 of the additions and engineering tricks mentioned above:
@@ -2798,41 +2892,44 @@ for all \(s, a\) \emph{(optimistic; two tables for Double SARSA)} ✦
 \hyperref[trick-2-4-5]{Double SARSA / Double Expected SARSA})\\
 \(Q(\text{terminal}, \cdot) = 0\)\\
 \textbf{for} \(\text{episode} = 1, 2, \ldots, M\) \textbf{do}\\
- Initialise \(s\)\\
- ✦ \(e(s,a) \leftarrow 0\) for all \(s, a\) \emph{(eligibility traces)}
-✦ (\hyperref[trick-2-4-2]{SARSA(\(\lambda\))})\\
- ✦ Choose \(a \sim \mathrm{softmax}(Q(s,\cdot)/\tau)\) ✦
+\strut ~~Initialise \(s\)\\
+\strut ~~✦ \(e(s,a) \leftarrow 0\) for all \(s, a\) \emph{(eligibility
+traces)} ✦ (\hyperref[trick-2-4-2]{SARSA(\(\lambda\))})\\
+\strut ~~✦ Choose \(a \sim \mathrm{softmax}(Q(s,\cdot)/\tau)\) ✦
 (\hyperref[trick-2-4-3]{Boltzmann (softmax) exploration})\\
- \textbf{repeat} (for each step of episode)\\
-  Take action \(a\); observe \(r,\; s'\)\\
-  ✦ Choose \(a' \sim \mathrm{softmax}(Q(s',\cdot)/\tau)\) ✦
+\strut ~~\textbf{repeat} (for each step of episode)\\
+\strut ~~~~Take action \(a\); observe \(r,\; s'\)\\
+\strut ~~~~✦ Choose \(a' \sim \mathrm{softmax}(Q(s',\cdot)/\tau)\) ✦
 (\hyperref[trick-2-4-3]{Boltzmann (softmax) exploration})\\
-  ✦ \emph{(n-step variant: accumulate
+\strut ~~~~✦ \emph{(n-step variant: accumulate
 \(G_{t:t+n} = \sum_{k=0}^{n-1}\gamma^k r_{t+k+1} + \gamma^n Q(s_{t+n},a_{t+n})\)
 before updating)} ✦ (\hyperref[trick-2-4-4]{n-step SARSA})\\
-  ✦ \(y \leftarrow r + \gamma\sum_{a''}\pi(a''\mid s')Q(s',a'')\)
+\strut ~~~~✦
+\(y \leftarrow r + \gamma\sum_{a''}\pi(a''\mid s')Q(s',a'')\)
 \emph{(Expected SARSA target --- replaces sampled \(Q(s',a')\))} ✦
 (\hyperref[trick-2-4-1]{Expected SARSA})\\
-  \(\delta \leftarrow y - Q(s, a)\)\\
-  ✦ \(e(s,a) \leftarrow e(s,a) + 1\) ✦
+\strut ~~~~\(\delta \leftarrow y - Q(s, a)\)\\
+\strut ~~~~✦ \(e(s,a) \leftarrow e(s,a) + 1\) ✦
 (\hyperref[trick-2-4-2]{SARSA(\(\lambda\))})\\
-  ✦ \textbf{for all} \((\bar s,\bar a)\) \textbf{do}
+\strut ~~~~✦ \textbf{for all} \((\bar s,\bar a)\) \textbf{do}
 \(Q(\bar s,\bar a) \leftarrow Q(\bar s,\bar a) + \alpha\,\delta\,e(\bar s,\bar a)\);
 \(\;e(\bar s,\bar a) \leftarrow \gamma\lambda\,e(\bar s,\bar a)\)
 \textbf{end for} ✦ (\hyperref[trick-2-4-2]{SARSA(\(\lambda\))})\\
-  ✦ \emph{(Double variant: with 50 \% prob. update \(Q^A\) using
-\(Q^B\)'s value at \((s',a')\), else vice versa)} ✦
+\strut ~~~~✦ \emph{(Double variant: with 50 \% prob. update \(Q^A\)
+using \(Q^B\)'s value at \((s',a')\), else vice versa)} ✦
 (\hyperref[trick-2-4-5]{Double SARSA / Double Expected SARSA})\\
-  \(s \leftarrow s';\quad a \leftarrow a'\)\\
- \textbf{until} \(s\) is terminal\\
+\strut ~~~~\(s \leftarrow s';\quad a \leftarrow a'\)\\
+\strut ~~\textbf{until} \(s\) is terminal\\
 \textbf{end for}\\
 \textbf{Output:} \(Q \approx q_{*}\)
+
+\end{pseudobox}
 
     ✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦
 
     \clearpage
 
-\phantomsection\label{q-learning}
+\phantomsection\label{q-learning-algo}
 
     \subsubsection{Q-Learning}\label{q-learning}
 
@@ -3001,8 +3098,13 @@ Q-learning & \(r + \gamma \max_{a'} Q(s', a')\) (greedy max) \\
 
     \phantomsection\label{pseudo-2-5}
 
-    Algorithm 2.5 Q-learning (off-policy TD control) --- Raw Pseudocode
-(without additional tricks) {[}Sutton \& Barto, §6.5; Watkins, 1989{]}
+    \begin{pseudobox}
+
+\textbf{Algorithm 2.5} Q-learning (off-policy TD control) --- Raw
+Pseudocode (without additional tricks) \emph{{[}Sutton \& Barto, §6.5;
+Watkins, 1989{]}}
+
+\tcbline
 
 Here is the pseudocode for the Q-learning core (base) algorithm without
 any further additions and engineering tricks (also mentioned above)
@@ -3013,20 +3115,26 @@ exploration rate \(\varepsilon\), episodes \(n\)\\
 Initialize \(Q(s, a)\) arbitrarily for all \(s \in S,\; a \in A\);
 \(\;Q(\text{terminal}, \cdot) = 0\)\\
 \textbf{for} \(\text{episode} = 1, 2, \ldots, n\) \textbf{do}\\
- Initialize \(s\)\\
- \textbf{repeat} (for each step of episode)\\
-  Choose \(a\) from \(s\) using \(\varepsilon\)-greedy w.r.t. \(Q\)
-\emph{(behavior policy)}\\
-  Take action \(a\); observe \(r,\; s'\)\\
-  \(Q(s, a) \leftarrow Q(s, a) + \alpha\,\bigl[\, r + \gamma\, \max_{a'} Q(s', a') - Q(s, a) \,\bigr]\)\\
-  \(s \leftarrow s'\)\\
- \textbf{until} \(s\) is terminal\\
+\strut ~~Initialize \(s\)\\
+\strut ~~\textbf{repeat} (for each step of episode)\\
+\strut ~~~~Choose \(a\) from \(s\) using \(\varepsilon\)-greedy w.r.t.
+\(Q\) \emph{(behavior policy)}\\
+\strut ~~~~Take action \(a\); observe \(r,\; s'\)\\
+\strut ~~~~\(Q(s, a) \leftarrow Q(s, a) + \alpha\,\bigl[\, r + \gamma\, \max_{a'} Q(s', a') - Q(s, a) \,\bigr]\)\\
+\strut ~~~~\(s \leftarrow s'\)\\
+\strut ~~\textbf{until} \(s\) is terminal\\
 \textbf{end for}\\
 \textbf{Output:} \(Q \approx q_{*}\)
 
-    Algorithm 2.5 Q-learning (off-policy TD control) --- Pseudocode with
-Additions (Engineering Tricks) {[}Sutton \& Barto, §6.5; Watkins,
-1989{]}
+\end{pseudobox}
+
+    \begin{pseudobox}
+
+\textbf{Algorithm 2.5} Q-learning (off-policy TD control) --- Pseudocode
+with Additions (Engineering Tricks) \emph{{[}Sutton \& Barto, §6.5;
+Watkins, 1989{]}}
+
+\tcbline
 
 Here is the pseudocode for the Q-learning algorithm with also employing
 all of the additions and engineering tricks mentioned above:
@@ -3048,36 +3156,39 @@ shaping}), episodes \(n\)\\
 \(Q(s,a)=\mathbf{w}^\top\phi(s,a)\) over overlapping tilings)} ✦
 (\hyperref[trick-2-5-3]{Tile coding / state aggregation})\\
 \textbf{for} \(\text{episode} = 1, 2, \ldots, n\) \textbf{do}\\
- Initialise \(s\)\\
- ✦ \(e(s,a) \leftarrow 0\) for all \(s, a\) \emph{(eligibility traces)}
-✦ (\hyperref[trick-2-5-2]{Watkins's Q(\(\lambda\)) / Peng's
+\strut ~~Initialise \(s\)\\
+\strut ~~✦ \(e(s,a) \leftarrow 0\) for all \(s, a\) \emph{(eligibility
+traces)} ✦ (\hyperref[trick-2-5-2]{Watkins's Q(\(\lambda\)) / Peng's
 Q(\(\lambda\))})\\
- \textbf{repeat} (for each step of episode)\\
-  ✦
+\strut ~~\textbf{repeat} (for each step of episode)\\
+\strut ~~~~✦
 \(a \leftarrow \arg\max_a \bigl[Q(s,a) + c\sqrt{\log t / N(s,a)}\bigr]\)
 \emph{(UCB action selection)} ✦ (\hyperref[trick-2-5-4]{Count-based /
 UCB-style exploration})\\
-  Take action \(a\); observe \(r,\; s'\)\\
-  ✦ \(N(s,a) \leftarrow N(s,a) + 1\) ✦
+\strut ~~~~Take action \(a\); observe \(r,\; s'\)\\
+\strut ~~~~✦ \(N(s,a) \leftarrow N(s,a) + 1\) ✦
 (\hyperref[trick-2-5-4]{Count-based / UCB-style exploration})\\
-  ✦ \(r' \leftarrow r + \gamma\,\Phi(s') - \Phi(s)\)
+\strut ~~~~✦ \(r' \leftarrow r + \gamma\,\Phi(s') - \Phi(s)\)
 \emph{(potential-based reward shaping)} ✦ (\hyperref[trick-2-5-5]{Reward
 shaping})\\
-  ✦ With prob. 0.5: \(a^*\!\leftarrow\!\arg\max_{a'} Q^A(s',a')\);
+\strut ~~~~✦ With prob. 0.5:
+\(a^*\!\leftarrow\!\arg\max_{a'} Q^A(s',a')\);
 \(Q^A(s,a)\!\leftarrow\! Q^A(s,a) + \alpha\bigl[r' + \gamma\, Q^B(s',a^*) - Q^A(s,a)\bigr]\);
 else swap A/B ✦ (\hyperref[trick-2-5-1]{Double Q-learning})\\
-  ✦ \(e(s,a) \leftarrow e(s,a)+1\); \textbf{if} \(a\) was greedy: decay
-\(e \leftarrow \gamma\lambda\,e\); \textbf{else} cut \(e \leftarrow 0\)
-\emph{(Watkins)} ✦ (\hyperref[trick-2-5-2]{Watkins's Q(\(\lambda\)) /
-Peng's Q(\(\lambda\))})\\
-  ✦ \textbf{for all} \((\bar s,\bar a)\) \textbf{do}
+\strut ~~~~✦ \(e(s,a) \leftarrow e(s,a)+1\); \textbf{if} \(a\) was
+greedy: decay \(e \leftarrow \gamma\lambda\,e\); \textbf{else} cut
+\(e \leftarrow 0\) \emph{(Watkins)} ✦ (\hyperref[trick-2-5-2]{Watkins's
+Q(\(\lambda\)) / Peng's Q(\(\lambda\))})\\
+\strut ~~~~✦ \textbf{for all} \((\bar s,\bar a)\) \textbf{do}
 \(Q(\bar s,\bar a)\mathrel{+}=\alpha\,\delta\,e(\bar s,\bar a)\)
 \textbf{end for} ✦ (\hyperref[trick-2-5-2]{Watkins's Q(\(\lambda\)) /
 Peng's Q(\(\lambda\))})\\
-  \(s \leftarrow s'\)\\
- \textbf{until} \(s\) is terminal\\
+\strut ~~~~\(s \leftarrow s'\)\\
+\strut ~~\textbf{until} \(s\) is terminal\\
 \textbf{end for}\\
 \textbf{Output:} \(Q \approx q_{*}\)
+
+\end{pseudobox}
 
     ✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦
 
@@ -3242,8 +3353,12 @@ Replay} (see below).
 
     \phantomsection\label{pseudo-3-1}
 
-    Algorithm 3.1 DQN (naive --- no target net, no replay) --- Raw
-Pseudocode (without additional tricks) {[}Mnih et al., 2013{]}
+    \begin{pseudobox}
+
+\textbf{Algorithm 3.1} DQN (naive --- no target net, no replay) --- Raw
+Pseudocode (without additional tricks) \emph{{[}Mnih et al., 2013{]}}
+
+\tcbline
 
 Here is the pseudocode for the DQN (naive) core (base) algorithm without
 any further additions and engineering tricks (also mentioned above)
@@ -3254,21 +3369,28 @@ rate \(\varepsilon\), episodes \(n\)\\
 Initialize \(Q\)-network \(Q(s, a;\, \theta)\) with random weights
 \(\theta\)\\
 \textbf{for} \(\text{episode} = 1, 2, \ldots, n\) \textbf{do}\\
- Initialize \(s\)\\
- \textbf{repeat} (for each step of episode)\\
-  Choose \(a\) from \(s\) using \(\varepsilon\)-greedy w.r.t.
+\strut ~~Initialize \(s\)\\
+\strut ~~\textbf{repeat} (for each step of episode)\\
+\strut ~~~~Choose \(a\) from \(s\) using \(\varepsilon\)-greedy w.r.t.
 \(Q(s, \cdot;\, \theta)\)\\
-  Take action \(a\); observe \(r,\; s'\)\\
-  \(y \leftarrow r + \gamma\, \max_{a'} Q(s', a';\, \theta)\)
+\strut ~~~~Take action \(a\); observe \(r,\; s'\)\\
+\strut ~~~~\(y \leftarrow r + \gamma\, \max_{a'} Q(s', a';\, \theta)\)
 \emph{(bootstrap from same network)}\\
-  \(\mathcal{L}(\theta) \leftarrow \bigl(\, y - Q(s, a;\, \theta) \,\bigr)^{2}\)\\
-  \(\theta \leftarrow \theta - \alpha\, \nabla_{\theta}\, \mathcal{L}(\theta)\)\\
-  \(s \leftarrow s'\)\\
- \textbf{until} \(s\) is terminal\\
+\strut ~~~~\(\mathcal{L}(\theta) \leftarrow \bigl(\, y - Q(s, a;\, \theta) \,\bigr)^{2}\)\\
+\strut ~~~~\(\theta \leftarrow \theta - \alpha\, \nabla_{\theta}\, \mathcal{L}(\theta)\)\\
+\strut ~~~~\(s \leftarrow s'\)\\
+\strut ~~\textbf{until} \(s\) is terminal\\
 \textbf{end for}
 
-    Algorithm 3.1 DQN (naive --- no target net, no replay) --- Pseudocode
-with Additions (Engineering Tricks) {[}Mnih et al., 2013{]}
+\end{pseudobox}
+
+    \begin{pseudobox}
+
+\textbf{Algorithm 3.1} DQN (naive --- no target net, no replay) ---
+Pseudocode with Additions (Engineering Tricks) \emph{{[}Mnih et al.,
+2013{]}}
+
+\tcbline
 
 Here is the pseudocode for the DQN (naive) algorithm with also employing
 all of the additions and engineering tricks mentioned above:
@@ -3281,33 +3403,37 @@ momentum \(0.95\), \(\epsilon_\text{opt}\!=\!10^{-2}\) ✦
 Initialise \(Q\)-network \(Q(s, a;\, \theta)\) with random weights
 \(\theta\)\\
 \textbf{for} \(\text{episode} = 1, 2, \ldots, n\) \textbf{do}\\
- Initialise \(s\)\\
- ✦ Pre-process \(s\): grayscale, resize to \(84\!\times\!84\), pixel-max
-over last 2 raw frames ✦ (\hyperref[trick-3-1-4]{Atari pre-processing
-pipeline})\\
- ✦ Stack last \(k\!=\!4\) pre-processed frames as channels ✦
+\strut ~~Initialise \(s\)\\
+\strut ~~✦ Pre-process \(s\): grayscale, resize to \(84\!\times\!84\),
+pixel-max over last 2 raw frames ✦ (\hyperref[trick-3-1-4]{Atari
+pre-processing pipeline})\\
+\strut ~~✦ Stack last \(k\!=\!4\) pre-processed frames as channels ✦
 (\hyperref[trick-3-1-3]{Frame stacking})\\
- \textbf{repeat} (for each step of episode)\\
-  Choose \(a\) from \(s\) using \(\varepsilon\)-greedy w.r.t.
+\strut ~~\textbf{repeat} (for each step of episode)\\
+\strut ~~~~Choose \(a\) from \(s\) using \(\varepsilon\)-greedy w.r.t.
 \(Q(s, \cdot;\, \theta)\)\\
-  ✦ Repeat action \(a\) for \(k\!=\!4\) environment steps; accumulate
-reward ✦ (\hyperref[trick-3-1-2]{Frame skipping / action repeat})\\
-  Take action \(a\); observe \(r,\; s'\)\\
-  ✦ \(r \leftarrow \mathrm{clip}(r,\, -1,\, +1)\) ✦
+\strut ~~~~✦ Repeat action \(a\) for \(k\!=\!4\) environment steps;
+accumulate reward ✦ (\hyperref[trick-3-1-2]{Frame skipping / action
+repeat})\\
+\strut ~~~~Take action \(a\); observe \(r,\; s'\)\\
+\strut ~~~~✦ \(r \leftarrow \mathrm{clip}(r,\, -1,\, +1)\) ✦
 (\hyperref[trick-3-1-1]{Reward clipping to \([-1,+1]\)})\\
-  ✦ Pre-process and frame-stack \(s'\) ✦ (\hyperref[trick-3-1-4]{Atari
-pre-processing pipeline} / \hyperref[trick-3-1-3]{Frame stacking})\\
-  \(y \leftarrow r + \gamma\, \max_{a'} Q(s', a';\, \theta)\)\\
-  ✦
+\strut ~~~~✦ Pre-process and frame-stack \(s'\) ✦
+(\hyperref[trick-3-1-4]{Atari pre-processing pipeline} /
+\hyperref[trick-3-1-3]{Frame stacking})\\
+\strut ~~~~\(y \leftarrow r + \gamma\, \max_{a'} Q(s', a';\, \theta)\)\\
+\strut ~~~~✦
 \(\mathcal{L}(\theta) \leftarrow \mathrm{Huber}\bigl(y - Q(s, a;\, \theta)\bigr)\)
 \emph{(smooth L1 --- linear for \(|e|>1\), quadratic otherwise)} ✦
 (\hyperref[trick-3-1-5]{Huber loss (smooth L1)})\\
-  ✦
+\strut ~~~~✦
 \(\theta \leftarrow \theta - \mathrm{RMSProp}(\nabla_\theta\, \mathcal{L})\)
 ✦ (\hyperref[trick-3-1-6]{RMSProp with low learning rate})\\
-  \(s \leftarrow s'\)\\
- \textbf{until} \(s\) is terminal\\
+\strut ~~~~\(s \leftarrow s'\)\\
+\strut ~~\textbf{until} \(s\) is terminal\\
 \textbf{end for}
+
+\end{pseudobox}
 
     ✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦
 
@@ -3463,8 +3589,12 @@ target update frequency \(C\)
 
     \phantomsection\label{pseudo-3-2}
 
-    Algorithm 3.2 DQN with target network --- Raw Pseudocode (without
-additional tricks) {[}Mnih et al., 2015{]}
+    \begin{pseudobox}
+
+\textbf{Algorithm 3.2} DQN with target network --- Raw Pseudocode
+(without additional tricks) \emph{{[}Mnih et al., 2015{]}}
+
+\tcbline
 
 Here is the pseudocode for the DQN with target network core (base)
 algorithm without any further additions and engineering tricks (also
@@ -3477,23 +3607,29 @@ Initialize target network \(\hat{Q}(s, a;\, \theta^{-})\) with
 \(\theta^{-} \leftarrow \theta\)\\
 Step counter \(t \leftarrow 0\)\\
 \textbf{for} \(\text{episode} = 1, 2, \ldots, n\) \textbf{do}\\
- Initialize \(s\)\\
- \textbf{repeat} (for each step of episode)\\
-  Choose \(a\) from \(s\) using \(\varepsilon\)-greedy w.r.t.
+\strut ~~Initialize \(s\)\\
+\strut ~~\textbf{repeat} (for each step of episode)\\
+\strut ~~~~Choose \(a\) from \(s\) using \(\varepsilon\)-greedy w.r.t.
 \(Q(s, \cdot;\, \theta)\)\\
-  Take action \(a\); observe \(r,\; s'\)\\
-  \(y \leftarrow r + \gamma\, \max_{a'} \hat{Q}(s', a';\, \theta^{-})\)
+\strut ~~~~Take action \(a\); observe \(r,\; s'\)\\
+\strut ~~~~\(y \leftarrow r + \gamma\, \max_{a'} \hat{Q}(s', a';\, \theta^{-})\)
 \emph{(target from frozen net)}\\
-  \(\mathcal{L}(\theta) \leftarrow \bigl(\, y - Q(s, a;\, \theta) \,\bigr)^{2}\)\\
-  \(\theta \leftarrow \theta - \alpha\, \nabla_{\theta}\, \mathcal{L}(\theta)\)\\
-  \(s \leftarrow s';\quad t \leftarrow t + 1\)\\
-  \textbf{if} \(t \bmod C = 0\) \textbf{then}
+\strut ~~~~\(\mathcal{L}(\theta) \leftarrow \bigl(\, y - Q(s, a;\, \theta) \,\bigr)^{2}\)\\
+\strut ~~~~\(\theta \leftarrow \theta - \alpha\, \nabla_{\theta}\, \mathcal{L}(\theta)\)\\
+\strut ~~~~\(s \leftarrow s';\quad t \leftarrow t + 1\)\\
+\strut ~~~~\textbf{if} \(t \bmod C = 0\) \textbf{then}
 \(\theta^{-} \leftarrow \theta\)\\
- \textbf{until} \(s\) is terminal\\
+\strut ~~\textbf{until} \(s\) is terminal\\
 \textbf{end for}
 
-    Algorithm 3.2 DQN with target network --- Pseudocode with Additions
-(Engineering Tricks) {[}Mnih et al., 2015{]}
+\end{pseudobox}
+
+    \begin{pseudobox}
+
+\textbf{Algorithm 3.2} DQN with target network --- Pseudocode with
+Additions (Engineering Tricks) \emph{{[}Mnih et al., 2015{]}}
+
+\tcbline
 
 Here is the pseudocode for the DQN with target network algorithm with
 also employing all of the additions and engineering tricks mentioned
@@ -3510,33 +3646,38 @@ Initialise target network \(\hat{Q}(s, a;\, \theta^{-})\) with
 \(\theta^{-} \leftarrow \theta\)\\
 Step counter \(t \leftarrow 0\)\\
 \textbf{for} \(\text{episode} = 1, 2, \ldots, n\) \textbf{do}\\
- Initialise \(s\)\\
- \textbf{repeat} (for each step of episode)\\
-  ✦ Choose \(a\) from \(s\) using \(\varepsilon\)-greedy w.r.t.
+\strut ~~Initialise \(s\)\\
+\strut ~~\textbf{repeat} (for each step of episode)\\
+\strut ~~~~✦ Choose \(a\) from \(s\) using \(\varepsilon\)-greedy w.r.t.
 \(Q(s, \cdot;\, \theta)\) \emph{(online net for behaviour, not target)}
 ✦ (\hyperref[trick-3-2-2]{Target network \emph{only} for
 \(\max_{a'} Q\), not for action selection at \(s\)})\\
-  Take action \(a\); observe \(r,\; s'\)\\
-  ✦ \(a^* \leftarrow \arg\max_{a'} Q(s', a';\, \theta)\) \emph{(online
-net selects)} ✦ (\hyperref[trick-3-2-4]{Decoupling the max})\\
-  ✦ \(y \leftarrow r + \gamma\, \hat{Q}(s', a^*;\, \theta^{-})\)
+\strut ~~~~Take action \(a\); observe \(r,\; s'\)\\
+\strut ~~~~✦ \(a^* \leftarrow \arg\max_{a'} Q(s', a';\, \theta)\)
+\emph{(online net selects)} ✦ (\hyperref[trick-3-2-4]{Decoupling the
+max})\\
+\strut ~~~~✦
+\(y \leftarrow r + \gamma\, \hat{Q}(s', a^*;\, \theta^{-})\)
 \emph{(target net evaluates --- Double DQN)} ✦
 (\hyperref[trick-3-2-4]{Decoupling the max})\\
-  ✦ \emph{(For \(m\)-step bootstrap:
+\strut ~~~~✦ \emph{(For \(m\)-step bootstrap:
 \(y \leftarrow \sum_{k=0}^{m-1}\gamma^k r_{t+k} + \gamma^m \hat{Q}(s_{t+m}, \cdot;\, \theta^{-})\))}
 ✦ (\hyperref[trick-3-2-5]{Target net for \(V(s')\) in \(n\)-step
 bootstraps})\\
-  \(\mathcal{L}(\theta) \leftarrow \bigl(\, y - Q(s, a;\, \theta) \,\bigr)^{2}\)\\
-  \(\theta \leftarrow \theta - \alpha\, \nabla_{\theta}\, \mathcal{L}(\theta)\)\\
-  \(s \leftarrow s';\quad t \leftarrow t + 1\)\\
-  ✦ \(\theta^{-} \leftarrow \tau\,\theta + (1 - \tau)\,\theta^{-}\)
+\strut ~~~~\(\mathcal{L}(\theta) \leftarrow \bigl(\, y - Q(s, a;\, \theta) \,\bigr)^{2}\)\\
+\strut ~~~~\(\theta \leftarrow \theta - \alpha\, \nabla_{\theta}\, \mathcal{L}(\theta)\)\\
+\strut ~~~~\(s \leftarrow s';\quad t \leftarrow t + 1\)\\
+\strut ~~~~✦
+\(\theta^{-} \leftarrow \tau\,\theta + (1 - \tau)\,\theta^{-}\)
 \emph{(Polyak soft update every step)} ✦ (\hyperref[trick-3-2-1]{Polyak
 (soft) target update})\\
-  ✦ \emph{(Alternative: hard sync every \(C\) steps, with \(C\)
+\strut ~~~~✦ \emph{(Alternative: hard sync every \(C\) steps, with \(C\)
 increasing over training)} ✦ (\hyperref[trick-3-2-3]{Asymmetric \(C\)
 scheduling})\\
- \textbf{until} \(s\) is terminal\\
+\strut ~~\textbf{until} \(s\) is terminal\\
 \textbf{end for}
+
+\end{pseudobox}
 
     ✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦
 
@@ -3732,8 +3873,13 @@ buffer capacity \(M\), minibatch size \(B\), target update freq \(C\)
 
     \phantomsection\label{pseudo-3-3}
 
-    Algorithm 3.3 Deep Q-learning with experience replay (full DQN) --- Raw
-Pseudocode (without additional tricks) {[}Mnih et al., 2015{]}
+    \begin{pseudobox}
+
+\textbf{Algorithm 3.3} Deep Q-learning with experience replay (full DQN)
+--- Raw Pseudocode (without additional tricks) \emph{{[}Mnih et al.,
+2015{]}}
+
+\tcbline
 
 Here is the pseudocode for the DQN with experience replay (full DQN)
 core (base) algorithm without any further additions and engineering
@@ -3746,27 +3892,35 @@ Initialize online network \(Q(s, a;\, \theta)\); target network
 Initialize replay buffer \(\mathcal{D}\) with capacity \(M\); step
 counter \(t \leftarrow 0\)\\
 \textbf{for} \(\text{episode} = 1, 2, \ldots, n\) \textbf{do}\\
- Initialize \(s\)\\
- \textbf{repeat} (for each step of episode)\\
-  Choose \(a\) from \(s\) using \(\varepsilon\)-greedy w.r.t.
+\strut ~~Initialize \(s\)\\
+\strut ~~\textbf{repeat} (for each step of episode)\\
+\strut ~~~~Choose \(a\) from \(s\) using \(\varepsilon\)-greedy w.r.t.
 \(Q(s, \cdot;\, \theta)\)\\
-  Take action \(a\); observe \(r,\; s',\; \text{done}\)\\
-  Store transition \((s, a, r, s', \text{done})\) in \(\mathcal{D}\)\\
-  Sample minibatch
+\strut ~~~~Take action \(a\); observe \(r,\; s',\; \text{done}\)\\
+\strut ~~~~Store transition \((s, a, r, s', \text{done})\) in
+\(\mathcal{D}\)\\
+\strut ~~~~Sample minibatch
 \(\{(s_j, a_j, r_j, s'_j, \text{done}_j)\}_{j=1}^{B} \sim \mathcal{D}\)\\
-  \textbf{for each} \(j\) \textbf{do}\\
-   \(y_j \leftarrow r_j + \gamma\,(1 - \text{done}_j)\, \max_{a'} \hat{Q}(s'_j, a';\, \theta^{-})\)\\
-  \textbf{end for}\\
-  \(\mathcal{L}(\theta) \leftarrow \dfrac{1}{B}\, \sum_{j=1}^{B} \bigl(\, y_j - Q(s_j, a_j;\, \theta) \,\bigr)^{2}\)\\
-  \(\theta \leftarrow \theta - \alpha\, \nabla_{\theta}\, \mathcal{L}(\theta)\)\\
-  \(s \leftarrow s';\quad t \leftarrow t + 1\)\\
-  \textbf{if} \(t \bmod C = 0\) \textbf{then}
+\strut ~~~~\textbf{for each} \(j\) \textbf{do}\\
+\strut ~~~~~~\(y_j \leftarrow r_j + \gamma\,(1 - \text{done}_j)\, \max_{a'} \hat{Q}(s'_j, a';\, \theta^{-})\)\\
+\strut ~~~~\textbf{end for}\\
+\strut ~~~~\(\mathcal{L}(\theta) \leftarrow \dfrac{1}{B}\, \sum_{j=1}^{B} \bigl(\, y_j - Q(s_j, a_j;\, \theta) \,\bigr)^{2}\)\\
+\strut ~~~~\(\theta \leftarrow \theta - \alpha\, \nabla_{\theta}\, \mathcal{L}(\theta)\)\\
+\strut ~~~~\(s \leftarrow s';\quad t \leftarrow t + 1\)\\
+\strut ~~~~\textbf{if} \(t \bmod C = 0\) \textbf{then}
 \(\theta^{-} \leftarrow \theta\)\\
- \textbf{until} \(\text{done} = \mathbf{true}\)\\
+\strut ~~\textbf{until} \(\text{done} = \mathbf{true}\)\\
 \textbf{end for}
 
-    Algorithm 3.3 Deep Q-learning with experience replay (full DQN) ---
-Pseudocode with Additions (Engineering Tricks) {[}Mnih et al., 2015{]}
+\end{pseudobox}
+
+    \begin{pseudobox}
+
+\textbf{Algorithm 3.3} Deep Q-learning with experience replay (full DQN)
+--- Pseudocode with Additions (Engineering Tricks) \emph{{[}Mnih et al.,
+2015{]}}
+
+\tcbline
 
 Here is the pseudocode for the DQN with experience replay (full DQN)
 algorithm with also employing all of the additions and engineering
@@ -3793,40 +3947,43 @@ Step counter \(t \leftarrow 0\)\\
 transitions into \(\mathcal{D}\) \textbf{end for} ✦
 (\hyperref[trick-3-3-8]{Replay warm-up / minimum buffer fill})\\
 \textbf{for} \(\text{episode} = 1, 2, \ldots, n\) \textbf{do}\\
- Initialise \(s\)\\
- \textbf{repeat} (for each step of episode)\\
-  ✦ \(a \leftarrow \arg\max_a Q(s, a;\, \theta)\)
+\strut ~~Initialise \(s\)\\
+\strut ~~\textbf{repeat} (for each step of episode)\\
+\strut ~~~~✦ \(a \leftarrow \arg\max_a Q(s, a;\, \theta)\)
 \emph{(\(\varepsilon\)-greedy unnecessary with noisy nets)} ✦
 (\hyperref[trick-3-3-4]{Noisy Networks for exploration})\\
-  Take action \(a\); observe \(r,\; s',\; \text{done}\)\\
-  ✦ Store \(m\)-step transition \((s_t, a_t, R^{(m)}_t, s_{t+m})\) with
+\strut ~~~~Take action \(a\); observe \(r,\; s',\; \text{done}\)\\
+\strut ~~~~✦ Store \(m\)-step transition
+\((s_t, a_t, R^{(m)}_t, s_{t+m})\) with
 \(R^{(m)}=\sum_{k=0}^{m-1}\gamma^k r_{t+k+1}\) ✦
 (\hyperref[trick-3-3-5]{n-step bootstrap returns in the buffer})\\
-  ✦ Sample minibatch
+\strut ~~~~✦ Sample minibatch
 \(j \sim P(j) \propto |\delta_j|^{\alpha_\text{per}}\) from
 \(\mathcal{D}\); compute IS weights
 \(w_j = (N\,P_j)^{-\beta_\text{per}}\) ✦
 (\hyperref[trick-3-3-1]{Prioritized Experience Replay (PER)})\\
-  \textbf{for each} \(j\) \textbf{do}\\
-   ✦ \(a^*_j \leftarrow \arg\max_{a'} Q(s'_j, a';\, \theta)\);
+\strut ~~~~\textbf{for each} \(j\) \textbf{do}\\
+\strut ~~~~~~✦ \(a^*_j \leftarrow \arg\max_{a'} Q(s'_j, a';\, \theta)\);
 \(\;y_j \leftarrow R^{(m)}_j + \gamma^m(1-\text{done}_j)\,\hat{Q}(s'_j, a^*_j;\, \theta^{-})\)
 \emph{(Double DQN + \(m\)-step)} ✦ (\hyperref[trick-3-3-2]{Double DQN} /
 \hyperref[trick-3-3-5]{n-step bootstrap returns in the buffer})\\
-  \textbf{end for}\\
-  ✦
+\strut ~~~~\textbf{end for}\\
+\strut ~~~~✦
 \(\mathcal{L}(\theta) \leftarrow \frac{1}{B}\sum_j w_j\bigl(\, y_j - Q(s_j, a_j;\, \theta) \,\bigr)^{2}\)
 \emph{(IS-weighted loss)} ✦ (\hyperref[trick-3-3-1]{Prioritized
 Experience Replay (PER)})\\
-  ✦ Update priorities \(|\delta_j|\) in \(\mathcal{D}\) ✦
+\strut ~~~~✦ Update priorities \(|\delta_j|\) in \(\mathcal{D}\) ✦
 (\hyperref[trick-3-3-1]{Prioritized Experience Replay (PER)})\\
-  ✦ \emph{(Full Rainbow: all above + distributional C51/QR-DQN head
-replacing scalar \(Q\))} ✦ (\hyperref[trick-3-3-6]{Distributional RL ---
-C51 / QR-DQN / IQN} / \hyperref[trick-3-3-7]{Rainbow})\\
-  \(\theta \leftarrow \theta - \alpha\, \nabla_{\theta}\, \mathcal{L}(\theta);\quad s \leftarrow s';\quad t \leftarrow t + 1\)\\
-  \textbf{if} \(t \bmod C = 0\) \textbf{then}
+\strut ~~~~✦ \emph{(Full Rainbow: all above + distributional C51/QR-DQN
+head replacing scalar \(Q\))} ✦ (\hyperref[trick-3-3-6]{Distributional
+RL --- C51 / QR-DQN / IQN} / \hyperref[trick-3-3-7]{Rainbow})\\
+\strut ~~~~\(\theta \leftarrow \theta - \alpha\, \nabla_{\theta}\, \mathcal{L}(\theta);\quad s \leftarrow s';\quad t \leftarrow t + 1\)\\
+\strut ~~~~\textbf{if} \(t \bmod C = 0\) \textbf{then}
 \(\theta^{-} \leftarrow \theta\)\\
- \textbf{until} \(\text{done} = \mathbf{true}\)\\
+\strut ~~\textbf{until} \(\text{done} = \mathbf{true}\)\\
 \textbf{end for}
+
+\end{pseudobox}
 
     ✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦
 
@@ -4049,8 +4206,13 @@ typically reduced with a learned baseline (see Actor--Critic).
 
     \phantomsection\label{pseudo-4-1}
 
-    Algorithm 4.1 REINFORCE (Monte Carlo policy gradient) --- Raw Pseudocode
-(without additional tricks) {[}Williams, 1992; Sutton \& Barto, §13.3{]}
+    \begin{pseudobox}
+
+\textbf{Algorithm 4.1} REINFORCE (Monte Carlo policy gradient) --- Raw
+Pseudocode (without additional tricks) \emph{{[}Williams, 1992; Sutton
+\& Barto, §13.3{]}}
+
+\tcbline
 
 Here is the pseudocode for the REINFORCE core (base) algorithm without
 any further additions and engineering tricks (also mentioned above)
@@ -4060,17 +4222,23 @@ added:
 rate \(\alpha\), discount \(\gamma\), episodes \(n\)\\
 Initialize \(\theta\) randomly\\
 \textbf{for} \(\text{episode} = 1, 2, \ldots, n\) \textbf{do}\\
- Generate an episode using \(\pi_\theta\):
+\strut ~~Generate an episode using \(\pi_\theta\):
 \(\;s_0, a_0, r_1,\, s_1, a_1, r_2,\, \ldots,\, s_{T-1}, a_{T-1}, r_T\)\\
- \textbf{for} \(t = 0, 1, \ldots, T - 1\) \textbf{do}\\
-  \(G_t \leftarrow \displaystyle\sum_{k = t + 1}^{T} \gamma^{\,k - t - 1}\, r_k\)\\
-  \(\theta \leftarrow \theta + \alpha\, \gamma^{\,t}\, G_t\, \nabla_{\theta} \log \pi(a_t \mid s_t;\, \theta)\)\\
- \textbf{end for}\\
+\strut ~~\textbf{for} \(t = 0, 1, \ldots, T - 1\) \textbf{do}\\
+\strut ~~~~\(G_t \leftarrow \displaystyle\sum_{k = t + 1}^{T} \gamma^{\,k - t - 1}\, r_k\)\\
+\strut ~~~~\(\theta \leftarrow \theta + \alpha\, \gamma^{\,t}\, G_t\, \nabla_{\theta} \log \pi(a_t \mid s_t;\, \theta)\)\\
+\strut ~~\textbf{end for}\\
 \textbf{end for}
 
-    Algorithm 4.1 REINFORCE (Monte Carlo policy gradient) --- Pseudocode
-with Additions (Engineering Tricks) {[}Williams, 1992; Sutton \& Barto,
-§13.3{]}
+\end{pseudobox}
+
+    \begin{pseudobox}
+
+\textbf{Algorithm 4.1} REINFORCE (Monte Carlo policy gradient) ---
+Pseudocode with Additions (Engineering Tricks) \emph{{[}Williams, 1992;
+Sutton \& Barto, §13.3{]}}
+
+\tcbline
 
 Here is the pseudocode for the REINFORCE algorithm with also employing
 all of the additions and engineering tricks mentioned above:
@@ -4085,27 +4253,29 @@ Initialise \(\theta\) randomly\\
 ✦ \emph{(Optionally initialise a baseline \(b(s)\) --- e.g., a learned
 \(V(s;w)\))} ✦ (\hyperref[trick-4-1-1]{Baseline subtraction})\\
 \textbf{for} \(\text{episode} = 1, 2, \ldots, n\) \textbf{do}\\
- Generate an episode using \(\pi_\theta\):
+\strut ~~Generate an episode using \(\pi_\theta\):
 \(\;s_0, a_0, r_1,\, s_1, a_1, r_2,\, \ldots,\, s_{T-1}, a_{T-1}, r_T\)\\
- \textbf{for} \(t = 0, 1, \ldots, T - 1\) \textbf{do}\\
-  \(G_t \leftarrow \displaystyle\sum_{k = t + 1}^{T} \gamma^{\,k - t - 1}\, r_k\)\\
- \textbf{end for}\\
- ✦ Standardise returns:
+\strut ~~\textbf{for} \(t = 0, 1, \ldots, T - 1\) \textbf{do}\\
+\strut ~~~~\(G_t \leftarrow \displaystyle\sum_{k = t + 1}^{T} \gamma^{\,k - t - 1}\, r_k\)\\
+\strut ~~\textbf{end for}\\
+\strut ~~✦ Standardise returns:
 \(G_t \leftarrow (G_t - \mu_G)/(\sigma_G + 10^{-8})\) over
 \(\{G_0, \ldots, G_{T-1}\}\) ✦ (\hyperref[trick-4-1-2]{Return
 standardisation (whitening)})\\
- \textbf{for} \(t = 0, 1, \ldots, T - 1\) \textbf{do}\\
-  ✦
+\strut ~~\textbf{for} \(t = 0, 1, \ldots, T - 1\) \textbf{do}\\
+\strut ~~~~✦
 \(\theta \leftarrow \theta + \alpha\, \gamma^{\,t}\,(G_t - b(s_t))\, \nabla_{\theta} \log \pi(a_t \mid s_t;\, \theta)\)
 \emph{(baseline-subtracted gradient)} ✦ (\hyperref[trick-4-1-1]{Baseline
 subtraction})\\
- \textbf{end for}\\
- ✦ \textbf{if} \(\lVert\nabla\theta\rVert > c\) \textbf{then}
+\strut ~~\textbf{end for}\\
+\strut ~~✦ \textbf{if} \(\lVert\nabla\theta\rVert > c\) \textbf{then}
 \(\nabla\theta \leftarrow c \cdot \nabla\theta / \lVert\nabla\theta\rVert\)
 ✦ (\hyperref[trick-4-1-4]{Global-norm gradient clipping})\\
- ✦ Apply Adam step ✦ (\hyperref[trick-4-1-3]{Adam with low learning rate
-(\(10^{-4}\,\text{–}\,10^{-3}\))})\\
+\strut ~~✦ Apply Adam step ✦ (\hyperref[trick-4-1-3]{Adam with low
+learning rate (\(10^{-4}\,\text{–}\,10^{-3}\))})\\
 \textbf{end for}
+
+\end{pseudobox}
 
     ✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦
 
@@ -4275,8 +4445,12 @@ discount \(\gamma\), episodes \(n\)
 
     \phantomsection\label{pseudo-4-2}
 
-    Algorithm 4.2 One-step Actor--Critic --- Raw Pseudocode (without
-additional tricks) {[}Sutton \& Barto, §13.5{]}
+    \begin{pseudobox}
+
+\textbf{Algorithm 4.2} One-step Actor--Critic --- Raw Pseudocode
+(without additional tricks) \emph{{[}Sutton \& Barto, §13.5{]}}
+
+\tcbline
 
 Here is the pseudocode for the Actor--Critic core (base) algorithm
 without any further additions and engineering tricks (also mentioned
@@ -4287,22 +4461,28 @@ discount \(\gamma\), episodes \(n\)\\
 Initialize policy parameters \(\theta\) and value parameters \(w\)
 randomly\\
 \textbf{for} \(\text{episode} = 1, 2, \ldots, n\) \textbf{do}\\
- Initialize \(s\)\\
- \(I \leftarrow 1\)\\
- \textbf{repeat} (for each step of episode)\\
-  Sample \(a \sim \pi(\cdot \mid s;\, \theta)\)\\
-  Take action \(a\); observe \(r,\; s'\)\\
-  \(\delta \leftarrow r + \gamma\, V(s';\, w) - V(s;\, w)\) \emph{(TD
-error / advantage)}\\
-  \(w \leftarrow w + \alpha_w\, \delta\, \nabla_{w}\, V(s;\, w)\)\\
-  \(\theta \leftarrow \theta + \alpha_\theta\, I\, \delta\, \nabla_{\theta} \log \pi(a \mid s;\, \theta)\)\\
-  \(I \leftarrow \gamma\, I\)\\
-  \(s \leftarrow s'\)\\
- \textbf{until} \(s\) is terminal\\
+\strut ~~Initialize \(s\)\\
+\strut ~~\(I \leftarrow 1\)\\
+\strut ~~\textbf{repeat} (for each step of episode)\\
+\strut ~~~~Sample \(a \sim \pi(\cdot \mid s;\, \theta)\)\\
+\strut ~~~~Take action \(a\); observe \(r,\; s'\)\\
+\strut ~~~~\(\delta \leftarrow r + \gamma\, V(s';\, w) - V(s;\, w)\)
+\emph{(TD error / advantage)}\\
+\strut ~~~~\(w \leftarrow w + \alpha_w\, \delta\, \nabla_{w}\, V(s;\, w)\)\\
+\strut ~~~~\(\theta \leftarrow \theta + \alpha_\theta\, I\, \delta\, \nabla_{\theta} \log \pi(a \mid s;\, \theta)\)\\
+\strut ~~~~\(I \leftarrow \gamma\, I\)\\
+\strut ~~~~\(s \leftarrow s'\)\\
+\strut ~~\textbf{until} \(s\) is terminal\\
 \textbf{end for}
 
-    Algorithm 4.2 One-step Actor--Critic --- Pseudocode with Additions
-(Engineering Tricks) {[}Sutton \& Barto, §13.5{]}
+\end{pseudobox}
+
+    \begin{pseudobox}
+
+\textbf{Algorithm 4.2} One-step Actor--Critic --- Pseudocode with
+Additions (Engineering Tricks) \emph{{[}Sutton \& Barto, §13.5{]}}
+
+\tcbline
 
 Here is the pseudocode for the Actor--Critic algorithm with also
 employing all of the additions and engineering tricks mentioned above:
@@ -4322,34 +4502,36 @@ episodes \(n\)\\
 ✦ Initialise Pop-Art running stats \((\mu_r,\sigma_r)\) ✦
 (\hyperref[trick-4-2-6]{Pop-Art / adaptive reward normalisation})\\
 \textbf{for} \(\text{episode} = 1, 2, \ldots, n\) \textbf{do}\\
- Initialise \(s\); \(\;I \leftarrow 1\)\\
- ✦ \(e_\theta \leftarrow 0,\;e_w \leftarrow 0\) \emph{(eligibility
-traces)} ✦ (\hyperref[trick-4-2-5]{Eligibility traces ---
-AC(\(\lambda\))})\\
- \textbf{repeat} (for each step of episode)\\
-  Sample \(a \sim \pi(\cdot \mid s;\, \theta)\)\\
-  Take action \(a\); observe \(r,\; s'\)\\
-  ✦ \(r \leftarrow (r - \mu_r)/\sigma_r\); update running stats
+\strut ~~Initialise \(s\); \(\;I \leftarrow 1\)\\
+\strut ~~✦ \(e_\theta \leftarrow 0,\;e_w \leftarrow 0\)
+\emph{(eligibility traces)} ✦ (\hyperref[trick-4-2-5]{Eligibility traces
+--- AC(\(\lambda\))})\\
+\strut ~~\textbf{repeat} (for each step of episode)\\
+\strut ~~~~Sample \(a \sim \pi(\cdot \mid s;\, \theta)\)\\
+\strut ~~~~Take action \(a\); observe \(r,\; s'\)\\
+\strut ~~~~✦ \(r \leftarrow (r - \mu_r)/\sigma_r\); update running stats
 \emph{(Pop-Art)} ✦ (\hyperref[trick-4-2-6]{Pop-Art / adaptive reward
 normalisation})\\
-  ✦
+\strut ~~~~✦
 \(\delta^{(m)} \leftarrow \sum_{k=0}^{m-1}\gamma^k r_{t+k+1} + \gamma^m V(s_{t+m};\, w^-) - V(s_t;\, w)\)
 \emph{(\(m\)-step TD error via target critic)} ✦
 (\hyperref[trick-4-2-3]{n-step / multi-step bootstrapped returns} /
 \hyperref[trick-4-2-2]{Target value network for the critic})\\
-  ✦ \(e_w \leftarrow \gamma\lambda\,e_w + \nabla_w V(s;w)\);
+\strut ~~~~✦ \(e_w \leftarrow \gamma\lambda\,e_w + \nabla_w V(s;w)\);
 \(\;w \leftarrow w + \alpha_w\,\delta^{(m)}\,e_w\) ✦
 (\hyperref[trick-4-2-5]{Eligibility traces --- AC(\(\lambda\))})\\
-  ✦
+\strut ~~~~✦
 \(e_\theta \leftarrow \gamma\lambda\,e_\theta + I\,\nabla_\theta\log\pi(a\mid s;\theta)\)
 ✦ (\hyperref[trick-4-2-5]{Eligibility traces --- AC(\(\lambda\))})\\
-  ✦
+\strut ~~~~✦
 \(\theta \leftarrow \theta + \alpha_\theta\,\delta^{(m)}\,e_\theta + \beta\,\nabla_\theta H\bigl(\pi(\cdot\mid s)\bigr)\)
 \emph{(+ entropy bonus)} ✦ (\hyperref[trick-4-2-5]{Eligibility traces
 --- AC(\(\lambda\))} / \hyperref[trick-4-2-4]{Entropy regularisation})\\
-  \(I \leftarrow \gamma\, I\); \(\;s \leftarrow s'\)\\
- \textbf{until} \(s\) is terminal\\
+\strut ~~~~\(I \leftarrow \gamma\, I\); \(\;s \leftarrow s'\)\\
+\strut ~~\textbf{until} \(s\) is terminal\\
 \textbf{end for}
+
+\end{pseudobox}
 
     ✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦
 
@@ -4526,9 +4708,13 @@ length \(n\), parallel workers \(K\), entropy coefficient \(\beta\)
 
     \phantomsection\label{pseudo-4-3}
 
-    Algorithm 4.3 A2C (synchronous advantage actor--critic) --- Raw
-Pseudocode (without additional tricks) {[}Mnih et al., 2016 (synchronous
-variant){]}
+    \begin{pseudobox}
+
+\textbf{Algorithm 4.3} A2C (synchronous advantage actor--critic) --- Raw
+Pseudocode (without additional tricks) \emph{{[}Mnih et al., 2016
+(synchronous variant){]}}
+
+\tcbline
 
 Here is the pseudocode for the A2C core (base) algorithm without any
 further additions and engineering tricks (also mentioned above) added:
@@ -4537,31 +4723,39 @@ further additions and engineering tricks (also mentioned above) added:
 length \(n\), parallel workers \(K\), entropy coefficient \(\beta\)\\
 Initialize global parameters \(\theta\) and \(w\)\\
 \textbf{repeat} until convergence\\
- \emph{// Each worker collects \(n\) steps with current
+\strut ~~\emph{// Each worker collects \(n\) steps with current
 \(\pi_\theta\)}\\
- \textbf{for} \(k = 1, 2, \ldots, K\) in parallel \textbf{do}\\
-  \textbf{for} \(i = 0, 1, \ldots, n - 1\) \textbf{do}\\
-   Sample \(a_i^{k} \sim \pi(\cdot \mid s_i^{k};\, \theta)\); observe
-\(r_{i+1}^{k},\, s_{i+1}^{k}\)\\
-  \textbf{end for}\\
- \textbf{end for}\\
- \emph{// Compute \(n\)-step returns and advantages}\\
- \textbf{for} \(k = 1, 2, \ldots, K\) \textbf{do}\\
-  \(R \leftarrow 0\) if \(s_n^{k}\) terminal else \(V(s_n^{k};\, w)\)\\
-  \textbf{for} \(i = n - 1\) \textbf{down to} \(0\) \textbf{do}\\
-   \(R \leftarrow r_{i+1}^{k} + \gamma\, R\)\\
-   \(\hat{A}_i^{k} \leftarrow R - V(s_i^{k};\, w)\);\(\quad R_i^{k} \leftarrow R\)\\
-  \textbf{end for}\\
- \textbf{end for}\\
- \emph{// Joint update over all \(K n\) samples}\\
- \(\mathcal{L}_\theta \leftarrow -\dfrac{1}{K n} \sum_{k, i} \bigl[\, \log \pi(a_i^{k} \mid s_i^{k};\, \theta)\, \hat{A}_i^{k} + \beta\, \mathcal{H}\bigl(\pi(\cdot \mid s_i^{k};\, \theta)\bigr) \,\bigr]\)\\
- \(\mathcal{L}_w \leftarrow \dfrac{1}{K n} \sum_{k, i} \bigl(\, R_i^{k} - V(s_i^{k};\, w) \,\bigr)^{2}\)\\
- \(\theta \leftarrow \theta - \alpha_\theta\, \nabla_{\theta}\, \mathcal{L}_\theta;\quad w \leftarrow w - \alpha_w\, \nabla_{w}\, \mathcal{L}_w\)\\
+\strut ~~\textbf{for} \(k = 1, 2, \ldots, K\) in parallel \textbf{do}\\
+\strut ~~~~\textbf{for} \(i = 0, 1, \ldots, n - 1\) \textbf{do}\\
+\strut ~~~~~~Sample \(a_i^{k} \sim \pi(\cdot \mid s_i^{k};\, \theta)\);
+observe \(r_{i+1}^{k},\, s_{i+1}^{k}\)\\
+\strut ~~~~\textbf{end for}\\
+\strut ~~\textbf{end for}\\
+\strut ~~\emph{// Compute \(n\)-step returns and advantages}\\
+\strut ~~\textbf{for} \(k = 1, 2, \ldots, K\) \textbf{do}\\
+\strut ~~~~\(R \leftarrow 0\) if \(s_n^{k}\) terminal else
+\(V(s_n^{k};\, w)\)\\
+\strut ~~~~\textbf{for} \(i = n - 1\) \textbf{down to} \(0\)
+\textbf{do}\\
+\strut ~~~~~~\(R \leftarrow r_{i+1}^{k} + \gamma\, R\)\\
+\strut ~~~~~~\(\hat{A}_i^{k} \leftarrow R - V(s_i^{k};\, w)\);\(\quad R_i^{k} \leftarrow R\)\\
+\strut ~~~~\textbf{end for}\\
+\strut ~~\textbf{end for}\\
+\strut ~~\emph{// Joint update over all \(K n\) samples}\\
+\strut ~~\(\mathcal{L}_\theta \leftarrow -\dfrac{1}{K n} \sum_{k, i} \bigl[\, \log \pi(a_i^{k} \mid s_i^{k};\, \theta)\, \hat{A}_i^{k} + \beta\, \mathcal{H}\bigl(\pi(\cdot \mid s_i^{k};\, \theta)\bigr) \,\bigr]\)\\
+\strut ~~\(\mathcal{L}_w \leftarrow \dfrac{1}{K n} \sum_{k, i} \bigl(\, R_i^{k} - V(s_i^{k};\, w) \,\bigr)^{2}\)\\
+\strut ~~\(\theta \leftarrow \theta - \alpha_\theta\, \nabla_{\theta}\, \mathcal{L}_\theta;\quad w \leftarrow w - \alpha_w\, \nabla_{w}\, \mathcal{L}_w\)\\
 \textbf{end repeat}
 
-    Algorithm 4.3 A2C (synchronous advantage actor--critic) --- Pseudocode
-with Additions (Engineering Tricks) {[}Mnih et al., 2016 (synchronous
-variant){]}
+\end{pseudobox}
+
+    \begin{pseudobox}
+
+\textbf{Algorithm 4.3} A2C (synchronous advantage actor--critic) ---
+Pseudocode with Additions (Engineering Tricks) \emph{{[}Mnih et al.,
+2016 (synchronous variant){]}}
+
+\tcbline
 
 Here is the pseudocode for the A2C algorithm with also employing all of
 the additions and engineering tricks mentioned above:
@@ -4580,37 +4774,41 @@ Estimation --- GAE(\(\lambda\))}), ✦ gradient clip norm \(c = 0.5\) ✦
 all workers ✦ (\hyperref[trick-4-3-3]{Observation normalisation with
 running mean/std})\\
 \textbf{repeat} until convergence\\
- \textbf{for} \(k = 1, 2, \ldots, K\) in parallel \textbf{do}\\
-  \textbf{for} \(i = 0, 1, \ldots, n - 1\) \textbf{do}\\
-   ✦ Pre-process: frame-stack + frame-skip (Atari) or normalise
-\(s \leftarrow (s - \mu_s)/\sigma_s\) ✦ (\hyperref[trick-4-3-6]{Frame
-stacking + frame skipping (Atari)} / \hyperref[trick-4-3-3]{Observation
-normalisation with running mean/std})\\
-   Sample \(a_i^{k} \sim \pi(\cdot \mid s_i^{k};\, \theta)\); observe
-\(r_{i+1}^{k},\, s_{i+1}^{k}\)\\
-  \textbf{end for}\\
- \textbf{end for}\\
- ✦ \emph{// Compute GAE advantages} ✦
+\strut ~~\textbf{for} \(k = 1, 2, \ldots, K\) in parallel \textbf{do}\\
+\strut ~~~~\textbf{for} \(i = 0, 1, \ldots, n - 1\) \textbf{do}\\
+\strut ~~~~~~✦ Pre-process: frame-stack + frame-skip (Atari) or
+normalise \(s \leftarrow (s - \mu_s)/\sigma_s\) ✦
+(\hyperref[trick-4-3-6]{Frame stacking + frame skipping (Atari)} /
+\hyperref[trick-4-3-3]{Observation normalisation with running
+mean/std})\\
+\strut ~~~~~~Sample \(a_i^{k} \sim \pi(\cdot \mid s_i^{k};\, \theta)\);
+observe \(r_{i+1}^{k},\, s_{i+1}^{k}\)\\
+\strut ~~~~\textbf{end for}\\
+\strut ~~\textbf{end for}\\
+\strut ~~✦ \emph{// Compute GAE advantages} ✦
 (\hyperref[trick-4-3-1]{Generalised Advantage Estimation ---
 GAE(\(\lambda\))})\\
- \textbf{for} \(k = 1, 2, \ldots, K\) \textbf{do}\\
-  \(\delta_i^k \leftarrow r_{i+1}^k + \gamma\, V(s_{i+1}^k;\, w) - V(s_i^k;\, w)\)\\
-  ✦
+\strut ~~\textbf{for} \(k = 1, 2, \ldots, K\) \textbf{do}\\
+\strut ~~~~\(\delta_i^k \leftarrow r_{i+1}^k + \gamma\, V(s_{i+1}^k;\, w) - V(s_i^k;\, w)\)\\
+\strut ~~~~✦
 \(\hat{A}_i^{k} \leftarrow \sum_{l \geq 0}(\gamma\lambda)^l\, \delta_{i+l}^k\)
 ✦ (\hyperref[trick-4-3-1]{Generalised Advantage Estimation ---
 GAE(\(\lambda\))})\\
-  \(R_i^{k} \leftarrow \hat{A}_i^{k} + V(s_i^{k};\, w)\)\\
- \textbf{end for}\\
- ✦
+\strut ~~~~\(R_i^{k} \leftarrow \hat{A}_i^{k} + V(s_i^{k};\, w)\)\\
+\strut ~~\textbf{end for}\\
+\strut ~~✦
 \(\hat{A} \leftarrow (\hat{A} - \mu_{\hat{A}})/(\sigma_{\hat{A}} + 10^{-8})\)
 ✦ (\hyperref[trick-4-3-4]{Advantage normalisation per batch})\\
- \(\mathcal{L}_\theta \leftarrow -\dfrac{1}{K n} \sum_{k, i} \bigl[\, \log \pi(a_i^{k} \mid s_i^{k};\, \theta)\, \hat{A}_i^{k} + \beta\, \mathcal{H}\bigl(\pi(\cdot \mid s_i^{k};\, \theta)\bigr) \,\bigr]\)\\
- \(\mathcal{L}_w \leftarrow \dfrac{1}{K n} \sum_{k, i} \bigl(\, R_i^{k} - V(s_i^{k};\, w) \,\bigr)^{2}\)\\
- ✦ \textbf{if} \(\lVert\nabla(\theta,w)\rVert_2 > c\) \textbf{then}
-rescale to norm \(c\) ✦ (\hyperref[trick-4-3-5]{Global-norm gradient
-clipping (typically \(0.5\))})\\
- \(\theta \leftarrow \theta - \alpha_\theta\, \nabla_{\theta}\, \mathcal{L}_\theta;\quad w \leftarrow w - \alpha_w\, \nabla_{w}\, \mathcal{L}_w\)\\
+\strut ~~\(\mathcal{L}_\theta \leftarrow -\dfrac{1}{K n} \sum_{k, i} \bigl[\, \log \pi(a_i^{k} \mid s_i^{k};\, \theta)\, \hat{A}_i^{k} + \beta\, \mathcal{H}\bigl(\pi(\cdot \mid s_i^{k};\, \theta)\bigr) \,\bigr]\)\\
+\strut ~~\(\mathcal{L}_w \leftarrow \dfrac{1}{K n} \sum_{k, i} \bigl(\, R_i^{k} - V(s_i^{k};\, w) \,\bigr)^{2}\)\\
+\strut ~~✦ \textbf{if} \(\lVert\nabla(\theta,w)\rVert_2 > c\)
+\textbf{then} rescale to norm \(c\) ✦
+(\hyperref[trick-4-3-5]{Global-norm gradient clipping (typically
+\(0.5\))})\\
+\strut ~~\(\theta \leftarrow \theta - \alpha_\theta\, \nabla_{\theta}\, \mathcal{L}_\theta;\quad w \leftarrow w - \alpha_w\, \nabla_{w}\, \mathcal{L}_w\)\\
 \textbf{end repeat}
+
+\end{pseudobox}
 
     ✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦
 
@@ -4787,9 +4985,13 @@ length \(n\), parallel workers \(K\), entropy coefficient \(\beta\)
 
     \phantomsection\label{pseudo-4-4}
 
-    Algorithm 4.4 A3C --- asynchronous advantage actor--critic (per
+    \begin{pseudobox}
+
+\textbf{Algorithm 4.4} A3C --- asynchronous advantage actor--critic (per
 actor-learner thread) --- Raw Pseudocode (without additional tricks)
-{[}Mnih et al., 2016{]}
+\emph{{[}Mnih et al., 2016{]}}
+
+\tcbline
 
 Here is the pseudocode for the A3C core (base) algorithm without any
 further additions and engineering tricks (also mentioned above) added:
@@ -4799,35 +5001,43 @@ global shared counter \(T = 0\)\\
 Assume thread-specific parameter vectors \(\theta'\) and \(\phi'\)\\
 Initialize thread step counter \(t \leftarrow 1\)\\
 \textbf{repeat}\\
- Reset gradients: \(d\theta \leftarrow 0\) and \(d\phi \leftarrow 0\)\\
- Synchronize thread-specific parameters \(\theta' = \theta\) and
+\strut ~~Reset gradients: \(d\theta \leftarrow 0\) and
+\(d\phi \leftarrow 0\)\\
+\strut ~~Synchronize thread-specific parameters \(\theta' = \theta\) and
 \(\phi' = \phi\)\\
- \(t_{\text{start}} \leftarrow t\)\\
- Get state \(s_t\)\\
- \textbf{repeat}\\
-  Perform \(a_t\) according to policy \(\pi(a_t \mid s_t;\, \theta')\)\\
-  Receive reward \(r_t\) and new state \(s_{t+1}\)\\
-  \(t \leftarrow t + 1\)\\
-  \(T \leftarrow T + 1\)\\
- \textbf{until} terminal \(s_t\) \textbf{or}
+\strut ~~\(t_{\text{start}} \leftarrow t\)\\
+\strut ~~Get state \(s_t\)\\
+\strut ~~\textbf{repeat}\\
+\strut ~~~~Perform \(a_t\) according to policy
+\(\pi(a_t \mid s_t;\, \theta')\)\\
+\strut ~~~~Receive reward \(r_t\) and new state \(s_{t+1}\)\\
+\strut ~~~~\(t \leftarrow t + 1\)\\
+\strut ~~~~\(T \leftarrow T + 1\)\\
+\strut ~~\textbf{until} terminal \(s_t\) \textbf{or}
 \(t - t_{\text{start}} = t_{\max}\)\\
- \(R \leftarrow \begin{cases} 0 & \text{for terminal } s_t \\ V(s_t,\, \phi') & \text{for non-terminal } s_t \end{cases}\)
+\strut ~~\(R \leftarrow \begin{cases} 0 & \text{for terminal } s_t \\ V(s_t,\, \phi') & \text{for non-terminal } s_t \end{cases}\)
 \emph{(bootstrap from last state)}\\
- \textbf{for} \(i \in \{t - 1, \ldots, t_{\text{start}}\}\)
+\strut ~~\textbf{for} \(i \in \{t - 1, \ldots, t_{\text{start}}\}\)
 \textbf{do}\\
-  \(R \leftarrow r_i + \gamma\, R\)\\
-  Accumulate gradients wrt \(\theta'\):
+\strut ~~~~\(R \leftarrow r_i + \gamma\, R\)\\
+\strut ~~~~Accumulate gradients wrt \(\theta'\):
 \(\;d\theta \leftarrow d\theta + \nabla_{\theta'} \log \pi(a_i \mid s_i;\, \theta')\,\bigl(R - V(s_i;\, \phi')\bigr)\)\\
-  Accumulate gradients wrt \(\phi'\):
+\strut ~~~~Accumulate gradients wrt \(\phi'\):
 \(\;d\phi \leftarrow d\phi + \partial\bigl(R - V(s_i;\, \phi')\bigr)^{2} / \partial \phi'\)\\
- \textbf{end for}\\
- Perform asynchronous update of \(\theta\) using \(d\theta\) and of
-\(\phi\) using \(d\phi\) ~HOGWILD!-style lock-free async update\\
+\strut ~~\textbf{end for}\\
+\strut ~~Perform asynchronous update of \(\theta\) using \(d\theta\) and
+of \(\phi\) using \(d\phi\) ~HOGWILD!-style lock-free async update\\
 \textbf{until} \(T > T_{\max}\)
 
-    Algorithm 4.4 A3C --- asynchronous advantage actor--critic (per
+\end{pseudobox}
+
+    \begin{pseudobox}
+
+\textbf{Algorithm 4.4} A3C --- asynchronous advantage actor--critic (per
 actor-learner thread) --- Pseudocode with Additions (Engineering Tricks)
-{[}Mnih et al., 2016{]}
+\emph{{[}Mnih et al., 2016{]}}
+
+\tcbline
 
 Here is the pseudocode for the A3C algorithm with also employing all of
 the additions and engineering tricks mentioned above:
@@ -4843,40 +5053,43 @@ optimizer state (RMSProp accumulators)})\\
 Assume thread-specific parameter vectors \(\theta'\) and \(\phi'\)\\
 Initialise thread step counter \(t \leftarrow 1\)\\
 \textbf{repeat}\\
- Reset gradients: \(d\theta \leftarrow 0\) and \(d\phi \leftarrow 0\)\\
- Synchronise thread-specific parameters \(\theta' = \theta\) and
+\strut ~~Reset gradients: \(d\theta \leftarrow 0\) and
+\(d\phi \leftarrow 0\)\\
+\strut ~~Synchronise thread-specific parameters \(\theta' = \theta\) and
 \(\phi' = \phi\)\\
- \(t_{\text{start}} \leftarrow t\)\\
- Get state \(s_t\)\\
- ✦ Reset LSTM hidden state \(h\) at episode boundaries; carry within
-rollout ✦ (\hyperref[trick-4-4-4]{LSTM policy for partial
+\strut ~~\(t_{\text{start}} \leftarrow t\)\\
+\strut ~~Get state \(s_t\)\\
+\strut ~~✦ Reset LSTM hidden state \(h\) at episode boundaries; carry
+within rollout ✦ (\hyperref[trick-4-4-4]{LSTM policy for partial
 observability})\\
- \textbf{repeat}\\
-  ✦ Perform \(a_t\) according to policy
+\strut ~~\textbf{repeat}\\
+\strut ~~~~✦ Perform \(a_t\) according to policy
 \(\pi(a_t \mid s_t, h;\, \theta')\) \emph{(LSTM policy)} ✦
 (\hyperref[trick-4-4-4]{LSTM policy for partial observability})\\
-  Receive reward \(r_t\) and new state \(s_{t+1}\)\\
-  \(t \leftarrow t + 1\)\\
-  \(T \leftarrow T + 1\)\\
- \textbf{until} terminal \(s_t\) \textbf{or}
+\strut ~~~~Receive reward \(r_t\) and new state \(s_{t+1}\)\\
+\strut ~~~~\(t \leftarrow t + 1\)\\
+\strut ~~~~\(T \leftarrow T + 1\)\\
+\strut ~~\textbf{until} terminal \(s_t\) \textbf{or}
 \(t - t_{\text{start}} = t_{\max}\)\\
- \(R \leftarrow \begin{cases} 0 & \text{for terminal } s_t \\ V(s_t,\, \phi') & \text{for non-terminal } s_t \end{cases}\)\\
- \textbf{for} \(i \in \{t - 1, \ldots, t_{\text{start}}\}\)
+\strut ~~\(R \leftarrow \begin{cases} 0 & \text{for terminal } s_t \\ V(s_t,\, \phi') & \text{for non-terminal } s_t \end{cases}\)\\
+\strut ~~\textbf{for} \(i \in \{t - 1, \ldots, t_{\text{start}}\}\)
 \textbf{do}\\
-  \(R \leftarrow r_i + \gamma\, R\)\\
-  Accumulate gradients wrt \(\theta'\):
+\strut ~~~~\(R \leftarrow r_i + \gamma\, R\)\\
+\strut ~~~~Accumulate gradients wrt \(\theta'\):
 \(\;d\theta \leftarrow d\theta + \nabla_{\theta'} \log \pi(a_i \mid s_i;\, \theta')\,\bigl(R - V(s_i;\, \phi')\bigr)\)\\
-  Accumulate gradients wrt \(\phi'\):
+\strut ~~~~Accumulate gradients wrt \(\phi'\):
 \(\;d\phi \leftarrow d\phi + \partial\bigl(R - V(s_i;\, \phi')\bigr)^{2} / \partial \phi'\)\\
- \textbf{end for}\\
- ✦ Atomically add \(d\theta\) to global \(\theta\) and \(d\phi\) to
-global \(\phi\) \emph{(lock-free HOGWILD! update via atomic CPU
+\strut ~~\textbf{end for}\\
+\strut ~~✦ Atomically add \(d\theta\) to global \(\theta\) and \(d\phi\)
+to global \(\phi\) \emph{(lock-free HOGWILD! update via atomic CPU
 instructions)} ✦ (\hyperref[trick-4-4-1]{HOGWILD!-style lock-free async
 updates} / \hyperref[trick-4-4-5]{Atomic gradient accumulation})\\
- ✦ Update worker-local RMSProp accumulators ✦
+\strut ~~✦ Update worker-local RMSProp accumulators ✦
 (\hyperref[trick-4-4-2]{Worker-local optimizer state (RMSProp
 accumulators)})\\
 \textbf{until} \(T > T_{\max}\)
+
+\end{pseudobox}
 
     ✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦
 
@@ -5071,8 +5284,13 @@ minibatch size \(B\), episodes \(n\)
 
     \phantomsection\label{pseudo-4-5}
 
-    Algorithm 4.5 DDPG (deep deterministic policy gradient) --- Raw
-Pseudocode (without additional tricks) {[}Lillicrap et al., 2016{]}
+    \begin{pseudobox}
+
+\textbf{Algorithm 4.5} DDPG (deep deterministic policy gradient) --- Raw
+Pseudocode (without additional tricks) \emph{{[}Lillicrap et al.,
+2016{]}}
+
+\tcbline
 
 Here is the pseudocode for the DDPG core (base) algorithm without any
 further additions and engineering tricks (also mentioned above) added:
@@ -5086,28 +5304,35 @@ Initialize target networks:
 \(\theta^{Q'} \leftarrow \theta^{Q},\;\theta^{\mu'} \leftarrow \theta^{\mu}\)\\
 Initialize replay buffer \(\mathcal{D}\) with capacity \(M\)\\
 \textbf{for} \(\text{episode} = 1, 2, \ldots, n\) \textbf{do}\\
- Initialize exploration noise process \(\mathcal{N}\)\\
- Initialize \(s\)\\
- \textbf{repeat} (for each step of episode)\\
-  \(a \leftarrow \mu(s;\, \theta^{\mu}) + \mathcal{N}_t\)\\
-  Take action \(a\); observe \(r,\; s',\; \text{done}\)\\
-  Store \((s, a, r, s', \text{done})\) in \(\mathcal{D}\)\\
-  Sample minibatch
+\strut ~~Initialize exploration noise process \(\mathcal{N}\)\\
+\strut ~~Initialize \(s\)\\
+\strut ~~\textbf{repeat} (for each step of episode)\\
+\strut ~~~~\(a \leftarrow \mu(s;\, \theta^{\mu}) + \mathcal{N}_t\)\\
+\strut ~~~~Take action \(a\); observe \(r,\; s',\; \text{done}\)\\
+\strut ~~~~Store \((s, a, r, s', \text{done})\) in \(\mathcal{D}\)\\
+\strut ~~~~Sample minibatch
 \(\{(s_j, a_j, r_j, s'_j, \text{done}_j)\}_{j=1}^{B} \sim \mathcal{D}\)\\
-  \(y_j \leftarrow r_j + \gamma\,(1 - \text{done}_j)\, Q\bigl(s'_j,\, \mu(s'_j;\, \theta^{\mu'});\, \theta^{Q'}\bigr)\)\\
-  \(\mathcal{L}_Q \leftarrow \dfrac{1}{B} \sum_j \bigl(\, y_j - Q(s_j, a_j;\, \theta^{Q}) \,\bigr)^{2}\)\\
-  \(\theta^{Q} \leftarrow \theta^{Q} - \alpha_Q\, \nabla_{\theta^{Q}}\, \mathcal{L}_Q\)\\
-  \(\nabla_{\theta^{\mu}} J \approx \dfrac{1}{B} \sum_j \nabla_a\, Q(s_j, a;\, \theta^{Q})\bigr|_{a = \mu(s_j;\, \theta^{\mu})}\, \nabla_{\theta^{\mu}}\, \mu(s_j;\, \theta^{\mu})\)\\
-  \(\theta^{\mu} \leftarrow \theta^{\mu} + \alpha_\mu\, \nabla_{\theta^{\mu}} J\)\\
-  \emph{// Soft target updates (Polyak averaging)}\\
-  \(\theta^{Q'} \leftarrow \tau\, \theta^{Q} + (1 - \tau)\, \theta^{Q'}\)\\
-  \(\theta^{\mu'} \leftarrow \tau\, \theta^{\mu} + (1 - \tau)\, \theta^{\mu'}\)\\
-  \(s \leftarrow s'\)\\
- \textbf{until} \(s\) is terminal\\
+\strut ~~~~\(y_j \leftarrow r_j + \gamma\,(1 - \text{done}_j)\, Q\bigl(s'_j,\, \mu(s'_j;\, \theta^{\mu'});\, \theta^{Q'}\bigr)\)\\
+\strut ~~~~\(\mathcal{L}_Q \leftarrow \dfrac{1}{B} \sum_j \bigl(\, y_j - Q(s_j, a_j;\, \theta^{Q}) \,\bigr)^{2}\)\\
+\strut ~~~~\(\theta^{Q} \leftarrow \theta^{Q} - \alpha_Q\, \nabla_{\theta^{Q}}\, \mathcal{L}_Q\)\\
+\strut ~~~~\(\nabla_{\theta^{\mu}} J \approx \dfrac{1}{B} \sum_j \nabla_a\, Q(s_j, a;\, \theta^{Q})\bigr|_{a = \mu(s_j;\, \theta^{\mu})}\, \nabla_{\theta^{\mu}}\, \mu(s_j;\, \theta^{\mu})\)\\
+\strut ~~~~\(\theta^{\mu} \leftarrow \theta^{\mu} + \alpha_\mu\, \nabla_{\theta^{\mu}} J\)\\
+\strut ~~~~\emph{// Soft target updates (Polyak averaging)}\\
+\strut ~~~~\(\theta^{Q'} \leftarrow \tau\, \theta^{Q} + (1 - \tau)\, \theta^{Q'}\)\\
+\strut ~~~~\(\theta^{\mu'} \leftarrow \tau\, \theta^{\mu} + (1 - \tau)\, \theta^{\mu'}\)\\
+\strut ~~~~\(s \leftarrow s'\)\\
+\strut ~~\textbf{until} \(s\) is terminal\\
 \textbf{end for}
 
-    Algorithm 4.5 DDPG (deep deterministic policy gradient) --- Pseudocode
-with Additions (Engineering Tricks) {[}Lillicrap et al., 2016{]}
+\end{pseudobox}
+
+    \begin{pseudobox}
+
+\textbf{Algorithm 4.5} DDPG (deep deterministic policy gradient) ---
+Pseudocode with Additions (Engineering Tricks) \emph{{[}Lillicrap et
+al., 2016{]}}
+
+\tcbline
 
 Here is the pseudocode for the DDPG algorithm with also employing all of
 the additions and engineering tricks mentioned above:
@@ -5137,41 +5362,44 @@ action squashing + reward/state scaling})\\
 \(\mathcal{D}\) \textbf{end for} ✦ (\hyperref[trick-4-5-5]{Replay
 warm-up with random actor})\\
 \textbf{for} \(\text{episode} = 1, 2, \ldots, n\) \textbf{do}\\
- Initialise \(s\)\\
- ✦ \emph{(Optionally perturb \(\theta^\mu\) with Gaussian noise for
-parameter-space exploration)} ✦ (\hyperref[trick-4-5-2]{Parameter-space
-noise for exploration})\\
- \textbf{repeat} (for each step of episode)\\
-  ✦
+\strut ~~Initialise \(s\)\\
+\strut ~~✦ \emph{(Optionally perturb \(\theta^\mu\) with Gaussian noise
+for parameter-space exploration)} ✦
+(\hyperref[trick-4-5-2]{Parameter-space noise for exploration})\\
+\strut ~~\textbf{repeat} (for each step of episode)\\
+\strut ~~~~✦
 \(a \leftarrow \tanh\!\bigl(\mu((s-\mu_s)/\sigma_s;\,\theta^\mu)\bigr) \cdot \text{scale} + \mathcal{N}_t\)
 \emph{(or use parameter-space noise)} ✦ (\hyperref[trick-4-5-3]{Tanh
 action squashing + reward/state scaling} /
 \hyperref[trick-4-5-2]{Parameter-space noise for exploration})\\
-  Take action \(a\); observe \(r,\; s',\; \text{done}\)\\
-  ✦ \(r \leftarrow r / \sigma_r\) \emph{(reward scaling)} ✦
+\strut ~~~~Take action \(a\); observe \(r,\; s',\; \text{done}\)\\
+\strut ~~~~✦ \(r \leftarrow r / \sigma_r\) \emph{(reward scaling)} ✦
 (\hyperref[trick-4-5-3]{Tanh action squashing + reward/state scaling})\\
-  Store \((s, a, r, s', \text{done})\) in \(\mathcal{D}\)\\
-  Sample minibatch
+\strut ~~~~Store \((s, a, r, s', \text{done})\) in \(\mathcal{D}\)\\
+\strut ~~~~Sample minibatch
 \(\{(s_j, a_j, r_j, s'_j, \text{done}_j)\}_{j=1}^{B} \sim \mathcal{D}\)\\
-  ✦
+\strut ~~~~✦
 \(\tilde{a}' \leftarrow \mu(s'_j;\,\theta^{\mu'}) + \mathrm{clip}(\epsilon,\, -c,\, c),\;\epsilon\sim\mathcal{N}(0,\sigma_t^2)\)
 \emph{(target action smoothing)} ✦ (\hyperref[trick-4-5-4]{TD3
 extensions})\\
-  ✦
+\strut ~~~~✦
 \(y_j \leftarrow r_j + \gamma\,(1-\text{done}_j)\,\min_{i=1,2} Q_{\theta_i^{Q'}}(s'_j, \tilde{a}')\)
 \emph{(twin-min target)} ✦ (\hyperref[trick-4-5-4]{TD3 extensions})\\
-  \textbf{for} \(i = 1, 2\) \textbf{do}
+\strut ~~~~\textbf{for} \(i = 1, 2\) \textbf{do}
 \(\;\theta_i^Q \leftarrow \theta_i^Q - \alpha_Q\,\nabla_{\theta_i^Q}\,\frac{1}{B}\sum_j(y_j - Q_{\theta_i^Q}(s_j,a_j))^2\)
 \textbf{end for}\\
-  ✦ \textbf{if} \(t \bmod 2 = 0\) \textbf{then} \emph{(delayed actor +
-target updates)} ✦ (\hyperref[trick-4-5-4]{TD3 extensions})\\
-   \(\nabla_{\theta^{\mu}} J \approx \dfrac{1}{B} \sum_j \nabla_a\, Q_{\theta_1^Q}(s_j, a)\bigr|_{a = \mu(s_j;\, \theta^{\mu})}\, \nabla_{\theta^{\mu}}\, \mu(s_j;\, \theta^{\mu})\)\\
-   \(\theta^{\mu} \leftarrow \theta^{\mu} + \alpha_\mu\, \nabla_{\theta^{\mu}} J\)\\
-   \(\theta_i^{Q'} \leftarrow \tau\, \theta_i^Q + (1 - \tau)\, \theta_i^{Q'};\quad \theta^{\mu'} \leftarrow \tau\, \theta^{\mu} + (1 - \tau)\, \theta^{\mu'}\)\\
-  ✦ \textbf{end if} ✦ (\hyperref[trick-4-5-4]{TD3 extensions})\\
-  \(s \leftarrow s'\)\\
- \textbf{until} \(s\) is terminal\\
+\strut ~~~~✦ \textbf{if} \(t \bmod 2 = 0\) \textbf{then} \emph{(delayed
+actor + target updates)} ✦ (\hyperref[trick-4-5-4]{TD3 extensions})\\
+\strut ~~~~~~\(\nabla_{\theta^{\mu}} J \approx \dfrac{1}{B} \sum_j \nabla_a\, Q_{\theta_1^Q}(s_j, a)\bigr|_{a = \mu(s_j;\, \theta^{\mu})}\, \nabla_{\theta^{\mu}}\, \mu(s_j;\, \theta^{\mu})\)\\
+\strut ~~~~~~\(\theta^{\mu} \leftarrow \theta^{\mu} + \alpha_\mu\, \nabla_{\theta^{\mu}} J\)\\
+\strut ~~~~~~\(\theta_i^{Q'} \leftarrow \tau\, \theta_i^Q + (1 - \tau)\, \theta_i^{Q'};\quad \theta^{\mu'} \leftarrow \tau\, \theta^{\mu} + (1 - \tau)\, \theta^{\mu'}\)\\
+\strut ~~~~✦ \textbf{end if} ✦ (\hyperref[trick-4-5-4]{TD3
+extensions})\\
+\strut ~~~~\(s \leftarrow s'\)\\
+\strut ~~\textbf{until} \(s\) is terminal\\
 \textbf{end for}
+
+\end{pseudobox}
 
     ✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦
 
@@ -5379,8 +5607,12 @@ buffer capacity \(M\), minibatch size \(B\), episodes \(n\)
 
     \phantomsection\label{pseudo-4-6}
 
-    Algorithm 4.6 SAC (soft actor--critic) --- Raw Pseudocode (without
-additional tricks) {[}Haarnoja et al., 2018{]}
+    \begin{pseudobox}
+
+\textbf{Algorithm 4.6} SAC (soft actor--critic) --- Raw Pseudocode
+(without additional tricks) \emph{{[}Haarnoja et al., 2018{]}}
+
+\tcbline
 
 Here is the pseudocode for the SAC core (base) algorithm without any
 further additions and engineering tricks (also mentioned above) added:
@@ -5394,35 +5626,42 @@ Initialize target critic weights
 \(\bar{\theta}_1 \leftarrow \theta_1,\;\bar{\theta}_2 \leftarrow \theta_2\)\\
 Initialize replay buffer \(\mathcal{D}\)\\
 \textbf{for} \(\text{episode} = 1, 2, \ldots, n\) \textbf{do}\\
- Initialize \(s\)\\
- \textbf{repeat} (for each step of episode)\\
-  Sample \(a \sim \pi_\phi(\cdot \mid s)\); take action \(a\); observe
-\(r,\; s',\; \text{done}\)\\
-  Store \((s, a, r, s', \text{done})\) in \(\mathcal{D}\)\\
-  Sample minibatch
+\strut ~~Initialize \(s\)\\
+\strut ~~\textbf{repeat} (for each step of episode)\\
+\strut ~~~~Sample \(a \sim \pi_\phi(\cdot \mid s)\); take action \(a\);
+observe \(r,\; s',\; \text{done}\)\\
+\strut ~~~~Store \((s, a, r, s', \text{done})\) in \(\mathcal{D}\)\\
+\strut ~~~~Sample minibatch
 \(\{(s_j, a_j, r_j, s'_j, \text{done}_j)\}_{j=1}^{B} \sim \mathcal{D}\)\\
-  \emph{// Critic update: twin-min target with entropy bonus}\\
-  Sample \(\tilde{a}'_j \sim \pi_\phi(\cdot \mid s'_j)\) for each
-\(j\)\\
-  \(y_j \leftarrow r_j + \gamma\,(1 - \text{done}_j)\,\bigl[\, \min_{i = 1, 2} Q_{\bar{\theta}_i}(s'_j,\, \tilde{a}'_j) - \alpha\, \log \pi_\phi(\tilde{a}'_j \mid s'_j) \,\bigr]\)\\
-  \textbf{for} \(i = 1, 2\) \textbf{do}\\
-   \(\mathcal{L}_{Q_i} \leftarrow \dfrac{1}{B} \sum_j \bigl(\, y_j - Q_{\theta_i}(s_j, a_j) \,\bigr)^{2}\)\\
-   \(\theta_i \leftarrow \theta_i - \alpha_Q\, \nabla_{\theta_i}\, \mathcal{L}_{Q_i}\)\\
-  \textbf{end for}\\
-  \emph{// Actor update via reparameterisation:
+\strut ~~~~\emph{// Critic update: twin-min target with entropy bonus}\\
+\strut ~~~~Sample \(\tilde{a}'_j \sim \pi_\phi(\cdot \mid s'_j)\) for
+each \(j\)\\
+\strut ~~~~\(y_j \leftarrow r_j + \gamma\,(1 - \text{done}_j)\,\bigl[\, \min_{i = 1, 2} Q_{\bar{\theta}_i}(s'_j,\, \tilde{a}'_j) - \alpha\, \log \pi_\phi(\tilde{a}'_j \mid s'_j) \,\bigr]\)\\
+\strut ~~~~\textbf{for} \(i = 1, 2\) \textbf{do}\\
+\strut ~~~~~~\(\mathcal{L}_{Q_i} \leftarrow \dfrac{1}{B} \sum_j \bigl(\, y_j - Q_{\theta_i}(s_j, a_j) \,\bigr)^{2}\)\\
+\strut ~~~~~~\(\theta_i \leftarrow \theta_i - \alpha_Q\, \nabla_{\theta_i}\, \mathcal{L}_{Q_i}\)\\
+\strut ~~~~\textbf{end for}\\
+\strut ~~~~\emph{// Actor update via reparameterisation:
 \(\tilde{a}_j = f_\phi(\varepsilon_j;\, s_j)\)}\\
-  Sample \(\tilde{a}_j \sim \pi_\phi(\cdot \mid s_j)\) for each \(j\)\\
-  \(\mathcal{L}_\pi \leftarrow \dfrac{1}{B} \sum_j \bigl[\, \alpha\, \log \pi_\phi(\tilde{a}_j \mid s_j) - \min_{i = 1, 2} Q_{\theta_i}(s_j,\, \tilde{a}_j) \,\bigr]\)\\
-  \(\phi \leftarrow \phi - \alpha_\phi\, \nabla_{\phi}\, \mathcal{L}_\pi\)\\
-  \emph{// Soft target updates}\\
-  \(\bar{\theta}_i \leftarrow \tau\, \theta_i + (1 - \tau)\, \bar{\theta}_i\)
+\strut ~~~~Sample \(\tilde{a}_j \sim \pi_\phi(\cdot \mid s_j)\) for each
+\(j\)\\
+\strut ~~~~\(\mathcal{L}_\pi \leftarrow \dfrac{1}{B} \sum_j \bigl[\, \alpha\, \log \pi_\phi(\tilde{a}_j \mid s_j) - \min_{i = 1, 2} Q_{\theta_i}(s_j,\, \tilde{a}_j) \,\bigr]\)\\
+\strut ~~~~\(\phi \leftarrow \phi - \alpha_\phi\, \nabla_{\phi}\, \mathcal{L}_\pi\)\\
+\strut ~~~~\emph{// Soft target updates}\\
+\strut ~~~~\(\bar{\theta}_i \leftarrow \tau\, \theta_i + (1 - \tau)\, \bar{\theta}_i\)
 for \(i = 1, 2\)\\
-  \(s \leftarrow s'\)\\
- \textbf{until} \(s\) is terminal\\
+\strut ~~~~\(s \leftarrow s'\)\\
+\strut ~~\textbf{until} \(s\) is terminal\\
 \textbf{end for}
 
-    Algorithm 4.6 SAC (soft actor--critic) --- Pseudocode with Additions
-(Engineering Tricks) {[}Haarnoja et al., 2018{]}
+\end{pseudobox}
+
+    \begin{pseudobox}
+
+\textbf{Algorithm 4.6} SAC (soft actor--critic) --- Pseudocode with
+Additions (Engineering Tricks) \emph{{[}Haarnoja et al., 2018{]}}
+
+\tcbline
 
 Here is the pseudocode for the SAC algorithm with also employing all of
 the additions and engineering tricks mentioned above:
@@ -5447,39 +5686,42 @@ Initialise replay buffer \(\mathcal{D}\)\\
 \(a \sim \mathrm{Uniform}\), store in \(\mathcal{D}\) \textbf{end for} ✦
 (\hyperref[trick-4-6-4]{Random-policy warm-up to fill the buffer})\\
 \textbf{for} \(\text{episode} = 1, 2, \ldots, n\) \textbf{do}\\
- Initialise \(s\)\\
- \textbf{repeat} (for each step of episode)\\
-  Sample \(a \sim \pi_\phi(\cdot \mid s)\); take action \(a\); observe
-\(r,\; s',\; \text{done}\)\\
-  ✦ \(r \leftarrow r \cdot \text{reward\_scale}\) ✦
+\strut ~~Initialise \(s\)\\
+\strut ~~\textbf{repeat} (for each step of episode)\\
+\strut ~~~~Sample \(a \sim \pi_\phi(\cdot \mid s)\); take action \(a\);
+observe \(r,\; s',\; \text{done}\)\\
+\strut ~~~~✦ \(r \leftarrow r \cdot \text{reward\_scale}\) ✦
 (\hyperref[trick-4-6-5]{Reward scaling})\\
-  Store \((s, a, r, s', \text{done})\) in \(\mathcal{D}\)\\
-  ✦ \textbf{for} \(g = 1, \ldots, G\) \textbf{do} \emph{(multiple
-gradient steps per env step)} ✦ (\hyperref[trick-4-6-2]{Update-to-data
-(UTD) ratio \(\gg 1\)})\\
-   Sample minibatch
+\strut ~~~~Store \((s, a, r, s', \text{done})\) in \(\mathcal{D}\)\\
+\strut ~~~~✦ \textbf{for} \(g = 1, \ldots, G\) \textbf{do}
+\emph{(multiple gradient steps per env step)} ✦
+(\hyperref[trick-4-6-2]{Update-to-data (UTD) ratio \(\gg 1\)})\\
+\strut ~~~~~~Sample minibatch
 \(\{(s_j, a_j, r_j, s'_j, \text{done}_j)\}_{j=1}^{B} \sim \mathcal{D}\)\\
-   \(\alpha \leftarrow \exp(\log\alpha)\)\\
-   Sample \(\tilde{a}'_j \sim \pi_\phi(\cdot \mid s'_j)\) for each
-\(j\)\\
-   \(y_j \leftarrow r_j + \gamma\,(1 - \text{done}_j)\,\bigl[\, \min_{i = 1, 2} Q_{\bar{\theta}_i}(s'_j,\, \tilde{a}'_j) - \alpha\, \log \pi_\phi(\tilde{a}'_j \mid s'_j) \,\bigr]\)\\
-   \textbf{for} \(i = 1, 2\) \textbf{do}
+\strut ~~~~~~\(\alpha \leftarrow \exp(\log\alpha)\)\\
+\strut ~~~~~~Sample \(\tilde{a}'_j \sim \pi_\phi(\cdot \mid s'_j)\) for
+each \(j\)\\
+\strut ~~~~~~\(y_j \leftarrow r_j + \gamma\,(1 - \text{done}_j)\,\bigl[\, \min_{i = 1, 2} Q_{\bar{\theta}_i}(s'_j,\, \tilde{a}'_j) - \alpha\, \log \pi_\phi(\tilde{a}'_j \mid s'_j) \,\bigr]\)\\
+\strut ~~~~~~\textbf{for} \(i = 1, 2\) \textbf{do}
 \(\;\theta_i \leftarrow \theta_i - \alpha_Q\, \nabla_{\theta_i}\, \frac{1}{B}\sum_j(y_j - Q_{\theta_i}(s_j, a_j))^{2}\)
 \textbf{end for}\\
-   Sample \(\tilde{a}_j \sim \pi_\phi(\cdot \mid s_j)\) for each \(j\)\\
-   \(\mathcal{L}_\pi \leftarrow \dfrac{1}{B} \sum_j \bigl[\, \alpha\, \log \pi_\phi(\tilde{a}_j \mid s_j) - \min_{i = 1, 2} Q_{\theta_i}(s_j,\, \tilde{a}_j) \,\bigr]\)\\
-   \(\phi \leftarrow \phi - \alpha_\phi\, \nabla_{\phi}\, \mathcal{L}_\pi\)\\
-   ✦
+\strut ~~~~~~Sample \(\tilde{a}_j \sim \pi_\phi(\cdot \mid s_j)\) for
+each \(j\)\\
+\strut ~~~~~~\(\mathcal{L}_\pi \leftarrow \dfrac{1}{B} \sum_j \bigl[\, \alpha\, \log \pi_\phi(\tilde{a}_j \mid s_j) - \min_{i = 1, 2} Q_{\theta_i}(s_j,\, \tilde{a}_j) \,\bigr]\)\\
+\strut ~~~~~~\(\phi \leftarrow \phi - \alpha_\phi\, \nabla_{\phi}\, \mathcal{L}_\pi\)\\
+\strut ~~~~~~✦
 \(\log\alpha \leftarrow \log\alpha - \alpha_\alpha\, \nabla_{\log\alpha}\bigl(-\alpha\,(\log\pi_\phi(\tilde{a}_j \mid s_j) + \bar{H})\bigr)\)
 \emph{(auto-tune temperature)} ✦ (\hyperref[trick-4-6-1]{Automatic
 temperature tuning})\\
-   \(\bar{\theta}_i \leftarrow \tau\, \theta_i + (1 - \tau)\, \bar{\theta}_i\)
+\strut ~~~~~~\(\bar{\theta}_i \leftarrow \tau\, \theta_i + (1 - \tau)\, \bar{\theta}_i\)
 for \(i = 1, 2\)\\
-  ✦ \textbf{end for} ✦ (\hyperref[trick-4-6-2]{Update-to-data (UTD)
-ratio \(\gg 1\)})\\
-  \(s \leftarrow s'\)\\
- \textbf{until} \(s\) is terminal\\
+\strut ~~~~✦ \textbf{end for} ✦ (\hyperref[trick-4-6-2]{Update-to-data
+(UTD) ratio \(\gg 1\)})\\
+\strut ~~~~\(s \leftarrow s'\)\\
+\strut ~~\textbf{until} \(s\) is terminal\\
 \textbf{end for}
+
+\end{pseudobox}
 
     ✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦
 
@@ -5767,8 +6009,13 @@ workers \(K_\text{workers}\), rollout length \(n\), entropy coefficient
 
     \phantomsection\label{pseudo-4-7}
 
-    Algorithm 4.7 PPO with clipped surrogate objective --- Raw Pseudocode
-(without additional tricks) {[}Schulman et al., 2017{]}
+    \begin{pseudobox}
+
+\textbf{Algorithm 4.7} PPO with clipped surrogate objective --- Raw
+Pseudocode (without additional tricks) \emph{{[}Schulman et al.,
+2017{]}}
+
+\tcbline
 
 Here is the pseudocode for the PPO core (base) algorithm without any
 further additions and engineering tricks (also mentioned above) added:
@@ -5779,33 +6026,42 @@ further additions and engineering tricks (also mentioned above) added:
 value coefficient \(c_v\)\\
 Initialize policy parameters \(\theta\) and value parameters \(w\)\\
 \textbf{repeat} until convergence\\
- \(\theta_{\text{old}} \leftarrow \theta\)\\
- \textbf{for each} worker \(k = 1, \ldots, K_{\text{w}}\) \textbf{do}\\
-  Collect \(n\) steps using \(\pi_{\theta_{\text{old}}}\):
+\strut ~~\(\theta_{\text{old}} \leftarrow \theta\)\\
+\strut ~~\textbf{for each} worker \(k = 1, \ldots, K_{\text{w}}\)
+\textbf{do}\\
+\strut ~~~~Collect \(n\) steps using \(\pi_{\theta_{\text{old}}}\):
 \((s_i, a_i, r_i, s'_i)\) for \(i = 0, \ldots, n - 1\)\\
- \textbf{end for}\\
- \emph{// Bootstrapped n-step return and advantage}\\
- \(R \leftarrow 0\) if \(s'_{n-1}\) terminal else \(V(s'_{n-1};\, w)\)\\
- \textbf{for} \(i = n - 1\) \textbf{down to} \(0\) \textbf{do}\\
-  \(R \leftarrow r_i + \gamma\, R\)\\
-  \(R_i \leftarrow R;\quad \hat{A}_i \leftarrow R_i - V(s_i;\, w)\)\\
- \textbf{end for}\\
- \emph{// Multi-epoch minibatch updates}\\
- \textbf{for} \(\text{epoch} = 1, 2, \ldots, K\) \textbf{do}
+\strut ~~\textbf{end for}\\
+\strut ~~\emph{// Bootstrapped n-step return and advantage}\\
+\strut ~~\(R \leftarrow 0\) if \(s'_{n-1}\) terminal else
+\(V(s'_{n-1};\, w)\)\\
+\strut ~~\textbf{for} \(i = n - 1\) \textbf{down to} \(0\) \textbf{do}\\
+\strut ~~~~\(R \leftarrow r_i + \gamma\, R\)\\
+\strut ~~~~\(R_i \leftarrow R;\quad \hat{A}_i \leftarrow R_i - V(s_i;\, w)\)\\
+\strut ~~\textbf{end for}\\
+\strut ~~\emph{// Multi-epoch minibatch updates}\\
+\strut ~~\textbf{for} \(\text{epoch} = 1, 2, \ldots, K\) \textbf{do}
 ~multi-epoch reuse of one rollout\\
-  \textbf{for each} minibatch of size \(B\) \textbf{do}\\
-   \(r_t(\theta) \leftarrow \dfrac{\pi_\theta(a_t \mid s_t)}{\pi_{\theta_{\text{old}}}(a_t \mid s_t)}\)\\
-   \(\mathcal{L}^{\text{CLIP}} \leftarrow \mathbb{E}_t\!\bigl[\, \min\!\bigl(r_t(\theta)\, \hat{A}_t,\;\; \mathrm{clip}(r_t(\theta),\, 1 - \epsilon,\, 1 + \epsilon)\, \hat{A}_t\bigr) \,\bigr]\)\\
-   \(\mathcal{L}^{V} \leftarrow \mathbb{E}_t\!\bigl[\, (R_t - V(s_t;\, w))^{2} \,\bigr]\)\\
-   \(\mathcal{L}^{H} \leftarrow \mathbb{E}_t\!\bigl[\, \mathcal{H}\bigl(\pi_\theta(\cdot \mid s_t)\bigr) \,\bigr]\)\\
-   \(\mathcal{L} \leftarrow -\,\mathcal{L}^{\text{CLIP}} + c_v\, \mathcal{L}^{V} - \beta\, \mathcal{L}^{H}\)\\
-   \(\theta \leftarrow \theta - \alpha_\theta\, \nabla_{\theta}\, \mathcal{L};\quad w \leftarrow w - \alpha_w\, \nabla_{w}\, \mathcal{L}\)\\
-  \textbf{end for}\\
- \textbf{end for}\\
+\strut ~~~~\textbf{for each} minibatch of size \(B\) \textbf{do}\\
+\strut ~~~~~~\(r_t(\theta) \leftarrow \dfrac{\pi_\theta(a_t \mid s_t)}{\pi_{\theta_{\text{old}}}(a_t \mid s_t)}\)\\
+\strut ~~~~~~\(\mathcal{L}^{\text{CLIP}} \leftarrow \mathbb{E}_t\!\bigl[\, \min\!\bigl(r_t(\theta)\, \hat{A}_t,\;\; \mathrm{clip}(r_t(\theta),\, 1 - \epsilon,\, 1 + \epsilon)\, \hat{A}_t\bigr) \,\bigr]\)\\
+\strut ~~~~~~\(\mathcal{L}^{V} \leftarrow \mathbb{E}_t\!\bigl[\, (R_t - V(s_t;\, w))^{2} \,\bigr]\)\\
+\strut ~~~~~~\(\mathcal{L}^{H} \leftarrow \mathbb{E}_t\!\bigl[\, \mathcal{H}\bigl(\pi_\theta(\cdot \mid s_t)\bigr) \,\bigr]\)\\
+\strut ~~~~~~\(\mathcal{L} \leftarrow -\,\mathcal{L}^{\text{CLIP}} + c_v\, \mathcal{L}^{V} - \beta\, \mathcal{L}^{H}\)\\
+\strut ~~~~~~\(\theta \leftarrow \theta - \alpha_\theta\, \nabla_{\theta}\, \mathcal{L};\quad w \leftarrow w - \alpha_w\, \nabla_{w}\, \mathcal{L}\)\\
+\strut ~~~~\textbf{end for}\\
+\strut ~~\textbf{end for}\\
 \textbf{end repeat}
 
-    Algorithm 4.7 PPO with clipped surrogate objective --- Pseudocode with
-Additions (Engineering Tricks) {[}Schulman et al., 2017{]}
+\end{pseudobox}
+
+    \begin{pseudobox}
+
+\textbf{Algorithm 4.7} PPO with clipped surrogate objective ---
+Pseudocode with Additions (Engineering Tricks) \emph{{[}Schulman et al.,
+2017{]}}
+
+\tcbline
 
 Here is the pseudocode for the PPO algorithm with also employing all of
 the additions and engineering tricks mentioned above:
@@ -5827,54 +6083,60 @@ per-head})\\
 normaliser ✦ (\hyperref[trick-4-7-7]{Observation / reward normalisation
 with running stats})\\
 \textbf{repeat} until convergence\\
- ✦ \(\alpha_t \leftarrow \alpha_0 \cdot (1 - t/T)\) \emph{(linear lr
-annealing)} ✦ (\hyperref[trick-4-7-6]{Linear learning-rate annealing})\\
- \(\theta_{\text{old}} \leftarrow \theta\)\\
- \textbf{for each} worker \(k = 1, \ldots, K_{\text{w}}\) \textbf{do}\\
-  ✦ Normalise observations: \(s \leftarrow (s - \mu_s)/\sigma_s\) ✦
+\strut ~~✦ \(\alpha_t \leftarrow \alpha_0 \cdot (1 - t/T)\)
+\emph{(linear lr annealing)} ✦ (\hyperref[trick-4-7-6]{Linear
+learning-rate annealing})\\
+\strut ~~\(\theta_{\text{old}} \leftarrow \theta\)\\
+\strut ~~\textbf{for each} worker \(k = 1, \ldots, K_{\text{w}}\)
+\textbf{do}\\
+\strut ~~~~✦ Normalise observations:
+\(s \leftarrow (s - \mu_s)/\sigma_s\) ✦
 (\hyperref[trick-4-7-7]{Observation / reward normalisation with running
 stats})\\
-  Collect \(n\) steps using \(\pi_{\theta_{\text{old}}}\):
+\strut ~~~~Collect \(n\) steps using \(\pi_{\theta_{\text{old}}}\):
 \((s_i, a_i, r_i, s'_i)\) for \(i = 0, \ldots, n - 1\)\\
- \textbf{end for}\\
- ✦ \emph{// Compute GAE advantages} ✦
+\strut ~~\textbf{end for}\\
+\strut ~~✦ \emph{// Compute GAE advantages} ✦
 (\hyperref[trick-4-7-1]{GAE(\(\lambda\))})\\
- \(\delta_i \leftarrow r_i + \gamma\, V(s'_i;\, w) - V(s_i;\, w)\)\\
- ✦
+\strut ~~\(\delta_i \leftarrow r_i + \gamma\, V(s'_i;\, w) - V(s_i;\, w)\)\\
+\strut ~~✦
 \(\hat{A}_i \leftarrow \sum_{l \geq 0}(\gamma\lambda)^l\, \delta_{i+l}\)
 ✦ (\hyperref[trick-4-7-1]{GAE(\(\lambda\))})\\
- \(R_i \leftarrow \hat{A}_i + V(s_i;\, w)\)\\
- ✦
+\strut ~~\(R_i \leftarrow \hat{A}_i + V(s_i;\, w)\)\\
+\strut ~~✦
 \(\hat{A} \leftarrow (\hat{A} - \mu_{\hat{A}})/(\sigma_{\hat{A}} + 10^{-8})\)
 \emph{(advantage normalisation)} ✦ (\hyperref[trick-4-7-2]{Advantage
 normalisation per minibatch})\\
- \emph{// Multi-epoch minibatch updates}\\
- \textbf{for} \(\text{epoch} = 1, 2, \ldots, K\) \textbf{do}\\
-  ✦ \textbf{if}
+\strut ~~\emph{// Multi-epoch minibatch updates}\\
+\strut ~~\textbf{for} \(\text{epoch} = 1, 2, \ldots, K\) \textbf{do}\\
+\strut ~~~~✦ \textbf{if}
 \(\mathbb{E}_t[\mathrm{KL}(\pi_{\theta_\text{old}} \| \pi_\theta)] > 1.5\,\delta_\text{KL}\)
 \textbf{then break} \emph{(early stopping)} ✦
 (\hyperref[trick-4-7-8]{Early stopping by KL divergence})\\
-  \textbf{for each} minibatch of size \(B\) \textbf{do}\\
-   \(r_t(\theta) \leftarrow \dfrac{\pi_\theta(a_t \mid s_t)}{\pi_{\theta_{\text{old}}}(a_t \mid s_t)}\)\\
-   \(\mathcal{L}^{\text{CLIP}} \leftarrow \mathbb{E}_t\!\bigl[\, \min\!\bigl(r_t(\theta)\, \hat{A}_t,\;\; \mathrm{clip}(r_t(\theta),\, 1 - \epsilon,\, 1 + \epsilon)\, \hat{A}_t\bigr) \,\bigr]\)\\
-   ✦
+\strut ~~~~\textbf{for each} minibatch of size \(B\) \textbf{do}\\
+\strut ~~~~~~\(r_t(\theta) \leftarrow \dfrac{\pi_\theta(a_t \mid s_t)}{\pi_{\theta_{\text{old}}}(a_t \mid s_t)}\)\\
+\strut ~~~~~~\(\mathcal{L}^{\text{CLIP}} \leftarrow \mathbb{E}_t\!\bigl[\, \min\!\bigl(r_t(\theta)\, \hat{A}_t,\;\; \mathrm{clip}(r_t(\theta),\, 1 - \epsilon,\, 1 + \epsilon)\, \hat{A}_t\bigr) \,\bigr]\)\\
+\strut ~~~~~~✦
 \(V^{\text{clip}} \leftarrow V_\text{old} + \mathrm{clip}(V_w - V_\text{old},\, -\epsilon,\, +\epsilon)\)
 ✦ (\hyperref[trick-4-7-3]{Value-loss clipping})\\
-   ✦
+\strut ~~~~~~✦
 \(\mathcal{L}^{V} \leftarrow \mathbb{E}_t\!\bigl[\, \max\!\bigl((V_w - R_t)^{2},\; (V^{\text{clip}} - R_t)^{2}\bigr) \,\bigr]\)
 ✦ (\hyperref[trick-4-7-3]{Value-loss clipping})\\
-   \(\mathcal{L}^{H} \leftarrow \mathbb{E}_t\!\bigl[\, \mathcal{H}\bigl(\pi_\theta(\cdot \mid s_t)\bigr) \,\bigr]\)\\
-   \(\mathcal{L} \leftarrow -\,\mathcal{L}^{\text{CLIP}} + c_v\, \mathcal{L}^{V} - \beta\, \mathcal{L}^{H}\)\\
-   ✦ \textbf{if} \(\lVert\nabla\mathcal{L}\rVert_2 > c\) \textbf{then}
-rescale to norm \(c\) ✦ (\hyperref[trick-4-7-4]{Global-norm gradient
-clipping, threshold \(\sim 0.5\)})\\
-   ✦
+\strut ~~~~~~\(\mathcal{L}^{H} \leftarrow \mathbb{E}_t\!\bigl[\, \mathcal{H}\bigl(\pi_\theta(\cdot \mid s_t)\bigr) \,\bigr]\)\\
+\strut ~~~~~~\(\mathcal{L} \leftarrow -\,\mathcal{L}^{\text{CLIP}} + c_v\, \mathcal{L}^{V} - \beta\, \mathcal{L}^{H}\)\\
+\strut ~~~~~~✦ \textbf{if} \(\lVert\nabla\mathcal{L}\rVert_2 > c\)
+\textbf{then} rescale to norm \(c\) ✦
+(\hyperref[trick-4-7-4]{Global-norm gradient clipping, threshold
+\(\sim 0.5\)})\\
+\strut ~~~~~~✦
 \(\theta \leftarrow \theta - \alpha_t\, \nabla_{\theta}\, \mathcal{L};\quad w \leftarrow w - \alpha_t\, \nabla_{w}\, \mathcal{L}\)
 \emph{(annealed lr)} ✦ (\hyperref[trick-4-7-6]{Linear learning-rate
 annealing})\\
-  \textbf{end for}\\
- \textbf{end for}\\
+\strut ~~~~\textbf{end for}\\
+\strut ~~\textbf{end for}\\
 \textbf{end repeat}
+
+\end{pseudobox}
 
     ✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦
 
@@ -6091,8 +6353,12 @@ size \(B\), target update freq \(C\), training iterations \(n\)
 
     \phantomsection\label{pseudo-4-8}
 
-    Algorithm 4.8 CQL (conservative Q-learning, offline) --- Raw Pseudocode
-(without additional tricks) {[}Kumar et al., 2020{]}
+    \begin{pseudobox}
+
+\textbf{Algorithm 4.8} CQL (conservative Q-learning, offline) --- Raw
+Pseudocode (without additional tricks) \emph{{[}Kumar et al., 2020{]}}
+
+\tcbline
 
 Here is the pseudocode for the CQL core (base) algorithm without any
 further additions and engineering tricks (also mentioned above) added:
@@ -6104,23 +6370,30 @@ size \(B\), target update freq \(C\), training iterations \(n\)\\
 Initialize online network \(Q(s, a;\, \theta)\); target network
 \(\hat{Q}(s, a;\, \theta^{-})\) with \(\theta^{-} \leftarrow \theta\)\\
 \textbf{for} \(t = 1, 2, \ldots, n\) \textbf{do}\\
- Sample minibatch
+\strut ~~Sample minibatch
 \(\{(s_j, a_j, r_j, s'_j, \text{done}_j)\}_{j=1}^{B} \sim \mathcal{D}\)\\
- \emph{// Standard TD target (data only --- no environment
+\strut ~~\emph{// Standard TD target (data only --- no environment
 interaction)}\\
- \(y_j \leftarrow r_j + \gamma\,(1 - \text{done}_j)\, \max_{a'} \hat{Q}(s'_j, a';\, \theta^{-})\)\\
- \(\mathcal{L}_{\text{TD}} \leftarrow \dfrac{1}{B} \sum_j \bigl(\, y_j - Q(s_j, a_j;\, \theta) \,\bigr)^{2}\)\\
- \emph{// Conservative regulariser: push down OOD actions, push up data
-actions}\\
- \(\mathcal{L}_{\text{CQL}} \leftarrow \dfrac{1}{B} \sum_j \Bigl[\, \log \sum_{a} \exp Q(s_j, a;\, \theta)\; -\; Q(s_j, a_j;\, \theta) \,\Bigr]\)\\
- \(\mathcal{L}(\theta) \leftarrow \mathcal{L}_{\text{TD}} + \lambda\, \mathcal{L}_{\text{CQL}}\)\\
- \(\theta \leftarrow \theta - \alpha\, \nabla_{\theta}\, \mathcal{L}(\theta)\)\\
- \textbf{if} \(t \bmod C = 0\) \textbf{then}
+\strut ~~\(y_j \leftarrow r_j + \gamma\,(1 - \text{done}_j)\, \max_{a'} \hat{Q}(s'_j, a';\, \theta^{-})\)\\
+\strut ~~\(\mathcal{L}_{\text{TD}} \leftarrow \dfrac{1}{B} \sum_j \bigl(\, y_j - Q(s_j, a_j;\, \theta) \,\bigr)^{2}\)\\
+\strut ~~\emph{// Conservative regulariser: push down OOD actions, push
+up data actions}\\
+\strut ~~\(\mathcal{L}_{\text{CQL}} \leftarrow \dfrac{1}{B} \sum_j \Bigl[\, \log \sum_{a} \exp Q(s_j, a;\, \theta)\; -\; Q(s_j, a_j;\, \theta) \,\Bigr]\)\\
+\strut ~~\(\mathcal{L}(\theta) \leftarrow \mathcal{L}_{\text{TD}} + \lambda\, \mathcal{L}_{\text{CQL}}\)\\
+\strut ~~\(\theta \leftarrow \theta - \alpha\, \nabla_{\theta}\, \mathcal{L}(\theta)\)\\
+\strut ~~\textbf{if} \(t \bmod C = 0\) \textbf{then}
 \(\theta^{-} \leftarrow \theta\)\\
 \textbf{end for}
 
-    Algorithm 4.8 CQL (conservative Q-learning, offline) --- Pseudocode with
-Additions (Engineering Tricks) {[}Kumar et al., 2020{]}
+\end{pseudobox}
+
+    \begin{pseudobox}
+
+\textbf{Algorithm 4.8} CQL (conservative Q-learning, offline) ---
+Pseudocode with Additions (Engineering Tricks) \emph{{[}Kumar et al.,
+2020{]}}
+
+\tcbline
 
 Here is the pseudocode for the CQL algorithm with also employing all of
 the additions and engineering tricks mentioned above:
@@ -6148,45 +6421,47 @@ entropy-regularised actor})\\
 normalise all states and actions ✦ (\hyperref[trick-4-8-5]{State (and
 action) normalisation})\\
 \textbf{for} \(t = 1, 2, \ldots, n\) \textbf{do}\\
- Sample minibatch
+\strut ~~Sample minibatch
 \(\{(s_j, a_j, r_j, s'_j, \text{done}_j)\}_{j=1}^{B} \sim \mathcal{D}\)\\
- \emph{// TD target (CQL-SAC: twin-min + entropy)}\\
- Sample \(\tilde{a}' \sim \pi_\phi(\cdot \mid s'_j)\)\\
- ✦
+\strut ~~\emph{// TD target (CQL-SAC: twin-min + entropy)}\\
+\strut ~~Sample \(\tilde{a}' \sim \pi_\phi(\cdot \mid s'_j)\)\\
+\strut ~~✦
 \(y_j \leftarrow r_j + \gamma\,(1-\text{done}_j)\bigl[\min_{i=1,2}\hat{Q}_{\theta_i^-}(s'_j, \tilde{a}') - \alpha_\text{ent}\log\pi_\phi(\tilde{a}'\mid s'_j)\bigr]\)
 \emph{(min-of-twin + SAC entropy)} ✦ (\hyperref[trick-4-8-7]{Min-of-twin
 Bellman target} / \hyperref[trick-4-8-2]{CQL-SAC: combine with twin
 critics + entropy-regularised actor})\\
- \(\mathcal{L}_{\text{TD}}^{(i)} \leftarrow \frac{1}{B}\sum_j(y_j - Q_{\theta_i}(s_j, a_j))^2\)\\
- \emph{// Conservative regulariser}\\
- ✦ Sample actions from three sources:
+\strut ~~\(\mathcal{L}_{\text{TD}}^{(i)} \leftarrow \frac{1}{B}\sum_j(y_j - Q_{\theta_i}(s_j, a_j))^2\)\\
+\strut ~~\emph{// Conservative regulariser}\\
+\strut ~~✦ Sample actions from three sources:
 \(a^\text{unif}\!\sim\!\mathrm{Uniform}\),
 \(a^\pi\!\sim\!\pi_\phi(\cdot\mid s_j)\), \(a^\beta\) from dataset ✦
 (\hyperref[trick-4-8-3]{Importance-weighted action sampling for the
 logsumexp})\\
- ✦
+\strut ~~✦
 \(\mathcal{L}_\text{CQL}^{(i)} \leftarrow \frac{1}{B}\sum_j\bigl[\log\!\sum_{\tilde{a}} \exp Q_{\theta_i}(s_j,\tilde{a})\,/\,w(\tilde{a}) \;-\; Q_{\theta_i}(s_j,a_j)\bigr]\)
 \emph{(IS-weighted logsumexp)} ✦
 (\hyperref[trick-4-8-3]{Importance-weighted action sampling for the
 logsumexp})\\
- ✦ \(\lambda \leftarrow \exp(\log\lambda)\);
+\strut ~~✦ \(\lambda \leftarrow \exp(\log\lambda)\);
 \(\;\log\lambda \leftarrow \log\lambda + \alpha_\lambda\,(\mathcal{L}_\text{CQL} - \tau_\text{CQL})\)
 \emph{(dual update)} ✦ (\hyperref[trick-4-8-1]{Lagrangian dual for
 automatic \(\lambda\)})\\
- \textbf{for} \(i = 1, 2\) \textbf{do}
+\strut ~~\textbf{for} \(i = 1, 2\) \textbf{do}
 \(\;\theta_i \leftarrow \theta_i - \alpha\,\nabla_{\theta_i}\bigl(\mathcal{L}_\text{TD}^{(i)} + \lambda\,\mathcal{L}_\text{CQL}^{(i)}\bigr)\)
 \textbf{end for}\\
- \emph{// Actor update (SAC-style + BC)}\\
- Sample \(\tilde{a}_j \sim \pi_\phi(\cdot \mid s_j)\)\\
- ✦
+\strut ~~\emph{// Actor update (SAC-style + BC)}\\
+\strut ~~Sample \(\tilde{a}_j \sim \pi_\phi(\cdot \mid s_j)\)\\
+\strut ~~✦
 \(\mathcal{L}_\pi \leftarrow \frac{1}{B}\sum_j\bigl[\alpha_\text{ent}\log\pi_\phi(\tilde{a}_j\mid s_j) - \min_i Q_{\theta_i}(s_j,\tilde{a}_j)\bigr] - \alpha_\text{BC}\,\frac{1}{B}\sum_j\log\pi_\phi(a_j\mid s_j)\)
 \emph{(+ BC regulariser)} ✦ (\hyperref[trick-4-8-2]{CQL-SAC: combine
 with twin critics + entropy-regularised actor} /
 \hyperref[trick-4-8-4]{Behavioural cloning regulariser})\\
- \(\phi \leftarrow \phi - \alpha_\phi\, \nabla_{\phi}\, \mathcal{L}_\pi\)\\
- \textbf{if} \(t \bmod C = 0\) \textbf{then}
+\strut ~~\(\phi \leftarrow \phi - \alpha_\phi\, \nabla_{\phi}\, \mathcal{L}_\pi\)\\
+\strut ~~\textbf{if} \(t \bmod C = 0\) \textbf{then}
 \(\theta_i^{-} \leftarrow \theta_i\) for \(i = 1, 2\)\\
 \textbf{end for}
+
+\end{pseudobox}
 
     ✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦✦
 
